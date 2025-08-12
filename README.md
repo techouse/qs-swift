@@ -62,10 +62,12 @@ targets: [
 import Qs
 
 // Decode
-let decoded = try Qs.decode("foo[bar]=baz&foo[list][]=a&foo[list][]=b")
+let decoded: [String: Any] = try Qs.decode("foo[bar]=baz&foo[list][]=a&foo[list][]=b")
+// decoded == ["foo": ["bar": "baz", "list": ["a", "b"]]]
 
 // Encode
-let encoded = try Qs.encode(["foo": ["bar": "baz"]])
+let encoded: String = try Qs.encode(["foo": ["bar": "baz"]])
+// encoded == "foo%5Bbar%5D=baz"
 ```
 
 ---
@@ -417,6 +419,85 @@ try Qs.encode(["a": "b c"], options: .init(format: .rfc1738)) // "a=b+c"
 
 ---
 
+## `nil`, `NSNull`, and `Undefined` (null semantics)
+
+Query strings don’t have a native null concept, so Qs uses a few conventions to mirror “JSON-style” semantics as
+closely as possible:
+
+- `NSNull()` – use this to represent an explicit “null-like” value.
+- `Undefined()` – a special sentinel provided by `Qs` to mean “omit this key entirely”.
+- `""` (empty string) – a real, present-but-empty value.
+
+### Encoding behavior (Swift → query string)
+
+| Input value         | Default (`strictNullHandling: false`) | With `strictNullHandling: true` | With `skipNulls: true` |
+|---------------------|---------------------------------------|---------------------------------|------------------------|
+| `"foo"`             | `a=foo`                               | `a=foo`                         | `a=foo`                |
+| `""` (empty string) | `a=`                                  | `a=`                            | `a=`                   |
+| `NSNull()`          | `a=`                                  | `a` (no `=` sign)               | (omitted)              |
+| `Undefined()`       | (omitted)                             | (omitted)                       | (omitted)              |
+
+Examples:
+
+```swift
+try Qs.encode(["a": NSNull()])
+// "a="
+
+try Qs.encode(["a": NSNull()], options: .init(strictNullHandling: true))
+// "a"               // bare key, no "="
+
+try Qs.encode(["a": NSNull()], options: .init(skipNulls: true))
+// ""                // key omitted
+
+try Qs.encode(["a": Undefined()])
+// ""                // always omitted, regardless of options
+```
+
+### Decoding behavior (query string → Swift)
+
+| Input token | Default (`strictNullHandling: false`) | With `strictNullHandling: true` |
+|-------------|---------------------------------------|---------------------------------|
+| `a=`        | `["a": ""]`                           | `["a": ""]`                     |
+| `a`         | `["a": ""]`                           | `["a": NSNull()]`               |
+
+Examples:
+
+```swift
+try Qs.decode("a&b=")
+// ["a": "", "b": ""]
+
+try Qs.decode("a&b=", options: .init(strictNullHandling: true))
+// ["a": NSNull(), "b": ""]
+```
+
+### How this maps to JSON libraries
+
+- In **Foundation**'s **JSONSerialization**, `NSNull` is the conventional stand-in for JSON `null`.
+  → In Qs, use `NSNull()` to mean a `null`-like value.
+- In **Codable**/**JSONEncoder**, whether missing keys are emitted or omitted often depends on how your model is
+  encoded (`encode` vs `encodeIfPresent`).
+  → In `Qs`, use `Undefined()` to _always_ omit a key from the output.
+- There is **[no native “null” in query strings]()**, so preserving a true “null round-trip” requires using:
+    - `NSNull()` on `encode` and `strictNullHandling: true` (so it renders as a bare key), and
+    - `strictNullHandling: true` on `decode` (so bare keys come back as `NSNull()`).
+
+Round-trip tip:
+
+```swift
+// Encode with a null-like value:
+let out = try Qs.encode(["a": NSNull()], options: .init(strictNullHandling: true))
+// "a"
+
+// Decode back to NSNull:
+let back = try Qs.decode(out, options: .init(strictNullHandling: true))
+// ["a": NSNull()]
+```
+
+If you simply want to drop keys when a value is not present, prefer `Undefined()` (or `skipNulls: true` when values are
+`NSNull()`), rather than encoding `NSNull()` itself.
+
+---
+
 ## API surface
 
 - `Qs.decode(_:, options:) -> [String: Any]`
@@ -471,4 +552,4 @@ Special thanks to the authors of [qs](https://www.npmjs.com/package/qs) for Java
 
 ## License
 
-BSD 3‑Clause © techouse
+BSD 3‑Clause © [techouse](https://github.com/techouse)
