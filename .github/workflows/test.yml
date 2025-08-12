@@ -57,10 +57,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y llvm
 
-      - name: Run tests
+      - name: Run tests with coverage
         env:
           SWIFT_DETERMINISTIC_HASHING: 1
-        run: swift test -q --parallel --enable-code-coverage --disable-sandbox
+        run: bash scripts/coverage.sh
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
