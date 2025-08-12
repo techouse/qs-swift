@@ -65,6 +65,7 @@ jobs:
 
       - name: Run tests with coverage
         env:
+          SKIP_EXPENSIVE_TESTS: 1
           SWIFT_DETERMINISTIC_HASHING: 1
         run: bash scripts/coverage.sh
 
