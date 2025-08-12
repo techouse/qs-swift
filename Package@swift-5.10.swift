@@ -1,4 +1,4 @@
-// swift-tools-version: 6.1
+// swift-tools-version: 5.10
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -14,6 +14,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.2.1"),
+        .package(url: "https://github.com/apple/swift-testing.git", from: "0.9.0"),
     ],
     targets: [
         .target(
@@ -24,11 +25,22 @@ let package = Package(
                 .product(name: "DequeModule", package: "swift-collections"),
             ],
             path: "Sources/Qs",
+            swiftSettings: [
+                .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
+                .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
+            ]
         ),
         .testTarget(
             name: "QsTests",
-            dependencies: ["Qs"],
+            dependencies: [
+                "Qs",
+                .product(name: "Testing", package: "swift-testing"),
+            ],
             path: "Tests/QsTests",
+            swiftSettings: [
+                .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
+                .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
+            ]
         ),
     ]
 )
