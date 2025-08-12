@@ -1,0 +1,31 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Swift: Build (debug)",
+            "type": "shell",
+            "command": "swift build",
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Swift: Build (release)",
+            "type": "shell",
+            "command": "swift build -c release",
+            "problemMatcher": []
+        },
+        {
+            "label": "Swift: Test",
+            "type": "shell",
+            "command": "swift test --parallel",
+            "group": "test",
+            "problemMatcher": []
+        },
+        {
+            "label": "Swift: Clean",
+            "type": "shell",
+            "command": "swift package clean",
+            "problemMatcher": []
+        }
+    ]
+}

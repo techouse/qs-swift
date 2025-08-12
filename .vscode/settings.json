@@ -1,0 +1,26 @@
+{
+  "files.exclude": {
+    "**/.build": true,
+    "**/.swiftpm": true
+  },
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 500,
+  "swift.path.swift": "swift",
+  "swift.path.swiftpm": "swift",
+  "swift.path.sourcekit-lsp": "sourcekit-lsp",
+  "swift.workspaceSymbols": "sourcekit-lsp",
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "files.trimTrailingWhitespace": true,
+  "local-history.daysLimit": 30,
+  "local-history.maxDisplay": 50,
+  "local-history.exclude": [
+    "**/node_modules/**",
+    "**/bin/**",
+    "**/obj/**"
+  ],
+  "[swift]": {
+    "editor.defaultFormatter": "vknabel.vscode-apple-swift-format"
+  },
+  "makefile.configureOnOpen": false,
+}

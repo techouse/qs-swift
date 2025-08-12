@@ -1,0 +1,40 @@
+{
+  "configurations" : [
+    {
+      "id" : "215D68D7-A65C-4B2D-B32A-C5804CC3AE47",
+      "name" : "Default",
+      "options" : {
+        "diagnosticCollectionPolicy" : "Always"
+      }
+    },
+    {
+      "id" : "4B3EB706-8380-4768-95A0-CE8B612CB597",
+      "name" : "ASan",
+      "options" : {
+        "addressSanitizer" : {
+          "enabled" : true
+        },
+        "diagnosticCollectionPolicy" : "Always"
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "environmentVariableEntries" : [
+      {
+        "key" : "SWIFT_DETERMINISTIC_HASHING",
+        "value" : "1"
+      }
+    ]
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "QsTests",
+        "name" : "QsTests"
+      }
+    }
+  ],
+  "version" : 2
+}
