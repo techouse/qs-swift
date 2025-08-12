@@ -14,6 +14,8 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.2.1"),
+        // Needed on Swift 5.10 where the Testing module is not bundled
+        .package(url: "https://github.com/apple/swift-testing.git", from: "0.9.0"),
     ],
     targets: [
         .target(
@@ -25,14 +27,17 @@ let package = Package(
             ],
             path: "Sources/Qs",
             swiftSettings: [
-                // Keep Swift 6-like checks while on 5.10 (debug only)
+                // Keep Swift 6-like checks while on 5.10
                 .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
                 .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
             ]
         ),
         .testTarget(
             name: "QsTests",
-            dependencies: ["Qs"],
+            dependencies: [
+                "Qs",
+                .product(name: "Testing", package: "swift-testing"),
+            ],
             path: "Tests/QsTests",
             swiftSettings: [
                 .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
