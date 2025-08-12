@@ -89,10 +89,10 @@ extension Qs {
     internal nonisolated static func decodeAsyncBoxed(
         _ input: _UnsafeSendable<Any?>,
         options: _UnsafeSendable<DecodeOptions>,
-        qos: DispatchQoS.QoSClass = .userInitiated
+        qos: _UnsafeSendable<DispatchQoS.QoSClass> = _UnsafeSendable(.userInitiated)
     ) async throws -> DecodedMap {
         try await withCheckedThrowingContinuation { cont in
-            DispatchQueue.global(qos: qos).async {
+            DispatchQueue.global(qos: qos.value).async {
                 do {
                     let dict = try _decodeSyncCore(input.value, options: options.value)
                     cont.resume(returning: DecodedMap(dict))

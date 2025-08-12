@@ -72,7 +72,7 @@ extension Qs {
         try await decodeAsyncBoxed(
             _UnsafeSendable(input),
             options: _UnsafeSendable(options),
-            qos: qos
+            qos: _UnsafeSendable(qos)
         )
     }
 
