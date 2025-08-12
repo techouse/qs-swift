@@ -12,6 +12,11 @@ import Foundation
     import XCTest
 #endif
 
+// Default: skip on CI (GitHub Actions sets CI=1), run locally
+private let defaultSkip = ProcessInfo.processInfo.environment["CI"] != nil
+private let skipExpensive = envFlag("SKIP_EXPENSIVE_TESTS") ?? defaultSkip
+private let runExpensive = !skipExpensive
+
 struct DecodeTests {
     @Test("decode - nested list handling in parseObject")
     func testDecode_NestedListHandling() async throws {
@@ -1605,31 +1610,26 @@ struct DoesNotCrashTests {
 
     #if DEBUG && os(macOS)
         @MainActor
-        @Test("decode – deep maps (very deep, MainActor)")
+        @Test(
+            "decode – deep maps (very deep, MainActor)",
+            .enabled(if: runExpensive, "expensive: set SKIP_EXPENSIVE_TESTS=0 to run; 1 to skip")
+        )
         func testDecode_DeepMaps_VeryDeep_Main() async throws {
-            try skipOnCI(
-                "Skip very-deep structure on CI to avoid recursive Dictionary deinit stack overflow"
-            )
-            try await runVeryDeepDecodeTest()
+            let depth = 5000
+            var s = "foo"
+            for _ in 0..<depth { s += "[p]" }
+            s += "=bar"
+            let r = try Qs.decode(s, options: DecodeOptions(depth: depth))
+            #expect(r.keys.contains("foo"))
+            var actual = 0
+            var ref: Any? = r["foo"]
+            while let dict = ref as? [String: Any], let next = dict["p"] {
+                ref = next
+                actual += 1
+            }
+            #expect(actual == depth)
         }
     #endif
-
-    @MainActor
-    private func runVeryDeepDecodeTest() async throws {
-        let depth = 5000
-        var s = "foo"
-        for _ in 0..<depth { s += "[p]" }
-        s += "=bar"
-        let r = try Qs.decode(s, options: DecodeOptions(depth: depth))
-        #expect(r.keys.contains("foo"))
-        var actual = 0
-        var ref: Any? = r["foo"]
-        while let dict = ref as? [String: Any], let next = dict["p"] {
-            ref = next
-            actual += 1
-        }
-        #expect(actual == depth)
-    }
 }
 
 @inline(__always)
@@ -3088,4 +3088,9 @@ private func asDictAnyHashable(_ v: Any?) -> [AnyHashable: Any]? { v as? [AnyHas
 
 private func asDictString(_ v: Any?) -> [String: Any]? {
     v as? [String: Any]
+}
+
+private func envFlag(_ name: String) -> Bool? {
+    guard let v = ProcessInfo.processInfo.environment[name] else { return nil }
+    return ["1", "true", "yes", "y", "on"].contains(v.lowercased())
 }
