@@ -5,7 +5,6 @@ A fast, flexible query string **encoding/decoding** library for Swift.
 Ported from [qs](https://www.npmjs.com/package/qs) for JavaScript.
 
 [![SwiftPM compatible](https://img.shields.io/badge/SwiftPM-compatible-orange.svg)](#installation)
-[![Platforms](https://img.shields.io/badge/platforms-macOS%20|%20iOS%20|%20tvOS%20|%20watchOS-blue.svg)](#requirements)
 [![Test](https://github.com/techouse/qs-swift/actions/workflows/test.yml/badge.svg)](https://github.com/techouse/qs-swift/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/techouse/qs-swift/graph/badge.svg?token=hk2eROAKOo)](https://codecov.io/gh/techouse/qs-swift)
 [![License](https://img.shields.io/github/license/techouse/qs-swift)](LICENSE)
