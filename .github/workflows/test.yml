@@ -17,10 +17,24 @@ concurrency:
 jobs:
   style:
     name: Code style (SwiftPM) + cache warmup
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            swift: '6.1'
+            xcode: '16.3'
+          - os: macos-14
+            swift: '5.10'
+            xcode: '15.4'
     runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Select Xcode ${{ matrix.xcode }}
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.xcode }}
       - name: Show Swift version (runner default)
         run: swift --version
       - name: Build (debug)
@@ -34,24 +48,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS + Swift 6.x -> Xcode 16
           - os: macos-15
             swift: '6.1'
-            use_xcode: '16.3'
-          # macOS + Swift 5.10 -> toolchain
-          - os: macos-14
-            swift: '5.10'
-            use_xcode: '15.4'
+            xcode: '16.3'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Only for macOS+Swift 6.x rows:
-      - name: Select Xcode ${{ matrix.use_xcode }}
-        if: ${{ runner.os == 'macOS' }}
+      - name: Select Xcode ${{ matrix.xcode }}
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: ${{ matrix.use_xcode }}
+          xcode-version: ${{ matrix.xcode }}
 
       - name: Show Swift toolchain
         run: swift --version
@@ -62,7 +69,7 @@ jobs:
         run: bash scripts/coverage.sh
 
       - name: Collect macOS crash logs
-        if: ${{ failure() && runner.os == 'macOS' }}
+        if: ${{ failure() }}
         run: |
           set -euxo pipefail
           mkdir -p crashlogs
@@ -100,10 +107,10 @@ jobs:
           ls -lah crashlogs || true
 
       - name: Upload macOS crash logs (if any)
-        if: ${{ failure() && runner.os == 'macOS' }}
+        if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: macOS-crashlogs
+          name: macOS-crashlogs-xcode-${{ matrix.xcode }}-swift-${{ matrix.swift }}
           path: crashlogs
           if-no-files-found: ignore
 
