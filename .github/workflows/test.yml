@@ -58,6 +58,8 @@ jobs:
           sudo apt-get install -y llvm
 
       - name: Run tests with coverage
+        env:
+          SWIFT_DETERMINISTIC_HASHING: 1
         run: bash scripts/coverage.sh
 
       - name: Upload coverage to Codecov
