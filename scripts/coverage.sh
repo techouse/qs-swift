@@ -38,7 +38,26 @@ done
 mkdir -p "$OUT_DIR"
 
 echo "▶ Running tests with coverage (config: $CONFIG)…"
-SWIFT_DETERMINISTIC_HASHING=1 swift test -c "$CONFIG" --enable-code-coverage
+
+if [[ "$OSTYPE" == darwin* ]]; then
+  # Build tests so we can sign them
+  SWIFT_DETERMINISTIC_HASHING=1 swift build -c "$CONFIG" --build-tests --enable-code-coverage
+
+  BIN_PATH="$(swift build -c "$CONFIG" --show-bin-path)"
+
+  # Ad-hoc sign each test bundle executable
+  while IFS= read -r -d '' exe; do
+    echo "• codesign: $exe"
+    /usr/bin/codesign --force -s - "$exe" || true
+  done < <(find "$BIN_PATH" -type f -path "*.xctest/Contents/MacOS/*" -print0)
+
+  # Run tests without rebuilding; also silence default.profraw write error
+  LLVM_PROFILE_FILE="$OUT_DIR/default-%p.profraw" \
+  SWIFT_DETERMINISTIC_HASHING=1 swift test -c "$CONFIG" --enable-code-coverage --skip-build
+else
+  LLVM_PROFILE_FILE="$OUT_DIR/default-%p.profraw" \
+  SWIFT_DETERMINISTIC_HASHING=1 swift test -c "$CONFIG" --enable-code-coverage
+fi
 
 # Find profdata (SwiftPM writes under .build/**/codecov/)
 PROF="$(find .build -type f -name "default.profdata" -path "*/codecov/*" -print -quit || true)"
