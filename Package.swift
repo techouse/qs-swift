@@ -28,7 +28,7 @@ let package = Package(
                 // Keep Swift 6-like checks while on 5.10 (debug only)
                 .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
                 .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
-            ],
+            ]
         ),
         .testTarget(
             name: "QsTests",
