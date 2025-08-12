@@ -39,8 +39,39 @@ mkdir -p "$OUT_DIR"
 
 echo "▶ Running tests with coverage (config: $CONFIG)…"
 
-LLVM_PROFILE_FILE="$OUT_DIR/default-%p.profraw" \
-SWIFT_DETERMINISTIC_HASHING=1 swift test -q -c "$CONFIG" --enable-code-coverage
+if [[ "$OSTYPE" == darwin* ]]; then
+  # Build tests so we can sign them
+  SWIFT_DETERMINISTIC_HASHING=1 swift build -c "$CONFIG" --build-tests --enable-code-coverage
+
+  BIN_PATH="${BIN_PATH:-.build/arm64-apple-macosx/debug}"
+
+  # Sign test runners if they are NOT already signed (covers Xcode 15.x)
+  while IFS= read -r -d '' exe; do
+    if /usr/bin/codesign -dv --verbose=2 "$exe" >/dev/null 2>&1; then
+      echo "• already signed: $exe"
+    else
+      echo "• adhoc signing: $exe"
+      /usr/bin/codesign --force -s - "$exe"
+    fi
+  done < <(find "$BIN_PATH" -type f -path "*.xctest/Contents/MacOS/*" -print0)
+
+  # (Optional) also sign any embedded frameworks inside the test bundles
+  while IFS= read -r -d '' dylib; do
+    if /usr/bin/codesign -dv --verbose=2 "$dylib" >/dev/null 2>&1; then
+      echo "• already signed: $dylib"
+    else
+      echo "• adhoc signing: $dylib"
+      /usr/bin/codesign --force -s - "$dylib"
+    fi
+  done < <(find "$BIN_PATH" -type f -path "*.xctest/Contents/Frameworks/*.dylib" -print0)
+
+  # Run tests without rebuilding; also silence default.profraw write error
+  LLVM_PROFILE_FILE="$OUT_DIR/default-%p.profraw" \
+  SWIFT_DETERMINISTIC_HASHING=1 swift test -q -c "$CONFIG" --enable-code-coverage --skip-build
+else
+  LLVM_PROFILE_FILE="$OUT_DIR/default-%p.profraw" \
+  SWIFT_DETERMINISTIC_HASHING=1 swift test -q -c "$CONFIG" --enable-code-coverage
+fi
 
 # Find profdata (SwiftPM writes under .build/**/codecov/)
 PROF="$(find .build -type f -name "default.profdata" -path "*/codecov/*" -print -quit || true)"
