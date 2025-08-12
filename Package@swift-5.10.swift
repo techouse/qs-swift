@@ -41,9 +41,6 @@ let package = Package(
             swiftSettings: [
                 .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
                 .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
-            ],
-            plugins: [
-                .plugin(name: "TestingPlugin", package: "swift-testing")
             ]
         ),
     ]
