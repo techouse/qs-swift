@@ -23,12 +23,12 @@ let package = Package(
                 .product(name: "OrderedCollections", package: "swift-collections"),
                 .product(name: "DequeModule", package: "swift-collections"),
             ],
-            path: "Sources/Qs",
+            path: "Sources/Qs"
         ),
         .testTarget(
             name: "QsTests",
             dependencies: ["Qs"],
-            path: "Tests/QsTests",
+            path: "Tests/QsTests"
         ),
     ]
 )
