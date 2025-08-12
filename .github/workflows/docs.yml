@@ -38,20 +38,23 @@ jobs:
             --transform-for-static-hosting \
             --hosting-base-path "$REPO_NAME"
       - name: Make root URL redirect to module docs
+        env:
+          OUT: 'docs'
+          TARGET: 'qs'
         run: |
           set -e
-          mkdir -p docs
+          mkdir -p ${{ env.OUT }}
           # prevent Pages' Jekyll from messing with DocC assets
           touch docs/.nojekyll
-          # Redirect root to /documentation/qs/
+          # Redirect root to /documentation/${{ env.TARGET }}/
           cat > docs/index.html <<'EOF'
           <!doctype html>
           <meta charset="utf-8">
           <title>Redirecting…</title>
-          <meta http-equiv="refresh" content="0; url=./documentation/qs/">
-          <link rel="canonical" href="./documentation/qs/">
-          <script>location.replace('./documentation/qs/');</script>
-          <p><a href="./documentation/qs/">Continue to the documentation</a></p>
+          <meta http-equiv="refresh" content="0; url=./documentation/${{ env.TARGET }}/">
+          <link rel="canonical" href="./documentation/${{ env.TARGET }}/">
+          <script>location.replace('./documentation/${{ env.TARGET }}/');</script>
+          <p><a href="./documentation/${{ env.TARGET }}/">Continue to the documentation</a></p>
           EOF
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
