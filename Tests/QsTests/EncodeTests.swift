@@ -58,7 +58,7 @@ struct EncodeTests {
             ["date": dateTime],
             options: EncodeOptions(
                 dateSerializer: nil,
-                encode: false,
+                encode: false
             )
         )
         #expect(result == "date=2023-01-01T00:00:00.001Z")
@@ -69,7 +69,7 @@ struct EncodeTests {
             options: EncodeOptions(
                 dateSerializer: nil,
                 listFormat: .comma,
-                encode: false,
+                encode: false
             )
         )
         #expect(result2 == "dates=2023-01-01T00:00:00.001Z,2023-01-01T00:00:00.001Z")
@@ -1219,7 +1219,7 @@ struct EncodeTests {
                 data,
                 options: EncodeOptions(
                     listFormat: .indices,
-                    filter: IterableFilter(["a", "b", 0, 2]),
+                    filter: IterableFilter(["a", "b", 0, 2])
                 )
             ) == "a%5Bb%5D%5B0%5D=1&a%5Bb%5D%5B2%5D=3"
         )

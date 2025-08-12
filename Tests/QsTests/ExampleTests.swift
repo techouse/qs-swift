@@ -440,7 +440,7 @@ struct ExampleTests {
             ["a": date],
             options: .init(
                 dateSerializer: { d in String(Int((d.timeIntervalSince1970 * 1000.0).rounded())) },
-                encode: false,
+                encode: false
             )
         )
         #expect(s == "a=7")
