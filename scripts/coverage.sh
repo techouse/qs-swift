@@ -40,8 +40,8 @@ mkdir -p "$OUT_DIR"
 echo "▶ Running tests with coverage (config: $CONFIG)…"
 SWIFT_DETERMINISTIC_HASHING=1 swift test -c "$CONFIG" --enable-code-coverage
 
-# Find profdata
-PROF=$(find .build -type f -name "default.profdata" -path "*/codecov/*" -print -quit)
+# Find profdata (SwiftPM writes under .build/**/codecov/)
+PROF="$(find .build -type f -name "default.profdata" -path "*/codecov/*" -print -quit || true)"
 if [[ -z "${PROF:-}" ]]; then
   echo "❌ Could not find default.profdata under .build/**/codecov/"
   exit 1
@@ -50,24 +50,35 @@ echo "• profdata: $PROF"
 
 BIN_PATH="$(swift build -c "$CONFIG" --show-bin-path)"
 
-# Collect test bundles/executables (macOS/Linux)
+# Collect test bundles/executables (macOS & Linux, Swift 5.x–6.x patterns)
 BUNDLES=()
+# macOS bundles
 while IFS= read -r -d '' p; do BUNDLES+=("$p"); done < <(find "$BIN_PATH" -type d -name '*.xctest' -print0 2>/dev/null || true)
+# Linux sometimes produces a file named *.xctest (executable, not bundle)
+while IFS= read -r -d '' p; do BUNDLES+=("$p"); done < <(find "$BIN_PATH" -maxdepth 1 -type f -name '*Tests.xctest' -print0 2>/dev/null || true)
+
+# If still nothing, scan for any executable whose basename ends with Tests/PackageTests
 if [[ ${#BUNDLES[@]} -eq 0 ]]; then
-  while IFS= read -r -d '' p; do BUNDLES+=("$p"); done < <(find "$BIN_PATH" -maxdepth 1 -type f -name '*PackageTests.xctest' -print0 2>/dev/null || true)
+  while IFS= read -r -d '' p; do BUNDLES+=("$p"); done < <(
+    find "$BIN_PATH" -maxdepth 1 -type f -perm -111 \( -regex '.*/.*PackageTests$' -o -regex '.*/.*Tests$' \) -print0 2>/dev/null || true
+  )
 fi
+
 if [[ ${#BUNDLES[@]} -eq 0 ]]; then
-  echo "❌ No test bundles found under $BIN_PATH"
+  echo "❌ No test bundles/executables found under $BIN_PATH"
   exit 1
 fi
 
 # Resolve executable paths
 BINS=()
 for b in "${BUNDLES[@]}"; do
+  exe=""
   if [[ -d "$b" && "$OSTYPE" == darwin* ]]; then
+    # macOS .xctest bundle
     name="$(basename "$b" .xctest)"
     exe="$b/Contents/MacOS/$name"
   else
+    # Linux, or macOS single-file .xctest
     if [[ -x "$b" && ! -d "$b" ]]; then
       exe="$b"
     else
@@ -76,26 +87,44 @@ for b in "${BUNDLES[@]}"; do
   fi
   [[ -n "${exe:-}" && -x "$exe" ]] && BINS+=("$exe")
 done
+
 if [[ ${#BINS[@]} -eq 0 ]]; then
   echo "❌ Could not resolve test executables."
-  printf '   bundle: %s\n' "${BUNDLES[@]}"
+  printf '   bundle candidate: %s\n' "${BUNDLES[@]}"
   exit 1
 fi
 
-# Choose llvm-cov
-LLVM_COV=${LLVM_COV:-llvm-cov}
-if [[ "$OSTYPE" == darwin* ]]; then
-  LLVM_COV="xcrun $LLVM_COV"
-fi
-if ! command -v ${LLVM_COV%% *} >/dev/null 2>&1; then
-  echo "❌ llvm-cov not found. On macOS, install Xcode CLT; on Linux, install llvm."
+# Robust llvm tool resolver
+resolve_llvm_bin() {
+  local name="$1"
+  # macOS: prefer Xcode toolchain via xcrun
+  if [[ "$OSTYPE" == darwin* ]]; then
+    if xcrun -f "$name" >/dev/null 2>&1; then
+      echo "xcrun $name"; return
+    fi
+  fi
+  # Plain name first
+  if command -v "$name" >/dev/null 2>&1; then
+    command -v "$name"; return
+  fi
+  # Versioned fallbacks (Linux)
+  for v in 18 17 16 15 14 13; do
+    if command -v "${name}-${v}" >/dev/null 2>&1; then
+      command -v "${name}-${v}"; return
+    fi
+  done
+  echo "❌ Could not find ${name}" >&2
   exit 1
-fi
+}
+
+LLVM_COV="$(resolve_llvm_bin llvm-cov)"
 
 # Export LCOV (merge all test executables)
 : > "$OUT_LCOV"
 for exe in "${BINS[@]}"; do
   echo "• exporting LCOV from: $exe"
+  # Ignore test sources and build dir; keep everything else
+  # (tweak the regex if you want to filter generated files or a Bench package)
   $LLVM_COV export \
     --format=lcov \
     --instr-profile "$PROF" \
@@ -107,7 +136,7 @@ echo "✅ LCOV written to $OUT_LCOV"
 # Optional HTML into coverage/html
 if [[ "$MAKE_HTML" -eq 1 ]]; then
   if ! command -v genhtml >/dev/null 2>&1; then
-    echo "❌ genhtml (lcov) not found. Install lcov (e.g. 'brew install lcov')."
+    echo "❌ genhtml (lcov) not found. Install lcov (e.g. 'brew install lcov' or 'apt-get install lcov')."
     exit 1
   fi
   rm -rf "$HTML_DIR"
