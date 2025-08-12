@@ -1,0 +1,5 @@
+name: qs-swift
+paths-ignore:
+  - Bench/**
+  - .build/**
+  - Tests/**
