@@ -1607,30 +1607,36 @@ struct DoesNotCrashTests {
         @MainActor
         @Test("decode – deep maps (very deep, MainActor)")
         func testDecode_DeepMaps_VeryDeep_Main() async throws {
-            // Skip on CI (GitHub Actions sets both CI and GITHUB_ACTIONS)
-            #if canImport(XCTest)
-                if ProcessInfo.processInfo.environment["CI"] == "true" {
-                    throw XCTSkip("Skipped on CI (very deep test can be flaky/slow).")
-                }
-            #endif
-
-            let depth = 5000  // lower if CI is flaky with sanitizers
-            var s = "foo"
-            for _ in 0..<depth { s += "[p]" }
-            s += "=bar"
-
-            let r = try Qs.decode(s, options: DecodeOptions(depth: depth))
-            #expect(r.keys.contains("foo"))
-
-            var actual = 0
-            var ref: Any? = r["foo"]
-            while let dict = ref as? [String: Any], let next = dict["p"] {
-                ref = next
-                actual += 1
-            }
-            #expect(actual == depth)
+            try skipOnCI(
+                "Skip very-deep structure on CI to avoid recursive Dictionary deinit stack overflow"
+            )
+            try await runVeryDeepDecodeTest()
         }
     #endif
+
+    @MainActor
+    private func runVeryDeepDecodeTest() async throws {
+        let depth = 5000
+        var s = "foo"
+        for _ in 0..<depth { s += "[p]" }
+        s += "=bar"
+        let r = try Qs.decode(s, options: DecodeOptions(depth: depth))
+        #expect(r.keys.contains("foo"))
+        var actual = 0
+        var ref: Any? = r["foo"]
+        while let dict = ref as? [String: Any], let next = dict["p"] {
+            ref = next
+            actual += 1
+        }
+        #expect(actual == depth)
+    }
+}
+
+@inline(__always)
+private func skipOnCI(_ reason: String) throws {
+    if ProcessInfo.processInfo.environment["CI"] != nil {
+        throw XCTSkip(reason)
+    }
 }
 
 // MARK: - Data / Date / Regex passthrough
