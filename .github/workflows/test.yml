@@ -17,6 +17,7 @@ concurrency:
 jobs:
   style:
     name: Code style (SwiftPM) + cache warmup
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -27,7 +28,6 @@ jobs:
           - os: macos-14
             swift: '5.10'
             xcode: '15.4'
-    runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
