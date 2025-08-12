@@ -53,10 +53,10 @@ if [[ "$OSTYPE" == darwin* ]]; then
 
   # Run tests without rebuilding; also silence default.profraw write error
   LLVM_PROFILE_FILE="$OUT_DIR/default-%p.profraw" \
-  SWIFT_DETERMINISTIC_HASHING=1 swift test -c "$CONFIG" --enable-code-coverage --skip-build
+  SWIFT_DETERMINISTIC_HASHING=1 swift test -q -c "$CONFIG" --enable-code-coverage --skip-build
 else
   LLVM_PROFILE_FILE="$OUT_DIR/default-%p.profraw" \
-  SWIFT_DETERMINISTIC_HASHING=1 swift test -c "$CONFIG" --enable-code-coverage
+  SWIFT_DETERMINISTIC_HASHING=1 swift test -q -c "$CONFIG" --enable-code-coverage
 fi
 
 # Find profdata (SwiftPM writes under .build/**/codecov/)
