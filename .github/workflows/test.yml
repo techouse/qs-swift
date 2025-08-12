@@ -60,6 +60,7 @@ jobs:
       - name: Confirm 5.10 manifest in use
         if: matrix.swift == '5.10'
         run: |
+          set -e
           swift package dump-package > manifest.json
           if grep -q 'swift-testing' manifest.json; then
             echo "Using Package@swift-5.10.swift ✅"
@@ -69,10 +70,27 @@ jobs:
             exit 1
           fi
 
+      - name: Route raw profiles to a writable place
+        run: |
+          set -e
+          mkdir -p $RUNNER_TEMP/profraw
+          export LLVM_PROFILE_FILE=$RUNNER_TEMP/profraw/default.profraw
+
       - name: Run tests with coverage
         env:
           SWIFT_DETERMINISTIC_HASHING: 1
         run: bash scripts/coverage.sh
+
+      - name: Collect macOS crash logs
+        if: ${{ failure() && runner.os == 'macOS' }}
+        run: |
+          mkdir -p crashlogs
+          find ~/Library/Logs/DiagnosticReports -name "*.crash" -mmin -10 -print -exec cp {} crashlogs/ \; || true
+      - uses: actions/upload-artifact@v4
+        if: ${{ failure() && runner.os == 'macOS' }}
+        with:
+          name: macOS-crashlogs
+          path: crashlogs
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
