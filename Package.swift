@@ -1,4 +1,4 @@
-// swift-tools-version: 6.1
+// swift-tools-version: 5.10
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -23,12 +23,21 @@ let package = Package(
                 .product(name: "OrderedCollections", package: "swift-collections"),
                 .product(name: "DequeModule", package: "swift-collections"),
             ],
-            path: "Sources/Qs"
+            path: "Sources/Qs",
+            swiftSettings: [
+                // Keep Swift 6-like checks while on 5.10 (debug only)
+                .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
+                .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
+            ],
         ),
         .testTarget(
             name: "QsTests",
             dependencies: ["Qs"],
-            path: "Tests/QsTests"
+            path: "Tests/QsTests",
+            swiftSettings: [
+                .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
+                .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
+            ]
         ),
     ]
 )

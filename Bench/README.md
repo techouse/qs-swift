@@ -17,7 +17,7 @@ You can tweak these inputs in `Sources/QsBench/main.swift`.
 
 ## Prerequisites
 
-- Swift 5.9+ toolchain (SwiftPM)
+- Swift 5.10+ toolchain (SwiftPM)
 - macOS or Linux shell
 - (Optional) [hyperfine](https://github.com/sharkdp/hyperfine) for nicer A/B comparisons
   - macOS: `brew install hyperfine`
