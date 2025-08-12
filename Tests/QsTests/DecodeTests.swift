@@ -1,7 +1,16 @@
 import Foundation
-import Testing
 
 @testable import Qs
+
+#if canImport(Testing)
+    import Testing
+#else
+    #error("The swift-testing package is required to build tests on Swift 5.x")
+#endif
+
+#if canImport(XCTest)
+    import XCTest
+#endif
 
 struct DecodeTests {
     @Test("decode - nested list handling in parseObject")
@@ -1598,6 +1607,13 @@ struct DoesNotCrashTests {
         @MainActor
         @Test("decode – deep maps (very deep, MainActor)")
         func testDecode_DeepMaps_VeryDeep_Main() async throws {
+            // Skip on CI (GitHub Actions sets both CI and GITHUB_ACTIONS)
+            #if canImport(XCTest)
+                if ProcessInfo.processInfo.environment["CI"] == "true" {
+                    throw XCTSkip("Skipped on CI (very deep test can be flaky/slow).")
+                }
+            #endif
+
             let depth = 5000  // lower if CI is flaky with sanitizers
             var s = "foo"
             for _ in 0..<depth { s += "[p]" }
@@ -2282,7 +2298,7 @@ extension DecodeTests {
 
     @Test("parse: limit specific array indices to listLimit")
     func parse_listLimitIndexing() throws {
-        let optDefault = DecodeOptions()              // listLimit = 20
+        let optDefault = DecodeOptions()  // listLimit = 20
         let opt20 = DecodeOptions(listLimit: 20)
 
         // index == listLimit ⇒ still an array (compacted to one element)

@@ -1,6 +1,11 @@
 import Foundation
 @_spi(Testing) @testable import Qs
-import Testing
+
+#if canImport(Testing)
+    import Testing
+#else
+    #error("The swift-testing package is required to build tests on Swift 5.x")
+#endif
 
 struct UtilsTests {
     // MARK: - Utils.encode tests
@@ -875,10 +880,12 @@ struct UtilsTests {
     func DropOnMain_Releases() async {
         weak var weakRef: AnyObject?
         do {
-            let deep = ["k": (0..<6000).reduce(into: ["p": Any?("x")]) { acc, _ in acc = ["p": acc] }]
+            let deep = [
+                "k": (0..<6000).reduce(into: ["p": Any?("x")]) { acc, _ in acc = ["p": acc] }
+            ]
             let box = Holder(deep)
             weakRef = box
-            Utils.dropOnMainThread(box) // schedule last release on main
+            Utils.dropOnMainThread(box)  // schedule last release on main
         }
 
         // Pump the main runloop a few times so the async release runs.
@@ -897,5 +904,5 @@ struct UtilsTests {
 private final class Holder: CustomStringConvertible {
     var payload: Any?
     init(_ p: Any?) { payload = p }
-    var description: String { "Holder(payload: …)" } // prevents recursive dictionary dump
+    var description: String { "Holder(payload: …)" }  // prevents recursive dictionary dump
 }

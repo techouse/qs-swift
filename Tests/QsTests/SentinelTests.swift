@@ -1,6 +1,10 @@
-import Testing
-
 @testable import Qs
+
+#if canImport(Testing)
+    import Testing
+#else
+    #error("The swift-testing package is required to build tests on Swift 5.x")
+#endif
 
 struct SentinelTests {
     @Test("Sentinel.iso - value, encoded, and description")
