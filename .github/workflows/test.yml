@@ -36,7 +36,7 @@ jobs:
         include:
           # macOS + Swift 6.x -> Xcode 16
           - os: macos-latest
-            swift: '6.1'
+            swift: '6.0'
             use_xcode: '16.2'
           # macOS + Swift 5.10 -> toolchain
           - os: macos-latest
