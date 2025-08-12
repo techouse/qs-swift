@@ -2,9 +2,9 @@ name: Test
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
   workflow_call:
 
 permissions:
@@ -74,7 +74,7 @@ jobs:
         run: |
           set -e
           mkdir -p $RUNNER_TEMP/profraw
-          export LLVM_PROFILE_FILE=$RUNNER_TEMP/profraw/default.profraw
+          echo "LLVM_PROFILE_FILE=$RUNNER_TEMP/profraw/default.profraw" >> $GITHUB_ENV
 
       - name: Run tests with coverage
         env:
@@ -84,13 +84,48 @@ jobs:
       - name: Collect macOS crash logs
         if: ${{ failure() && runner.os == 'macOS' }}
         run: |
+          set -euxo pipefail
           mkdir -p crashlogs
-          find ~/Library/Logs/DiagnosticReports -name "*.crash" -mmin -10 -print -exec cp {} crashlogs/ \; || true
-      - uses: actions/upload-artifact@v4
+          # Where crash logs usually live
+          USER_DR="$HOME/Library/Logs/DiagnosticReports"
+          SYS_DR="/Library/Logs/DiagnosticReports"
+
+          # List what’s there (for debugging)
+          for dir in "$USER_DR" "$SYS_DR"; do
+            if [ -d "$dir" ]; then
+              echo "=== Listing $dir ==="
+              ls -lah "$dir" || true
+            fi
+          done
+
+          # Copy recent crash-like files (last 60 minutes, multiple extensions)
+          for dir in "$USER_DR" "$SYS_DR"; do
+            if [ -d "$dir" ]; then
+              # Use sudo for system dir; it’s allowed on macOS runners
+              CP="cp"
+              if [ "$dir" = "$SYS_DR" ]; then CP="sudo cp"; fi
+
+              find "$dir" -type f \
+                \( -name '*.crash' -o -name '*.ips' -o -name '*.hang' -o -name '*.spin' \) \
+                -mmin -60 -print -exec $CP {} crashlogs/ \; || true
+            fi
+          done
+
+          # Always include a unified log snippet around the failure time (very helpful when no .crash exists)
+          /usr/bin/log show --style syslog --last 30m \
+            --predicate 'eventMessage CONTAINS[c] "xctest" OR process CONTAINS[c] "xctest" OR process CONTAINS[c] "swift"' \
+            > crashlogs/unified-log.txt 2>/dev/null || true
+
+          echo "Collected files:"
+          ls -lah crashlogs || true
+
+      - name: Upload macOS crash logs (if any)
         if: ${{ failure() && runner.os == 'macOS' }}
+        uses: actions/upload-artifact@v4
         with:
           name: macOS-crashlogs
           path: crashlogs
+          if-no-files-found: ignore
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
