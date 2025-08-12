@@ -14,7 +14,8 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.2.1"),
-        .package(url: "https://github.com/apple/swift-testing.git", from: "0.9.0"),
+        // Pin to 0.9.* so the plugin is available on Swift 5.10
+        .package(url: "https://github.com/apple/swift-testing.git", "0.9.0"..<"0.10.0"),
     ],
     targets: [
         .target(
