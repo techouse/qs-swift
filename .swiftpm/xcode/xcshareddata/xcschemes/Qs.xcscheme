@@ -30,7 +30,7 @@
       shouldUseLaunchSchemeArgsEnv = "YES">
       <TestPlans>
          <TestPlanReference
-            reference = "container:.swiftpm/QsSwift.xctestplan"
+            reference = "container:.swiftpm/Qs.xctestplan"
             default = "YES">
          </TestPlanReference>
       </TestPlans>

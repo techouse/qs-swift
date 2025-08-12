@@ -1,7 +1,7 @@
 {
   "configurations" : [
     {
-      "id" : "215D68D7-A65C-4B2D-B32A-C5804CC3AE47",
+      "id" : "3D81E147-168A-435C-9016-F31914CC775E",
       "name" : "Default",
       "options" : {
         "diagnosticCollectionPolicy" : "Always"
