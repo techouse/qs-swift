@@ -37,8 +37,8 @@ jobs:
           - macos-latest
           # - ubuntu-latest ## Disabled due to https://github.com/swift-actions/setup-swift/issues/739
         swift:
-          - "5"
-          - "6"
+          - '5.10'
+          - '6'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,6 +56,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y llvm
+
+      - name: Confirm 5.10 manifest in use
+        if: matrix.swift == '5.10'
+        run: |
+          swift package dump-package > manifest.json
+          if grep -q 'swift-testing' manifest.json; then
+            echo "Using Package@swift-5.10.swift ✅"
+          else
+            echo "Not using 5.10 manifest ❌"
+            cat manifest.json
+            exit 1
+          fi
 
       - name: Run tests with coverage
         env:
