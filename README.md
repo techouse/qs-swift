@@ -5,9 +5,10 @@ A fast, flexible query string **encoding/decoding** library for Swift.
 Ported from [qs](https://www.npmjs.com/package/qs) for JavaScript.
 
 [![SwiftPM compatible](https://img.shields.io/badge/SwiftPM-compatible-orange.svg)](#installation)
+[![Docs](https://img.shields.io/badge/Docs-qs--swift-blue)](https://techouse.github.io/qs-swift)
+[![License](https://img.shields.io/github/license/techouse/qs-swift)](LICENSE)
 [![Test](https://github.com/techouse/qs-swift/actions/workflows/test.yml/badge.svg)](https://github.com/techouse/qs-swift/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/techouse/qs-swift/graph/badge.svg?token=hk2eROAKOo)](https://codecov.io/gh/techouse/qs-swift)
-[![License](https://img.shields.io/github/license/techouse/qs-swift)](LICENSE)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/techouse)](https://github.com/sponsors/techouse)
 [![GitHub Repo stars](https://img.shields.io/github/stars/techouse/qs-swift)](https://github.com/techouse/qs-swift/stargazers)
 
