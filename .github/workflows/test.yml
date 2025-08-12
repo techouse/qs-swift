@@ -33,8 +33,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
-        swift: ['5.10', '6.0', '6.1']
+        os:
+          - macos-latest
+          # - ubuntu-latest ## Disabled due to https://github.com/swift-actions/setup-swift/issues/739
+        swift:
+          - "5"
+          - "6"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
