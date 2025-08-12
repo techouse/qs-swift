@@ -86,7 +86,9 @@ let qs = try Qs.encode(["a": "c"])
 // "a=c"
 ```
 
-### Decoding
+---
+
+## Decoding
 
 ### Nested maps
 
@@ -242,9 +244,9 @@ let r = try Qs.decode("a=b,c", options: .init(comma: true))
 
 ---
 
-### Encoding
+## Encoding
 
-#### Basics
+### Basics
 
 ```swift
 try Qs.encode(["a": "b"])
@@ -287,7 +289,7 @@ try Qs.encode(["a": ["b": "č"]], options: .init(encoder: enc))
 // "a[b]=c"
 ```
 
-#### List formats
+### List formats
 
 ```swift
 // indices (default when encode=false)
@@ -307,7 +309,7 @@ try Qs.encode(["a": ["b", "c"]], options: .init(listFormat: .comma, encode: fals
 // "a=b,c"
 ```
 
-#### Nested maps and dot notation
+### Nested maps and dot notation
 
 ```swift
 try Qs.encode(["a": ["b": ["c": "d", "e": "f"]]], options: .init(encode: false))
@@ -343,7 +345,7 @@ try Qs.encode(["a": "b", "c": "d"], options: .init(addQueryPrefix: true))  // "?
 try Qs.encode(["a": "b", "c": "d"], options: .init(delimiter: ";"))        // "a=b;c=d"
 ```
 
-#### Dates
+### Dates
 
 ```swift
 let date = Date(timeIntervalSince1970: 0.007) // 7 ms since epoch
@@ -363,7 +365,7 @@ try Qs.encode(
 // "a=7"
 ```
 
-#### Sorting and filtering
+### Sorting and filtering
 
 ```swift
 // Sort keys
@@ -409,7 +411,7 @@ try Qs.encode(["a": "b", "c": "d", "e": "f"], options: .init(encode: false, filt
 // "a=b&e=f"
 ```
 
-#### RFC 3986 vs RFC 1738 (spaces)
+### RFC 3986 vs RFC 1738 (spaces)
 
 ```swift
 try Qs.encode(["a": "b c"])                                   // "a=b%20c" (RFC 3986 default)
