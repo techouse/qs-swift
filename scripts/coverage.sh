@@ -38,7 +38,7 @@ done
 mkdir -p "$OUT_DIR"
 
 echo "▶ Running tests with coverage (config: $CONFIG)…"
-SWIFT_DETERMINISTIC_HASHING=1 swift test -c "$CONFIG" --enable-code-coverage
+SWIFT_DETERMINISTIC_HASHING=1 swift test -c "$CONFIG" --enable-code-coverage --disable-xctest
 
 # Find profdata (SwiftPM writes under .build/**/codecov/)
 PROF="$(find .build -type f -name "default.profdata" -path "*/codecov/*" -print -quit || true)"
