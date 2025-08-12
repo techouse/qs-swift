@@ -1,0 +1,66 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  style:
+    name: Code style (SwiftPM) + cache warmup
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Show Swift version (runner default)
+        run: swift --version
+      - name: Build (debug)
+        run: swift build --disable-sandbox
+
+  tests:
+    name: Swift tests + coverage (${{ matrix.os }}, Swift ${{ matrix.swift }})
+    runs-on: ${{ matrix.os }}
+    needs: style
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        swift: ['5.10', '6.0', '6.1']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Swift ${{ matrix.swift }}
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: ${{ matrix.swift }}
+
+      - name: Show Swift toolchain
+        run: swift --version
+
+      - name: Install llvm-cov (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm
+
+      - name: Run tests with coverage
+        run: bash scripts/coverage.sh
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage/info.lcov
+          flags: swift,${{ matrix.os }},swift-${{ matrix.swift }}
+          name: Qs-swift-${{ matrix.os }}-swift-${{ matrix.swift }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
