@@ -31,8 +31,8 @@
       "parallelizable" : true,
       "target" : {
         "containerPath" : "container:",
-        "identifier" : "QsTests",
-        "name" : "QsTests"
+        "identifier" : "QsSwiftTests",
+        "name" : "QsSwiftTests"
       }
     }
   ],

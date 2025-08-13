@@ -1,5 +1,5 @@
 import Foundation
-@_spi(Testing) @testable import Qs
+@_spi(Testing) @testable import QsSwift
 
 #if canImport(Testing)
     import Testing

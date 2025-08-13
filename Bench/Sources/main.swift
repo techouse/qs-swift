@@ -1,5 +1,5 @@
 import Foundation
-import Qs
+import QsSwift
 
 func benchCommaList(_ N: Int) throws {
     var parts: [String] = []

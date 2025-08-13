@@ -12,9 +12,9 @@ fi
 # Resolve the Bench package directory from the script location
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PKG_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"          # -> Bench/
-BIN_BASE="${PKG_DIR}/.build/release/QsBench_base"
-BIN_INLINE="${PKG_DIR}/.build/release/QsBench_inline"
-BIN_OUT="${PKG_DIR}/.build/release/QsBench"
+BIN_BASE="${PKG_DIR}/.build/release/QsSwiftBench_base"
+BIN_INLINE="${PKG_DIR}/.build/release/QsSwiftBench_inline"
+BIN_OUT="${PKG_DIR}/.build/release/QsSwiftBench"
 
 # Build baseline
 swift build -c release --package-path "$PKG_DIR"
