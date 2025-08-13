@@ -26,7 +26,7 @@ jobs:
       - name: Build DocC
         env:
           OUT: 'docs'
-          TARGET: 'Qs'
+          TARGET: 'QsSwift'
           REPO_NAME: 'qs-swift'
         run: |
           set -e
@@ -40,7 +40,7 @@ jobs:
       - name: Make root URL redirect to module docs
         env:
           OUT: 'docs'
-          TARGET: 'qs'
+          TARGET: 'qsswift'
         run: |
           set -e
           mkdir -p ${{ env.OUT }}

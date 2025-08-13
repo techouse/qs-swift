@@ -1,6 +1,6 @@
 import Foundation
 
-@testable import Qs
+@testable import QsSwift
 
 #if canImport(Testing)
     import Testing

@@ -4,12 +4,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Qs",
+    name: "QsSwift",
     platforms: [
         .macOS(.v12), .iOS(.v13), .tvOS(.v13), .watchOS(.v8),
     ],
     products: [
-        .library(name: "Qs", targets: ["Qs"])
+        .library(name: "QsSwift", targets: ["QsSwift"])
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
@@ -19,32 +19,28 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "Qs",
+            name: "QsSwift",
             dependencies: [
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 .product(name: "OrderedCollections", package: "swift-collections"),
                 .product(name: "DequeModule", package: "swift-collections"),
             ],
-            path: "Sources/Qs",
+            path: "Sources/QsSwift",
             swiftSettings: [
                 .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
                 .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
             ]
         ),
         .testTarget(
-            name: "QsTests",
+            name: "QsSwiftTests",
             dependencies: [
-                "Qs",
+                "QsSwift",
                 .product(name: "Testing", package: "swift-testing"),
             ],
-            path: "Tests/QsTests",
+            path: "Tests/QsSwiftTests",
             swiftSettings: [
                 .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
                 .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
-            ],
-            linkerSettings: [
-                // Make the test binary ad-hoc signed at link time (macOS only)
-                .unsafeFlags(["-Xlinker", "-adhoc_codesign"], .when(platforms: [.macOS]))
             ]
         ),
     ]

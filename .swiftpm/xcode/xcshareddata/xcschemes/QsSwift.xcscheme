@@ -15,9 +15,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "Qs"
-               BuildableName = "Qs"
-               BlueprintName = "Qs"
+               BlueprintIdentifier = "QsSwift"
+               BuildableName = "QsSwift"
+               BlueprintName = "QsSwift"
                ReferencedContainer = "container:">
             </BuildableReference>
          </BuildActionEntry>
@@ -30,7 +30,7 @@
       shouldUseLaunchSchemeArgsEnv = "YES">
       <TestPlans>
          <TestPlanReference
-            reference = "container:.swiftpm/Qs.xctestplan"
+            reference = "container:.swiftpm/QsSwift.xctestplan"
             default = "YES">
          </TestPlanReference>
       </TestPlans>
@@ -39,9 +39,9 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "QsTests"
-               BuildableName = "QsTests"
-               BlueprintName = "QsTests"
+               BlueprintIdentifier = "QsSwiftTests"
+               BuildableName = "QsSwiftTests"
+               BlueprintName = "QsSwiftTests"
                ReferencedContainer = "container:">
             </BuildableReference>
          </TestableReference>
@@ -74,9 +74,9 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "Qs"
-            BuildableName = "Qs"
-            BlueprintName = "Qs"
+            BlueprintIdentifier = "QsSwift"
+            BuildableName = "QsSwift"
+            BlueprintName = "QsSwift"
             ReferencedContainer = "container:">
          </BuildableReference>
       </MacroExpansion>
