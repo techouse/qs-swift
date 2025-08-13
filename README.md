@@ -45,13 +45,13 @@ Ported from [qs](https://www.npmjs.com/package/qs) for JavaScript.
 ```swift
 // in your Package.swift
 dependencies: [
-    .package(url: "https://github.com/techouse/qs-swift", from: "1.0.0")
+    .package(url: "https://github.com/techouse/qs-swift", from: "1.1.0")
 ],
 targets: [
     .target(
         name: "YourApp",
         dependencies: [
-            .product(name: "Qs", package: "qs-swift")
+            .product(name: "QsSwift", package: "qs-swift")
         ]
     )
 ]
@@ -62,7 +62,7 @@ targets: [
 ## Quick start
 
 ```swift
-import Qs
+import QsSwift
 
 // Decode
 let decoded: [String: Any] = try Qs.decode("foo[bar]=baz&foo[list][]=a&foo[list][]=b")
