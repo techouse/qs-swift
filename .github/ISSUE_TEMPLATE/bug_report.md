@@ -111,7 +111,7 @@ dependencies: [
 .target(
     name: "YourTarget",
     dependencies: [
-        .product(name: "Qs", package: "QsSwift")
+        .product(name: "QsSwift", package: "QsSwift")
     ]
 )
 ```
