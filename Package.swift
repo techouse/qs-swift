@@ -29,10 +29,7 @@ let package = Package(
         .testTarget(
             name: "QsSwiftTests",
             dependencies: ["QsSwift"],
-            path: "Tests/QsSwiftTests",
-            linkerSettings: [
-                .unsafeFlags(["-Xlinker", "-adhoc_codesign"], .when(platforms: [.macOS]))
-            ]
+            path: "Tests/QsSwiftTests"
         ),
     ]
 )

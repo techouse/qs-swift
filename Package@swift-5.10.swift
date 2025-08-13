@@ -41,10 +41,6 @@ let package = Package(
             swiftSettings: [
                 .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
                 .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
-            ],
-            linkerSettings: [
-                // Make the test binary ad-hoc signed at link time (macOS only)
-                .unsafeFlags(["-Xlinker", "-adhoc_codesign"], .when(platforms: [.macOS]))
             ]
         ),
     ]
