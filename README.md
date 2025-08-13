@@ -81,11 +81,11 @@ let encoded: String = try Qs.encode(["foo": ["bar": "baz"]])
 
 ```swift
 // Decode
-let obj = try Qs.decode("a=c")
+let obj: [String: Any] = try Qs.decode("a=c")
 // ["a": "c"]
 
 // Encode
-let qs = try Qs.encode(["a": "c"])
+let qs: String = try Qs.encode(["a": "c"])
 // "a=c"
 ```
 
