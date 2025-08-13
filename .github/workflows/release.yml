@@ -3,7 +3,6 @@ name: Github release
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
       - '[0-9]+.[0-9]+.[0-9]+*'
 
 permissions:
@@ -17,6 +16,7 @@ jobs:
     needs: test
     name: Github Release
     runs-on: ubuntu-latest
+    environment: github-release
     permissions:
       contents: write
     steps:

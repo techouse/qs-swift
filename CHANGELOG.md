@@ -1,3 +1,7 @@
+## 1.1.0
+
+- [CHORE] Rename package to QsSwift
+
 ## 1.0.0
 
-- Initial release of the project.
+- [CHORE] Initial release of the project.
