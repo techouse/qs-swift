@@ -1,4 +1,4 @@
-# qs-swift
+# QsSwift
 
 A fast, flexible query string **encoding/decoding** library for Swift.
 
