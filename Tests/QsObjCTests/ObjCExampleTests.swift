@@ -1,7 +1,6 @@
 #if canImport(ObjectiveC) && (os(macOS) || os(iOS) || os(tvOS) || os(watchOS))
     import Foundation
 
-    @testable import QsSwift
     @testable import QsObjC
 
     #if canImport(Testing)
@@ -10,9 +9,13 @@
         #error("The swift-testing package is required to build tests on Swift 5.x")
     #endif
 
-    @Suite("objc-example")
     struct ObjCExampleTests {
-
+        // Shared constants used in charset tests (mirroring Swift ExampleTests)
+        private let urlEncodedCheckmarkInUtf8 = "%E2%9C%93"
+        private let urlEncodedOSlashInUtf8 = "%C3%B8"
+        private let urlEncodedNumCheckmark = "%26%2310003%3B"
+        private let urlEncodedNumSmiley = "%26%239786%3B"
+        
         // Small helpers to keep the tests tidy
         private func decode(
             _ qs: String,
@@ -21,7 +24,7 @@
             let opts = DecodeOptionsObjC()
             configure?(opts)
             var err: NSError?
-            let out = QsObjC.decode(qs as NSString, options: opts, error: &err)
+            let out = QsBridge.decode(qs as NSString, options: opts, error: &err)
             #expect(err == nil, "decode error: \(String(describing: err))")
             #expect(out != nil)
             return out ?? [:]
@@ -34,7 +37,7 @@
             let opts = EncodeOptionsObjC()
             configure?(opts)
             var err: NSError?
-            let s = QsObjC.encode(dict, options: opts, error: &err)
+            let s = QsBridge.encode(dict, options: opts, error: &err)
             #expect(err == nil, "encode error: \(String(describing: err))")
             #expect(s != nil)
             return s ?? ""
@@ -116,7 +119,7 @@
 
         @Test("maps: custom delimiter")
         func maps_customDelimiter() throws {
-            let r = decode("a=b;c=d") { o in o.delimiter = ";" }
+            let r = decode("a=b;c=d") { o in o.delimiter = .semicolon }
             #expect(r["a"] as? String == "b")
             #expect(r["c"] as? String == "d")
         }
@@ -149,6 +152,54 @@
             #expect(arr?.count == 2)
             #expect(arr?.first as? String == "bar")
             #expect(arr?.last as? String == "baz")
+        }
+
+        @Test("maps: duplicates FIRST/LAST/COMBINE")
+        func maps_duplicatesModes() throws {
+            var r = decode("foo=bar&foo=baz") { o in o.duplicates = .combine }
+            #expect((r["foo"] as? [Any])?.count == 2)
+
+            r = decode("foo=bar&foo=baz") { o in o.duplicates = .first }
+            #expect(r["foo"] as? String == "bar")
+
+            r = decode("foo=bar&foo=baz") { o in o.duplicates = .last }
+            #expect(r["foo"] as? String == "baz")
+        }
+
+        @Test("maps: latin1 charset for legacy browsers")
+        func maps_latin1() throws {
+            let r = decode("a=%A7") { o in o.charset = String.Encoding.isoLatin1.rawValue }
+            #expect(r["a"] as? String == "§")
+        }
+
+        @Test("maps: charset sentinel with latin1")
+        func maps_charsetSentinel_latin1() throws {
+            let qs = "utf8=\(urlEncodedCheckmarkInUtf8)&a=\(urlEncodedOSlashInUtf8)"
+            let r = decode(qs) { o in
+                o.charset = String.Encoding.isoLatin1.rawValue
+                o.charsetSentinel = true
+            }
+            #expect(r["a"] as? String == "ø")
+        }
+
+        @Test("maps: charset sentinel with utf8")
+        func maps_charsetSentinel_utf8() throws {
+            let qs = "utf8=\(urlEncodedNumCheckmark)&a=%F8"
+            let r = decode(qs) { o in
+                o.charset = String.Encoding.utf8.rawValue
+                o.charsetSentinel = true
+            }
+            #expect(r["a"] as? String == "ø")
+        }
+
+        @Test("maps: interpret numeric entities")
+        func maps_numericEntities() throws {
+            let qs = "a=\(urlEncodedNumSmiley)"
+            let r = decode(qs) { o in
+                o.charset = String.Encoding.isoLatin1.rawValue
+                o.interpretNumericEntities = true
+            }
+            #expect(r["a"] as? String == "☺")
         }
 
         // MARK: - Decoding • Lists
@@ -284,11 +335,38 @@
             #expect(s as String == "a=b&a=c&a=d")
         }
 
+        @Test("encode: different list formats")
+        func encode_listFormats() throws {
+            var s = encode(["a": ["b", "c"]]) { o in
+                o.listFormat = .indices
+                o.encode = false
+            }
+            #expect(s as String == "a[0]=b&a[1]=c")
+
+            s = encode(["a": ["b", "c"]]) { o in
+                o.listFormat = .brackets
+                o.encode = false
+            }
+            #expect(s as String == "a[]=b&a[]=c")
+
+            s = encode(["a": ["b", "c"]]) { o in
+                o.listFormat = .repeatKey
+                o.encode = false
+            }
+            #expect(s as String == "a=b&a=c")
+
+            s = encode(["a": ["b", "c"]]) { o in
+                o.listFormat = .comma
+                o.encode = false
+            }
+            #expect(s as String == "a=b,c")
+        }
+
         @Test("encode: bracket notation for maps by default (encode=false)")
         func encode_bracketNotationForMaps() throws {
             let s = encode(["a": ["b": ["c": "d", "e": "f"]]]) { o in
                 o.encode = false
-                o.sortKeysCaseInsensitively = true // to ensure ordered output of NSDictionary in tests
+                o.sortKeysCaseInsensitively = true  // to ensure ordered output of NSDictionary in tests
             }
             #expect(s as String == "a[b][c]=d&a[b][e]=f")
         }
@@ -298,7 +376,7 @@
             let s = encode(["a": ["b": ["c": "d", "e": "f"]]]) { o in
                 o.allowDots = true
                 o.encode = false
-                o.sortKeysCaseInsensitively = true // to ensure ordered output of NSDictionary in tests
+                o.sortKeysCaseInsensitively = true  // to ensure ordered output of NSDictionary in tests
             }
             #expect(s as String == "a.b.c=d&a.b.e=f")
         }
@@ -363,6 +441,114 @@
                 o.sortKeysCaseInsensitively = true
             }
             #expect(s as String == "a=c&b=f&z=y")
+        }
+
+        // MARK: - Null values
+
+        @Test("nulls: treat null like empty string by default (encode)")
+        func nulls_encodeDefaults() throws {
+            let s = encode(["a": NSNull(), "b": ""]) { _ in }
+            #expect(s as String == "a=&b=")
+        }
+
+        @Test("nulls: decoding treats 'a&b=' as empty strings")
+        func nulls_decodeEmptyStrings() throws {
+            let r = decode("a&b=")
+            #expect(r["a"] as? String == "")
+            #expect(r["b"] as? String == "")
+        }
+
+        @Test("nulls: strictNullHandling on encode")
+        func nulls_encodeStrictNulls() throws {
+            let s = encode(["a": NSNull(), "b": ""]) { o in o.strictNullHandling = true }
+            #expect(s as String == "a&b=")
+        }
+
+        @Test("nulls: strictNullHandling on decode")
+        func nulls_decodeStrictNulls() throws {
+            let r = decode("a&b=") { o in o.strictNullHandling = true }
+            #expect(r["a"] is NSNull)
+            #expect(r["b"] as? String == "")
+        }
+
+        @Test("nulls: skipNulls on encode")
+        func nulls_skipNulls() throws {
+            let s = encode(["a": "b", "c": NSNull()]) { o in o.skipNulls = true }
+            #expect(s as String == "a=b")
+        }
+
+        // MARK: - Charset (encoding)
+
+        @Test("charset: encode using latin1")
+        func charset_encodeLatin1() throws {
+            let s = encode(["æ": "æ"]) { o in o.charset = String.Encoding.isoLatin1.rawValue }
+            #expect(s as String == "%E6=%E6")
+        }
+
+        @Test("charset: characters not in latin1 → numeric entities")
+        func charset_numericEntitiesWhenNeeded() throws {
+            let s = encode(["a": "☺"]) { o in o.charset = String.Encoding.isoLatin1.rawValue }
+            #expect(s as String == "a=%26%239786%3B")
+        }
+
+        @Test("charset: charsetSentinel with UTF-8")
+        func charset_sentinelUtf8() throws {
+            let s = encode(["a": "☺"]) { o in o.charsetSentinel = true }
+            #expect(s as String == "utf8=%E2%9C%93&a=%E2%98%BA")
+        }
+
+        @Test("charset: charsetSentinel with latin1")
+        func charset_sentinelLatin1() throws {
+            let s = encode(["a": "æ"]) { o in
+                o.charset = String.Encoding.isoLatin1.rawValue
+                o.charsetSentinel = true
+            }
+            #expect(s as String == "utf8=%26%2310003%3B&a=%E6")
+        }
+
+        // MARK: - RFC 3986 vs RFC 1738 space encoding
+
+        @Test("spaces: RFC 3986 default → %20")
+        func spaces_default3986() throws {
+            #expect(encode(["a": "b c"]) as String == "a=b%20c")
+        }
+
+        @Test("spaces: explicit RFC 3986")
+        func spaces_explicit3986() throws {
+            let s = encode(["a": "b c"]) { o in o.format = .rfc3986 }
+            #expect(s as String == "a=b%20c")
+        }
+
+        @Test("spaces: RFC 1738 → +")
+        func spaces_rfc1738() throws {
+            let s = encode(["a": "b c"]) { o in o.format = .rfc1738 }
+            #expect(s as String == "a=b+c")
+        }
+        
+        // MARK: - Decoding • Maps (regex delimiter)
+
+        @Test("maps: regex delimiter")
+        func maps_regexDelimiter() throws {
+            // Split on either ';' or ',' using a regex delimiter
+            let r = decode("a=b;c=d") { o in
+                // Use a plain character class to match ; or , (no whitespace tolerance)
+                o.delimiter = DelimiterObjC(regexPattern: #"[;,]"#)!
+            }
+            #expect(r["a"] as? String == "b")
+            #expect(r["c"] as? String == "d")
+        }
+        
+        // MARK: - Encoding (omit Undefined)
+
+        @Test("encode: omits undefined properties")
+        func encode_omitsUndefined() throws {
+            // NSNull encodes as empty value; Undefined should be omitted entirely
+            let input: NSDictionary = [
+                "a": NSNull(),
+                "b": UndefinedObjC()
+            ]
+            let s = encode(input) { _ in }
+            #expect(s as String == "a=")
         }
     }
 #endif

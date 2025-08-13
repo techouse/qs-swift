@@ -4,9 +4,7 @@
 
     @testable import QsObjC
 
-    @Suite("ObjC bridge")
     struct ObjCBridgeTests {
-
         @Test("encode → decode round-trip (flat)")
         func roundtripFlat() throws {
             let input: NSDictionary = [
@@ -15,13 +13,13 @@
             ]
 
             // encode is non-throwing and returns NSString?
-            let qs = QsObjC.encode(input)
+            let qs = QsBridge.encode(input)
             #expect(qs != nil)
             guard let qs else { return }  // stop if encode failed
 
             // decode takes non-optional NSString and throws
             var err: NSError?
-            guard let output = QsObjC.decode(qs, error: &err) else {
+            guard let output = QsBridge.decode(qs, error: &err) else {
                 #expect(err == nil)  // will fail and surface the NSError
                 return
             }
@@ -40,12 +38,12 @@
                 "list": ["1", "2", "3"],
             ]
 
-            let qs = QsObjC.encode(input)
+            let qs = QsBridge.encode(input)
             #expect(qs != nil)
             guard let qs else { return }
 
             var err: NSError?
-            guard let output = QsObjC.decode(qs, error: &err) else {
+            guard let output = QsBridge.decode(qs, error: &err) else {
                 #expect(err == nil)  // will fail and surface the NSError
                 return
             }

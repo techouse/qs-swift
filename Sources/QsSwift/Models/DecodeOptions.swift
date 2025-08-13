@@ -56,7 +56,7 @@ public typealias ValueDecoder = @Sendable (_ value: String?, _ charset: String.E
 /// let m2 = try Qs.decode("a.b=c", options: .init(allowDots: true))
 /// // ["a": ["b": "c"]]
 /// ```
-public struct DecodeOptions {
+public struct DecodeOptions: @unchecked Sendable {
     // MARK: Feature toggles (private booleans with computed accessors)
 
     /// Set to `true` to decode dot notation in keys (e.g. `a.b=c` ⇒ `["a": ["b": "c"]]`).

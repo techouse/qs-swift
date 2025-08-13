@@ -110,11 +110,11 @@ internal enum Encoder {
 
         // Then do type-specific normalization
         if let date = obj as? Date {
-            obj = serializeDate?(date) ?? ISO8601DateFormatter().string(from: date)
+            obj = serializeDate?(date) ?? Self.iso8601().string(from: date)
         } else if isComma, let iterable = obj as? [Any] {
             obj = iterable.map { v -> Any in
                 if let d = v as? Date {
-                    return serializeDate?(d) ?? ISO8601DateFormatter().string(from: d)
+                    return serializeDate?(d) ?? Self.iso8601().string(from: d)
                 }
                 return v
             }
@@ -158,23 +158,33 @@ internal enum Encoder {
             return []  // signal "no pairs produced"
         }
 
+        // ---- Normalize the scalar once (unwrap Optional, collapse Optional.none to nil) ----
+        let normalizedScalar: Any? = {
+            guard let some = obj else { return nil }
+            return unwrapOptional(some) ?? some
+        }()
+
         // Handle primitives
-        if Utils.isNonNullishPrimitive(obj, skipNulls: skipNulls) || obj is Data {
+        if Utils.isNonNullishPrimitive(normalizedScalar, skipNulls: skipNulls)
+            || normalizedScalar is Data
+        {
             if let enc = encoder {
                 let keyPart = encodeValuesOnly ? keyPrefix : enc(keyPrefix, nil, nil)
-                let valPart = enc(obj, nil, nil)
+                let valPart = enc(normalizedScalar, nil, nil)  // ✅ pass unwrapped
                 return "\(fmt.apply(keyPart))=\(fmt.apply(valPart))"
             }
-            return "\(fmt.apply(keyPrefix))=\(fmt.apply(describe(obj)))"
+            return "\(fmt.apply(keyPrefix))=\(fmt.apply(describe(normalizedScalar)))"  // ✅ unwrapped
         }
 
         var values: [Any] = []
 
         if undefined { return values }
 
+        let arrayView = arrayize(obj)
+
         // Determine object keys
         let objKeys: [Any] = {
-            if isComma, let elems0 = arrayize(obj) {
+            if isComma, let elems0 = arrayView {
                 var elems = elems0
                 if encodeValuesOnly, let encoder = encoder {
                     elems = elems0.map { el in encoder(describeForComma(el), nil, nil) }
@@ -259,8 +269,8 @@ internal enum Encoder {
                         }
                         return k
 
-                    case _ where arrayize(obj) != nil:
-                        let count = arrayize(obj)!.count
+                    case _ where arrayView != nil:
+                        let count = arrayView!.count
                         return Array(0..<count)
 
                     default:
@@ -279,13 +289,13 @@ internal enum Encoder {
             : keyPrefix
 
         let adjustedPrefix: String = {
-            if isComma, commaRoundTrip, let arr = arrayize(obj), arr.count == 1 {
+            if isComma, commaRoundTrip, let arr = arrayView, arr.count == 1 {
                 return "\(encodedPrefix)[]"
             }
             return encodedPrefix
         }()
 
-        if allowEmptyLists, let arr = arrayize(obj), arr.isEmpty {
+        if allowEmptyLists, let arr = arrayView, arr.isEmpty {
             return "\(adjustedPrefix)[]"
         }
 
@@ -317,21 +327,20 @@ internal enum Encoder {
 
                     case let dict as [String: Any]:
                         if let k = key as? String {
-                            let v = dict[k]
+                            let v = dict[k].flatMap { unwrapOptional($0) } ?? dict[k]
                             return (v, v == nil && !dict.keys.contains(k))
                         }
                         return (nil, true)
 
                     case let dict as [AnyHashable: Any]:
                         if let k = key as? AnyHashable {
-                            let v = dict[k]
+                            let v = dict[k].flatMap { unwrapOptional($0) } ?? dict[k]
                             return (v, v == nil && !dict.keys.contains(k))
                         }
                         return (nil, true)
 
                     default:
-                        if let arr = arrayize(obj), let idx = key as? Int, idx >= 0, idx < arr.count
-                        {
+                        if let arr = arrayView, let idx = key as? Int, idx >= 0, idx < arr.count {
                             return (arr[idx], false)
                         }
                         return (nil, true)
@@ -353,7 +362,7 @@ internal enum Encoder {
             }()
 
             let keyPrefix: String = {
-                if arrayize(obj) != nil {
+                if arrayView != nil {
                     return generator(adjustedPrefix, encodedKey)
                 }
                 return allowDots
@@ -367,6 +376,7 @@ internal enum Encoder {
             }
 
             // Create child side-channel and link to parent
+            // Link child → parent so ancestor walk can detect cycles via SENTINEL chain.
             let valueSideChannel = NSMapTable<AnyObject, AnyObject>.weakToWeakObjects()
             valueSideChannel.setObject(sideChannel, forKey: SENTINEL)
 
@@ -460,5 +470,16 @@ internal enum Encoder {
             return true
         }
         return false
+    }
+
+    @inline(__always)
+    private static func iso8601() -> ISO8601DateFormatter {
+        let key = "QsSwift.Encoder.iso8601"
+        let dict = Thread.current.threadDictionary
+        if let f = dict[key] as? ISO8601DateFormatter { return f }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        dict[key] = f
+        return f
     }
 }

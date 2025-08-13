@@ -4,7 +4,7 @@ import QsSwift
 public enum ListFormatObjC: Int {
     case brackets, indices, repeatKey, comma
 
-    var swift: ListFormat {
+    var swift: QsSwift.ListFormat {
         switch self {
         case .brackets: return .brackets
         case .indices: return .indices

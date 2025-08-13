@@ -4,7 +4,7 @@ import QsSwift
 public enum DuplicatesObjC: Int {
     case combine, first, last
 
-    var swift: Duplicates {
+    var swift: QsSwift.Duplicates {
         switch self {
         case .combine: return .combine
         case .first: return .first
