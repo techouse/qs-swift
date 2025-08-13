@@ -4,12 +4,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Qs",
+    name: "QsSwift",
     platforms: [
         .macOS(.v12), .iOS(.v13), .tvOS(.v13), .watchOS(.v8),
     ],
     products: [
-        .library(name: "Qs", targets: ["Qs"])
+        .library(name: "QsSwift", targets: ["QsSwift"])
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
@@ -18,18 +18,18 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "Qs",
+            name: "QsSwift",
             dependencies: [
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 .product(name: "OrderedCollections", package: "swift-collections"),
                 .product(name: "DequeModule", package: "swift-collections"),
             ],
-            path: "Sources/Qs"
+            path: "Sources/QsSwift"
         ),
         .testTarget(
-            name: "QsTests",
-            dependencies: ["Qs"],
-            path: "Tests/QsTests",
+            name: "QsSwiftTests",
+            dependencies: ["QsSwift"],
+            path: "Tests/QsSwiftTests",
             linkerSettings: [
                 .unsafeFlags(["-Xlinker", "-adhoc_codesign"], .when(platforms: [.macOS]))
             ]
