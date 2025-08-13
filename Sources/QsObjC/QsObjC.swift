@@ -1,10 +1,10 @@
 import Foundation
-import Qs
+import QsSwift
 
 
 // MARK: - Options (ObjC-friendly containers)
 
-@objc(DecodeOptions)
+@objc(QsDecodeOptions)
 @objcMembers
 public final class DecodeOptionsObjC: NSObject {
     public var allowDots: Bool = false
@@ -51,7 +51,7 @@ public final class DecodeOptionsObjC: NSObject {
     }
 }
 
-@objc(EncodeOptions)
+@objc(QsEncodeOptions)
 @objcMembers
 public final class EncodeOptionsObjC: NSObject {
     public var addQueryPrefix: Bool = false

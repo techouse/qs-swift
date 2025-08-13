@@ -9,8 +9,8 @@ let package = Package(
         .macOS(.v12), .iOS(.v13), .tvOS(.v13), .watchOS(.v8),
     ],
     products: [
-        .library(name: "QsSwift", targets: ["QsSwift"])
-        .library(name: "QsObjC", targets: ["QsObjC"]),
+        .library(name: "QsSwift", targets: ["QsSwift"]),
+        .library(name: "QsObjC", targets: ["QsObjC"])
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
@@ -35,7 +35,7 @@ let package = Package(
         .testTarget(
             name: "QsSwiftTests",
             dependencies: ["QsSwift"],
-            path: "Tests/QsTests"
+            path: "Tests/QsSwiftTests"
         ),
         .testTarget(
             name: "QsObjCTests",

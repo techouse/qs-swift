@@ -1,9 +1,9 @@
-import Qs
+import QsSwift
 
-@objc(Duplicates)
+@objc(QsDuplicates)
 public enum DuplicatesObjC: Int {
     case combine, first, last
-    
+
     var swift: Duplicates {
         switch self {
         case .combine: return .combine

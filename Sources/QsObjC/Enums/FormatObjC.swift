@@ -1,6 +1,6 @@
-import Qs
+import QsSwift
 
-@objc(Format)
+@objc(QsFormat)
 public enum FormatObjC: Int {
     case rfc3986, rfc1738
 

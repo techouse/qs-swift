@@ -1,6 +1,6 @@
-import Qs
+import QsSwift
 
-@objc(ListFormat)
+@objc(QsListFormat)
 public enum ListFormatObjC: Int {
     case brackets, indices, repeatKey, comma
 

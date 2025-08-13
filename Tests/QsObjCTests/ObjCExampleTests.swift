@@ -1,7 +1,7 @@
 #if canImport(ObjectiveC) && (os(macOS) || os(iOS) || os(tvOS) || os(watchOS))
     import Foundation
 
-    @testable import Qs
+    @testable import QsSwift
     @testable import QsObjC
 
     #if canImport(Testing)
