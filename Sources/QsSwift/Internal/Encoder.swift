@@ -239,6 +239,39 @@ internal enum Encoder {
                         }
                         return k
 
+                    case let nd as NSDictionary:
+                        var ks: [Any] = []
+                        ks.reserveCapacity(nd.count)
+                        nd.forEach { key, _ in ks.append(key) }
+
+                        if let sort = sort {
+                            ks = ks.sorted { sort($0, $1) < 0 }
+                        } else if depth > 0 {
+                            if encoder != nil {
+                                // Partition: primitives first, containers later (stable), like Swift dict.
+                                var prim: [Any] = []
+                                var cont: [Any] = []
+                                prim.reserveCapacity(ks.count)
+                                cont.reserveCapacity(ks.count)
+                                for k in ks {
+                                    let v = nd[k]
+                                    if isContainer(v) {
+                                        cont.append(k)
+                                    } else {
+                                        prim.append(k)
+                                    }
+                                }
+                                prim.sort { String(describing: $0) < String(describing: $1) }
+                                cont.sort { String(describing: $0) < String(describing: $1) }
+                                ks = prim + cont
+                            } else {
+                                // No custom encoder → match the “feel” of Swift dict literals:
+                                // sort lexicographically so "" comes before "a"
+                                ks.sort { String(describing: $0) < String(describing: $1) }
+                            }
+                        }
+                        return ks
+
                     case _ where arrayView != nil:
                         let count = arrayView!.count
                         return Array(0..<count)
@@ -293,6 +326,11 @@ internal enum Encoder {
                             return (v, v == nil && !dict.keys.contains(k))
                         }
                         return (nil, true)
+
+                    case let nd as NSDictionary:
+                        let v = nd[key]
+                        // NSDictionary can’t store nil; nil here means “absent”
+                        return (v, v == nil)
 
                     default:
                         if let arr = arrayView, let idx = key as? Int, idx >= 0, idx < arr.count {
