@@ -222,21 +222,6 @@ internal enum Encoder {
                         }
                         return k
 
-                    case let od as OrderedDictionary<AnyHashable, Any>:
-                        var k = [AnyHashable]()
-                        k.reserveCapacity(od.count)
-                        for (kk, _) in od { k.append(kk) }
-                        if let sort = sort {
-                            k = k.sorted { sort($0, $1) < 0 }
-                        } else if depth > 0 {
-                            let split = k.stablePartition { key in isContainer(od[key]) }
-                            if encoder != nil {
-                                k[..<split].sort { String(describing: $0) < String(describing: $1) }
-                                k[split...].sort { String(describing: $0) < String(describing: $1) }
-                            }
-                        }
-                        return k
-
                     case let dict as [String: Any]:
                         // enumerate to preserve insertion order
                         var k = [String]()
@@ -251,21 +236,6 @@ internal enum Encoder {
                             let split = k.stablePartition { key in isContainer(dict[key]) }  // containers last
                             k[..<split].sort()  // primitives A..Z
                             k[split...].sort()  // containers A..Z
-                        }
-                        return k
-
-                    case let dict as [AnyHashable: Any]:
-                        var k = [AnyHashable]()
-                        k.reserveCapacity(dict.count)
-                        for (kk, _) in dict { k.append(kk) }
-                        if let sort = sort {
-                            k = k.sorted { sort($0, $1) < 0 }
-                            return k
-                        }
-                        if depth > 0, encoder != nil {
-                            let split = k.stablePartition { key in isContainer(dict[key]) }
-                            k[..<split].sort { String(describing: $0) < String(describing: $1) }
-                            k[split...].sort { String(describing: $0) < String(describing: $1) }
                         }
                         return k
 
@@ -317,23 +287,8 @@ internal enum Encoder {
                         }
                         return (nil, true)
 
-                    case let od as OrderedDictionary<AnyHashable, Any>:
-                        if let k = key as? AnyHashable {
-                            let v = od[k]
-                            let contains = od.index(forKey: k) != nil
-                            return (v, v == nil && !contains)
-                        }
-                        return (nil, true)
-
                     case let dict as [String: Any]:
                         if let k = key as? String {
-                            let v = dict[k].flatMap { unwrapOptional($0) } ?? dict[k]
-                            return (v, v == nil && !dict.keys.contains(k))
-                        }
-                        return (nil, true)
-
-                    case let dict as [AnyHashable: Any]:
-                        if let k = key as? AnyHashable {
                             let v = dict[k].flatMap { unwrapOptional($0) } ?? dict[k]
                             return (v, v == nil && !dict.keys.contains(k))
                         }
@@ -465,10 +420,8 @@ internal enum Encoder {
     @inline(__always)
     private static func isContainer(_ v: Any?) -> Bool {
         if v is [Any] || v is NSArray { return true }
-        if v is [String: Any] || v is [AnyHashable: Any] || v is NSDictionary { return true }
-        if v is OrderedDictionary<String, Any> || v is OrderedDictionary<AnyHashable, Any> {
-            return true
-        }
+        if v is [String: Any] || v is NSDictionary { return true }
+        if v is OrderedDictionary<String, Any> { return true }
         return false
     }
 
