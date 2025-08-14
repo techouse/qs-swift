@@ -45,7 +45,10 @@ public final class QsBridge: NSObject {
 
     /// Minimal bridging so the core accepts common Obj-C shapes.
     @inline(__always)
-    internal static func bridgeInputForDecode(_ input: Any?) -> Any? {
+    internal static func bridgeInputForDecode(
+        _ input: Any?,
+        forceReduce: Bool = false           // ← NEW
+    ) -> Any? {
         guard let input else { return nil }
 
         // Strings must become Swift.String
@@ -53,14 +56,16 @@ public final class QsBridge: NSObject {
 
         // NSDictionary → [AnyHashable: Any] (core will stringify keys)
         if let d = input as? NSDictionary {
-            return d as? [AnyHashable: Any]
-                ?? d.reduce(into: [AnyHashable: Any]()) { acc, kv in
-                    if let (k, v) = kv as? (AnyHashable, Any) {
-                        acc[k] = v
-                    } else {
-                        acc[AnyHashable(String(describing: kv.key))] = kv.value
-                    }
+            if !forceReduce, let cast = d as? [AnyHashable: Any] {
+                return cast
+            }
+            return d.reduce(into: [AnyHashable: Any]()) { acc, kv in
+                if let (k, v) = kv as? (AnyHashable, Any) {
+                    acc[k] = v
+                } else {
+                    acc[AnyHashable(String(describing: kv.key))] = kv.value
                 }
+            }
         }
 
         // NSArray → [Any]
