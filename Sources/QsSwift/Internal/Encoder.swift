@@ -170,10 +170,10 @@ internal enum Encoder {
         {
             if let enc = encoder {
                 let keyPart = encodeValuesOnly ? keyPrefix : enc(keyPrefix, nil, nil)
-                let valPart = enc(normalizedScalar, nil, nil)  // ✅ pass unwrapped
+                let valPart = enc(normalizedScalar, nil, nil)  // pass unwrapped
                 return "\(fmt.apply(keyPart))=\(fmt.apply(valPart))"
             }
-            return "\(fmt.apply(keyPrefix))=\(fmt.apply(describe(normalizedScalar)))"  // ✅ unwrapped
+            return "\(fmt.apply(keyPrefix))=\(fmt.apply(describe(normalizedScalar)))"  // unwrapped
         }
 
         var values: [Any] = []
