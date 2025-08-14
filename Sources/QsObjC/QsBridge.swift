@@ -99,31 +99,52 @@ public final class QsBridge: NSObject {
     /// preserving container shape (always returns Swift `[String: Any]` / `[Any]` where possible).
     @inline(__always)
     private static func _bridgeUndefined(_ v: Any?) -> Any? {
-        switch v {
+        // kick off with a fresh identity set
+        let seen = NSHashTable<AnyObject>.weakObjects()
+        return _bridgeUndefined(v, seen: seen)
+    }
 
+    @inline(__always)
+    private static func _bridgeUndefined(_ v: Any?, seen: NSHashTable<AnyObject>) -> Any? {
+        switch v {
         // ObjC sentinel → Swift sentinel
         case is UndefinedObjC:
             return QsSwift.Undefined.instance
 
-        // Swift containers
-        case let d as [String: Any]:
-            var out: [String: Any] = [:]
-            out.reserveCapacity(d.count)
-            for (k, val) in d { out[k] = _bridgeUndefined(val) ?? val }
-            return out
+        // --- Foundation containers FIRST (so we can use identity to break cycles) ---
 
-        case let a as [Any]:
-            return a.map { _bridgeUndefined($0) ?? $0 }
-
-        // Foundation containers (defensive)
         case let d as NSDictionary:
+            // If we've already seen this *exact* object, preserve the reference to keep the cycle;
+            // the core encoder will detect/throw on it later.
+            let obj = d as AnyObject
+            if seen.contains(obj) { return d }
+            seen.add(obj)
+
             var out: [String: Any] = [:]
             out.reserveCapacity(d.count)
-            d.forEach { k, val in out[String(describing: k)] = _bridgeUndefined(val) ?? val }
+            d.forEach { k, val in
+                out[String(describing: k)] = _bridgeUndefined(val, seen: seen) ?? val
+            }
             return out
 
         case let a as NSArray:
-            return a.map { _bridgeUndefined($0) ?? $0 } as [Any]
+            let obj = a as AnyObject
+            if seen.contains(obj) { return a }
+            seen.add(obj)
+            return a.map { _bridgeUndefined($0, seen: seen) ?? $0 } as [Any]
+
+        // --- Pure Swift containers (value types; no identity cycles) ---
+
+        case let d as [String: Any]:
+            var out: [String: Any] = [:]
+            out.reserveCapacity(d.count)
+            for (k, val) in d {
+                out[k] = _bridgeUndefined(val, seen: seen) ?? val
+            }
+            return out
+
+        case let a as [Any]:
+            return a.map { _bridgeUndefined($0, seen: seen) ?? $0 }
 
         default:
             return v
