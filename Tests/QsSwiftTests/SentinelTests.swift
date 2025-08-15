@@ -46,4 +46,19 @@ struct SentinelTests {
         #expect(Sentinel.iso.value != Sentinel.charset.value)
         #expect(Sentinel.iso.encoded != Sentinel.charset.encoded)
     }
+
+    @Test("Sentinel.match exact and case-insensitive variants")
+    func sentinel_match_variants() {
+        // Exact matches
+        #expect(Sentinel.match(encodedPart: Sentinel.charsetString) == .charset)
+        #expect(Sentinel.match(encodedPart: Sentinel.isoString) == .iso)
+        #expect(Sentinel.match(encodedPart: "UTF8=%E2%9C%93") == nil)  // default is strict
+
+        // Case-insensitive: uppercased key and hex
+        #expect(Sentinel.match(encodedPart: "UTF8=%e2%9c%93", caseInsensitive: true) == .charset)
+        #expect(Sentinel.match(encodedPart: "utf8=%26%2310003%3b", caseInsensitive: true) == .iso)
+
+        // Non-matching noise
+        #expect(Sentinel.match(encodedPart: "foo=utf8=%E2%9C%93", caseInsensitive: true) == nil)
+    }
 }

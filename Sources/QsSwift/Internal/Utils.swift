@@ -799,6 +799,7 @@ internal enum Utils {
             is [AnyHashable: Any],
             is OrderedDictionary<String, Any>,
             is OrderedDictionary<AnyHashable, Any>,
+            is NSDictionary,
             is Undefined:
             return false
         case nil:

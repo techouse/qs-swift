@@ -45,7 +45,7 @@ Ported from [qs](https://www.npmjs.com/package/qs) for JavaScript.
 ```swift
 // in your Package.swift
 dependencies: [
-    .package(url: "https://github.com/techouse/qs-swift", from: "1.1.0")
+    .package(url: "https://github.com/techouse/qs-swift", from: "1.1.1")
 ],
 targets: [
     .target(
@@ -543,8 +543,8 @@ make profile
 
 ## Objective-C
 
-This package currently exposes a Swift API only. If you need Obj-C compatibility (facade + delegate hooks), please open
-an issue—we can add it without breaking the Swift API.
+An Objective‑C bridge is included as `QsObjC` (facade + delegate-style hooks). See
+the [QsObjC README](Sources/QsObjC/README.md) for installation, options, and examples.
 
 ---
 

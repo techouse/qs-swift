@@ -9,7 +9,8 @@ let package = Package(
         .macOS(.v12), .iOS(.v13), .tvOS(.v13), .watchOS(.v8),
     ],
     products: [
-        .library(name: "QsSwift", targets: ["QsSwift"])
+        .library(name: "QsSwift", targets: ["QsSwift"]),
+        .library(name: "QsObjC", targets: ["QsObjC"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
@@ -31,6 +32,15 @@ let package = Package(
                 .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
             ]
         ),
+        .target(
+            name: "QsObjC",
+            dependencies: ["QsSwift"],
+            path: "Sources/QsObjC",
+            exclude: ["README.md"],
+            swiftSettings: [
+                .define("QS_OBJC_BRIDGE", .when(platforms: [.macOS, .iOS, .tvOS, .watchOS]))
+            ]
+        ),
         .testTarget(
             name: "QsSwiftTests",
             dependencies: [
@@ -42,6 +52,15 @@ let package = Package(
                 .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
                 .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
             ]
+        ),
+        .testTarget(
+            name: "QsObjCTests",
+            dependencies: [
+                "QsSwift",
+                "QsObjC",
+                .product(name: "Testing", package: "swift-testing"),
+            ],
+            path: "Tests/QsObjCTests"
         ),
     ]
 )

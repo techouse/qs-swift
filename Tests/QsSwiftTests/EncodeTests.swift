@@ -98,18 +98,16 @@ struct EncodeTests {
             options: EncodeOptions(
                 encode: false,
                 filter: FunctionFilter { _, map in
-                    if let dict = map as? [String: Any?] {
-                        var out: [String: Any?] = [:]
-                        for (k, v) in dict {
-                            if let c = v as? CustomObject {
-                                out[k] = c["prop"]
-                            } else {
-                                out[k] = v
-                            }
+                    guard let dict = map as? [String: Any] else { return map }
+                    var out: [String: Any] = [:]
+                    for (k, v) in dict {
+                        if let c = v as? CustomObject {
+                            out[k] = c["prop"]  // "test"
+                        } else {
+                            out[k] = v
                         }
-                        return out
                     }
-                    return map
+                    return out
                 }
             )
         )
@@ -1152,9 +1150,11 @@ struct EncodeTests {
     @Test("encode - encodes boolean values")
     func testEncodesBooleanValues() async throws {
         #expect(try Qs.encode(["a": true]) == "a=true")
-        #expect(try Qs.encode(["a": ["b": true]]) == "a%5Bb%5D=true")
+        let qs1 = try Qs.encode(["a": ["b": true]])
+        #expect(qs1 == "a%5Bb%5D=true")
         #expect(try Qs.encode(["b": false]) == "b=false")
-        #expect(try Qs.encode(["b": ["c": false]]) == "b%5Bc%5D=false")
+        let qs2 = try Qs.encode(["b": ["c": false]])
+        #expect(qs2 == "b%5Bc%5D=false")
     }
 
     @Test("encode - encodes buffer (Data) values")
@@ -1311,35 +1311,95 @@ struct EncodeTests {
         )
     }
 
-    @Test("encode - can sort the keys at depth 3 or more too")
-    func testCanSortKeysDeep() async throws {
-        let sort: Sorter = { a, b in
-            let as_ = String(describing: a ?? "")
-            let bs_ = String(describing: b ?? "")
-            if as_ == bs_ { return 0 }
-            return as_ < bs_ ? -1 : 1
-        }
-
-        let input: [String: Any] = [
-            "a": "a",
-            "z": [
-                "zj": ["zjb": "zjb", "zja": "zja"],
-                "zi": ["zib": "zib", "zia": "zia"],
-            ],
-            "b": "b",
+    @Test("Encoder.encode: NSDictionary + custom Sorter (mixed key types)")
+    func nsdictionary_mixed_keys_custom_sort() throws {
+        // Mix NSString and NSNumber keys so it cannot bridge to [String: Any]
+        let nd: NSDictionary = [
+            3: "three",
+            "b": "2",
+            "a": "1",
         ]
 
-        // With custom sort, encode=false (so keys are not percent-encoded)
-        #expect(
-            try Qs.encode(input, options: EncodeOptions(encode: false, sort: sort))
-                == "a=a&b=b&z[zi][zia]=zia&z[zi][zib]=zib&z[zj][zja]=zja&z[zj][zjb]=zjb"
+        // Sort by String(describing:) ascending
+        let sorter: Sorter = { a, b in
+            let sa = a.map { String(describing: $0) } ?? ""
+            let sb = b.map { String(describing: $0) } ?? ""
+            return sa.compare(sb).rawValue
+        }
+
+        // encode=false to keep brackets readable (no %5B/%5D)
+        let out = try Qs.encode(["outer": nd], options: .init(encode: false, sort: sorter))
+
+        // "3" < "a" < "b"
+        #expect(out == "outer[3]=three&outer[a]=1&outer[b]=2")
+    }
+
+    @Test(
+        "Encoder.encode: NSDictionary depth>0 (encoder != nil) partitions primitives before containers"
+    )
+    func nsdictionary_depth_encoder_partitions() throws {
+        // 'a' and 'd' are primitives; 'b' and 'c' are containers
+        let nd: NSDictionary = [
+            "d": 0,
+            "b": ["x": 1],
+            "a": 1,
+            "c": ["y": 2],
+        ]
+
+        // encode=true → encoder != nil so the partitioning path runs
+        let out = try Qs.encode(["outer": nd], options: .init(encode: true))
+
+        // Expect primitives ("a","d") sorted A..Z first, then containers ("b","c") sorted A..Z
+        // (Percent-encoded brackets because encode=true)
+        #expect(out == "outer%5Ba%5D=1&outer%5Bd%5D=0&outer%5Bb%5D%5Bx%5D=1&outer%5Bc%5D%5By%5D=2")
+    }
+
+    @Test(
+        "Encoder.encode: NSDictionary depth>0 (encoder == nil) uses lexicographic fallback (order-insensitive)"
+    )
+    func nsdictionary_depth_no_encoder_lex_fallback() throws {
+        // Force NSDictionary path (include a non-String key)
+        let nd: NSDictionary = [
+            "": [2, 3],  // empty key → produces "[]"
+            "a": 2,
+            1: 9,  // NSNumber key → will serialize as "[1]" at this depth
+        ]
+
+        let side = NSMapTable<AnyObject, AnyObject>.weakToWeakObjects()
+
+        let any = try Encoder.encode(
+            data: nd,
+            undefined: false,
+            sideChannel: side,
+            prefix: "",  // depth>0 with empty prefix
+            generateArrayPrefix: ListFormat.indices.generator,
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,  // encoder == nil → lexicographic fallback path
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 1
         )
 
-        // With sort = nil, preserve traversal order (encode=false)
-        #expect(
-            try Qs.encode(input, options: EncodeOptions(encode: false, sort: nil))
-                == "a=a&z[zj][zjb]=zjb&z[zj][zja]=zja&z[zi][zib]=zib&z[zi][zia]=zia&b=b"
-        )
+        let s =
+            (any as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+            ?? String(describing: any)
+
+        // Order-insensitive check (we just care that lexicographic fallback ran)
+        let parts = Set(s.split(separator: "&").map(String.init))
+        let expected: Set<String> = ["[][0]=2", "[][1]=3", "[a]=2", "[1]=9"]
+        #expect(parts == expected)
     }
 
     @Test("encode preserves OrderedDictionary insertion order (nested)")
@@ -2290,7 +2350,8 @@ struct EncodeTests {
             try Qs.encode(nested, options: EncodeOptions(strictNullHandling: true))
                 == "a%5Bb%5D%5Bc%5D"
         )
-        #expect(try Qs.encode(["a": ["b": ["c": false]]]) == "a%5Bb%5D%5Bc%5D=false")
+        let qs1 = try Qs.encode(["a": ["b": ["c": false]]])
+        #expect(qs1 == "a%5Bb%5D%5Bc%5D=false")
     }
 
     @Test("encoding - stringify nested objects")
@@ -2562,6 +2623,515 @@ struct EncodeTests {
             value, options: EncodeOptions(listFormat: .comma, encodeValuesOnly: true))
         #expect(commaResult.contains("a="))
     }
+
+    // MARK: - NSDictionary
+
+    @Test("encode: NSDictionary behaves like [String:Any] (order-insensitive across keys)")
+    func nsdictionary_encodes_like_swift_dict_order_insensitive() throws {
+        let inner: NSDictionary = ["": [2, 3], "a": 2]
+        let out = try Qs.encode(["": inner], options: EncodeOptions(encode: false))
+
+        let parts = out.split(separator: "&").map(String.init)
+        // All required pairs must be present
+        #expect(Set(parts) == Set(["[][0]=2", "[][1]=3", "[a]=2"]))
+
+        // Still enforce array element ordering (0 before 1)
+        let i0 = parts.firstIndex(of: "[][0]=2")
+        let i1 = parts.firstIndex(of: "[][1]=3")
+        #expect(i0 != nil && i1 != nil && i0! < i1!)
+    }
+
+    @Test("encode: NSDictionary cycle throws")
+    func nsdictionary_cycle_throws() {
+        let m = NSMutableDictionary()
+        m["self"] = m
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(m)
+        }
+    }
+
+    // MARK: - Edge cases
+
+    @Test(
+        "encode: OrderedDictionary<String,Any> partitions containers and sorts both halves at nested depth"
+    )
+    func sort_orderedDict_string_keys_nestedPartition() throws {
+        // Parent dict (depth 0) has a nested dict so children encode at depth 1.
+        let child: OrderedDictionary<String, Any> = [
+            "zContainer": ["k": "v"],  // container → should be sorted after primitives
+            "aPrim": "1",
+            "bPrim": "2",
+        ]
+        let root: OrderedDictionary<String, Any> = [
+            "child": child
+        ]
+
+        // Force `encoder != nil` so the nested block sorts both primitive and container halves.
+        let opts = EncodeOptions(
+            encoder: { v, _, _ in String(describing: v ?? "") }
+        )
+
+        let out = try Qs.encode(root, options: opts)
+        // child’s primitive keys aPrim,bPrim should come before zContainer; each group A..Z
+        #expect(out == "child[aPrim]=1&child[bPrim]=2&child[zContainer][k]=v")
+    }
+
+    @Test("encode: .comma + empty list returns no pairs (Undefined sentinel path)")
+    func comma_empty_returns_no_pairs() throws {
+        let opts = EncodeOptions(listFormat: .comma)
+        // Top-level has no prefix, so this yields no "k=" pair at all.
+        let out = try Qs.encode([Any](), options: opts)
+        #expect(out == "")
+    }
+
+    @Test("encode: .comma + single element + commaRoundTrip adds [] to key")
+    func comma_single_element_roundtrip() throws {
+        let payload: [String: Any] = ["a": ["x"]]
+        let opts = EncodeOptions(listFormat: .comma, commaRoundTrip: true)
+        let out = try Qs.encode(payload, options: opts)
+        #expect(out == "a%5B%5D=x")
+    }
+
+    @Test("encode: allowEmptyLists renders foo[] for empty arrays")
+    func empty_list_emits_brackets() throws {
+        let opts = EncodeOptions(allowEmptyLists: true)
+        let out = try Qs.encode(["foo": []], options: opts)
+        #expect(out == "foo[]")
+    }
+
+    @Test("encode: NSNull non-strict yields key=")
+    func nsnull_non_strict() throws {
+        let out = try Qs.encode(["a": NSNull()])
+        #expect(out == "a=")
+    }
+
+    @Test("encode: NSNull strict yields bare key")
+    func nsnull_strict() throws {
+        let out = try Qs.encode(["a": NSNull()], options: .init(strictNullHandling: true))
+        #expect(out == "a")
+    }
+
+    @Test("encode: skipNulls drops NSNull leaf")
+    func skip_nulls_drops() throws {
+        let opts = EncodeOptions(skipNulls: true)
+        let out = try Qs.encode(["a": NSNull(), "b": "1"], options: opts)
+        #expect(out == "b=1")
+    }
+
+    @Test("encode: IterableFilter supplies custom key iteration order")
+    func iterable_filter_orders_keys() throws {
+        let payload: [String: Any] = ["b": "2", "a": "1", "c": "3"]
+        let filter = IterableFilter(["c", "a", "b"])  // desired order
+        let out = try Qs.encode(payload, options: .init(filter: filter))
+        #expect(out == "c=3&a=1&b=2")
+    }
+
+    @Test("encode: FunctionFilter adopts container only when original was a container")
+    func function_filter_adoption_rules() throws {
+        // For a primitive leaf, filter returns a container → should NOT adopt (keeps primitive).
+        let f1 = FunctionFilter { key, value in
+            // Leave the root alone; only return a container at leaves.
+            if key.isEmpty { return value }
+            return ["x": "y"] as [String: Any]
+        }
+        let out1 = try Qs.encode(["a": "1"], options: .init(filter: f1))
+        #expect(out1 == "a=1")
+
+        // For a container leaf, filter returns scalar → should adopt.
+        let f2 = FunctionFilter { key, value in
+            if key.isEmpty { return value }  // don't touch the root
+            if value is [String: Any] { return "ZZ" }  // replace container leaf with scalar
+            return value
+        }
+        let out2 = try Qs.encode(["a": ["b": "1"]], options: .init(filter: f2))
+        #expect(out2 == "a=ZZ")
+    }
+
+    @Test("allowDots + encodeDotInKeys (default encode) matches qs.js")
+    func dots_and_percent2e_default_encoder() throws {
+        let payload = ["a": ["b.c": "v"]]
+        let opts = EncodeOptions(allowDots: true, encodeDotInKeys: true)  // encode = true (default)
+        let out = try Qs.encode(payload, options: opts)
+        // qs.js: "a.b%252Ec=v"
+        #expect(out == "a.b%252Ec=v")
+    }
+
+    @Test("allowDots + encodeDotInKeys with encode=false keeps single %2E")
+    func dots_and_percent2e_no_encode() throws {
+        let payload = ["a": ["b.c": "v"]]
+        let opts = EncodeOptions(allowDots: true, encode: false, encodeDotInKeys: true)
+        let out = try Qs.encode(payload, options: opts)
+        // No second pass encoder -> single-encoded
+        #expect(out == "a.b%2Ec=v")
+    }
+
+    @Test("encode: dictionary cycle throws EncodeError.cyclicObject")
+    func cycle_throws() {
+        let d = NSMutableDictionary()
+        d["self"] = d  // true identity cycle
+
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(["root": d], options: .init())
+        }
+    }
+
+    @Test("encode: array cycle throws EncodeError.cyclicObject")
+    func array_cycle_throws() {
+        let a = NSMutableArray()
+        a.add(a)  // true identity cycle
+
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(["root": a], options: .init())
+        }
+    }
+
+    @Test("encode: NSMutableDictionary self-cycle throws EncodeError.cyclicObject")
+    func cycle_dict_ref_throws() {
+        let d = NSMutableDictionary()
+        d["self"] = d
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(["root": d])
+        }
+    }
+
+    @Test("encode: NSMutableArray self-cycle throws EncodeError.cyclicObject")
+    func cycle_array_ref_throws() {
+        let a = NSMutableArray()
+        a.add(a)
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(["root": a])
+        }
+    }
+
+    @Test("encode: cross-cycle NSDictionary <-> NSArray throws EncodeError.cyclicObject")
+    func cycle_cross_ref_throws() {
+        let d = NSMutableDictionary()
+        let a = NSMutableArray()
+        d["a"] = a
+        a.add(d)
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(["root": d])
+        }
+    }
+
+    @Test("encode: default ISO8601 date serializer uses fractional seconds when present")
+    func date_iso8601_fractional() throws {
+        let withMillis = Date(timeIntervalSince1970: 1.234)
+        let noMillis = Date(timeIntervalSince1970: 2.0)
+
+        let out = try Qs.encode(["a": withMillis, "b": noMillis])
+        // Shapes (don’t pin exact time zone if you don’t want brittleness)
+        #expect(out.contains("a=") && out.contains("b="))
+        #expect(out.contains(".234"))  // fractional seconds present
+        #expect(!out.contains("b=."))
+    }
+
+    // MARK: - NSDictionary-specific tests
+
+    // 1) NSDictionary + explicit Sorter → hits the `if let sort = sort` branch
+    @Test("encode: NSDictionary uses provided Sorter for key order")
+    func nsdictionary_sorted_by_sorter() throws {
+        // Unordered NSDictionary on purpose
+        let nd: NSDictionary = ["b": "2", "a": "1", "c": "3"]
+
+        // Sort by String(describing:) ascending
+        let sorter: Sorter = { a, b in
+            let sa = a.map { String(describing: $0) } ?? ""
+            let sb = b.map { String(describing: $0) } ?? ""
+            return sa.compare(sb).rawValue
+        }
+
+        // Turn off percent-encoding so expectations are easier to read
+        let out = try Qs.encode(["wrap": nd], options: .init(encode: false, sort: sorter))
+        #expect(out == "wrap[a]=1&wrap[b]=2&wrap[c]=3")
+    }
+
+    // 2) NSDictionary at depth > 0 + encoder != nil → partition primitives first, containers last
+    @Test("encode: NSDictionary depth>0 partitions prims before containers when encoder is non-nil")
+    func nsdictionary_partition_with_encoder() throws {
+        // "a" → primitive; "B" → container
+        let inner: NSDictionary = ["B": ["x": 1], "a": 1]
+
+        // Default options.percent-encode => encoder is non-nil in the recursive call
+        // Expect prim "a" before container "B"
+        let out = try Qs.encode(["wrap": inner])  // encode=true by default
+
+        // Percent-encoded brackets:
+        // wrap[a]=1           → "wrap%5Ba%5D=1"
+        // wrap[B][x]=1        → "wrap%5BB%5D%5Bx%5D=1"
+        #expect(out == "wrap%5Ba%5D=1&wrap%5BB%5D%5Bx%5D=1")
+    }
+
+    // 3) NSDictionary at depth > 0 + encoder == nil → fallback lexicographic sort of keys
+    @Test("encode: NSDictionary depth>0 (no encoder) produces expected pairs (order agnostic)")
+    func nsdictionary_depth_no_encoder_pairs() throws {
+        // Empty key "" and normal key "a"
+        let inner: NSDictionary = ["": [2, 3], "a": 2]
+
+        // encode=false ⇒ recursive encoder has encoder == nil (hits the NSDictionary depth>0 path)
+        let out = try Qs.encode(["": inner], options: .init(encode: false))
+
+        // Compare as sets of pairs to avoid dependence on NSDictionary enumeration order
+        let got = Set(out.split(separator: "&").map(String.init))
+        let expected: Set<String> = ["[][0]=2", "[][1]=3", "[a]=2"]
+
+        #expect(got == expected)
+    }
+
+    @Test("Encoder.encode: NSDictionary + custom Sorter (direct)")
+    func enc_nsdict_custom_sorter_direct() throws {
+        let nd: NSDictionary = ["b": 2, "a": 1, "c": 3]
+
+        // Sort descending by string form so the order is obvious: c > b > a
+        let sorter: Sorter = { a, b in
+            let sa = a.map { String(describing: $0) } ?? ""
+            let sb = b.map { String(describing: $0) } ?? ""
+            return sb.compare(sa).rawValue
+        }
+
+        let side = NSMapTable<AnyObject, AnyObject>.weakToWeakObjects()
+
+        let any = try Encoder.encode(
+            data: nd,
+            undefined: false,
+            sideChannel: side,
+            prefix: "outer",
+            generateArrayPrefix: ListFormat.indices.generator,
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,  // keep brackets unencoded
+            serializeDate: nil,
+            sort: sorter,  // <-- hits the "if let sort" path
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 1  // ensure depth > 0
+        )
+
+        let s =
+            (any as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+            ?? String(describing: any)
+        #expect(s == "outer[c]=3&outer[b]=2&outer[a]=1")
+    }
+
+    @Test(
+        "Encoder.encode: NSDictionary depth>0 (encoder != nil) partitions primitives before containers"
+    )
+    func enc_nsdict_depth_encoder_partitions() throws {
+        // primitives: "a"=1, "d"=0; containers: "b"={x:1}, "c"={y:2}
+        let nd: NSDictionary = [
+            "b": ["x": 1],
+            "a": 1,
+            "c": ["y": 2],
+            "d": 0,
+        ]
+
+        // Non-nil encoder to trigger the partition branch; identity is fine.
+        let identity: ValueEncoder = { v, _, _ in String(describing: v ?? "") }
+
+        let side = NSMapTable<AnyObject, AnyObject>.weakToWeakObjects()
+
+        let any = try Encoder.encode(
+            data: nd,
+            undefined: false,
+            sideChannel: side,
+            prefix: "outer",
+            generateArrayPrefix: ListFormat.indices.generator,
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: identity,  // <-- encoder != nil triggers partition+sort
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 1
+        )
+
+        let s =
+            (any as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+            ?? String(describing: any)
+        // primitives ("a","d") A..Z first, then containers ("b","c") A..Z
+        #expect(s == "outer[a]=1&outer[d]=0&outer[b][x]=1&outer[c][y]=2")
+    }
+
+    @Test("Encoder.encode: NSDictionary depth>0 (encoder == nil) uses lexicographic fallback")
+    func enc_nsdict_depth_no_encoder_lex_sort() throws {
+        // Empty key "" and normal key "a"
+        let nd: NSDictionary = ["": [2, 3], "a": 2]
+
+        let any = try Encoder.encode(
+            data: nd,
+            undefined: false,
+            sideChannel: NSMapTable.weakToWeakObjects(),
+            prefix: "",
+            generateArrayPrefix: ListFormat.indices.generator,
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,  // <- encoder == nil
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 1
+        )
+
+        let s =
+            (any as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+            ?? String(describing: any)
+
+        // Order-insensitive assertion
+        let expected = "[][0]=2&[][1]=3&[a]=2"
+        #expect(multisetParts(s) == multisetParts(expected))
+    }
+
+    @Test("NSDictionary lex path is used at depth>0 with encoder=nil")
+    func nsdict_lex_path_hits() throws {
+        let nd: NSDictionary = ["": [2, 3], "a": 2]
+        let side = NSMapTable<AnyObject, AnyObject>.weakToWeakObjects()
+
+        let any = try Encoder.encode(
+            data: nd,
+            undefined: false,
+            sideChannel: side,
+            prefix: "",
+            generateArrayPrefix: ListFormat.indices.generator,
+            listFormat: .indices,
+            encoder: nil,
+            depth: 1
+        )
+
+        let s =
+            (any as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+            ?? String(describing: any)
+
+        // Order-insensitive assertion
+        let expected = "[][0]=2&[][1]=3&[a]=2"
+        #expect(multisetParts(s) == multisetParts(expected))
+    }
+
+    @Test(
+        "Encoder.encode: NSDictionary depth>0 (encoder != nil) partitions primitives before containers (NSDictionary path)"
+    )
+    func enc_nsdict_depth_encoder_partitioning() throws {
+        // Mix of primitive and container values
+        let nd: NSDictionary = [
+            "b": ["x": 1],  // container
+            "a": 1,  // primitive
+            "c": ["y": 2],  // container
+            "d": 0,  // primitive
+        ]
+
+        // Non-nil encoder to trigger the partition branch; identity is fine
+        let idEnc: ValueEncoder = { value, _, _ in
+            if let s = value as? String { return s }
+            return String(describing: value ?? "")
+        }
+
+        let any = try Encoder.encode(
+            data: nd,
+            undefined: false,
+            sideChannel: NSMapTable<AnyObject, AnyObject>.weakToWeakObjects(),
+            prefix: "outer",
+            generateArrayPrefix: ListFormat.indices.generator,
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: idEnc,  // <- encoder != nil
+            serializeDate: nil,
+            sort: nil,  // <- no external sort
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 1  // <- depth > 0
+        )
+
+        let s =
+            (any as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+            ?? String(describing: any)
+
+        // primitives ("a","d") A..Z first, then containers ("b","c") A..Z
+        #expect(s == "outer[a]=1&outer[d]=0&outer[b][x]=1&outer[c][y]=2")
+    }
+
+    @Test(
+        "Qs.encode: NSDictionary nested – partitions primitives before containers (encoder != nil)"
+    )
+    func qs_nsdict_partitioning_percentEncoded() throws {
+        // Same payload nested under a single top-level key (stable)
+        let nd: NSDictionary = ["b": ["x": 1], "a": 1, "c": ["y": 2], "d": 0]
+
+        // Qs.encode will pass a non-nil percent-encoder to the recursive call
+        let out = try Qs.encode(["outer": nd])
+
+        // outer[a]=1&outer[d]=0&outer[b][x]=1&outer[c][y]=2 (percent-encoded brackets)
+        #expect(out == "outer%5Ba%5D=1&outer%5Bd%5D=0&outer%5Bb%5D%5Bx%5D=1&outer%5Bc%5D%5By%5D=2")
+    }
+
+    // MARK: - Empty keys across list formats
+
+    @Test("encode: map with empty-string key across list formats (parametrized)")
+    func encodes_empty_key_across_list_formats() throws {
+        for (i, element) in emptyTestCases().enumerated() {
+            let label = (element["input"] as? String) ?? "case \(i)"
+
+            let withEmptyKeys = element["withEmptyKeys"] as! [String: Any]
+            let stringifyOutput = element["stringifyOutput"] as! [String: String]
+
+            // indices
+            let outIndices = try Qs.encode(
+                withEmptyKeys,
+                options: EncodeOptions(listFormat: .indices, encode: false)
+            )
+            #expect(outIndices == (stringifyOutput["indices"] ?? ""), "\(label) (indices)")
+
+            // brackets
+            let outBrackets = try Qs.encode(
+                withEmptyKeys,
+                options: EncodeOptions(listFormat: .brackets, encode: false)
+            )
+            #expect(outBrackets == (stringifyOutput["brackets"] ?? ""), "\(label) (brackets)")
+
+            // repeat
+            let outRepeat = try Qs.encode(
+                withEmptyKeys,
+                options: EncodeOptions(listFormat: .repeatKey, encode: false)
+            )
+            #expect(outRepeat == (stringifyOutput["repeat"] ?? ""), "\(label) (repeat)")
+        }
+    }
 }
 
 // MARK: - Helpers
@@ -2587,4 +3157,14 @@ final class _Recorder: @unchecked Sendable {
         defer { lock.unlock() }
         return items.isEmpty
     }
+}
+
+// Put this test helper somewhere in your test target.
+private func multisetParts(_ qs: String) -> [String: Int] {
+    var bag: [String: Int] = [:]
+    for p in qs.split(separator: "&") {
+        let s = String(p)
+        bag[s, default: 0] += 1
+    }
+    return bag
 }

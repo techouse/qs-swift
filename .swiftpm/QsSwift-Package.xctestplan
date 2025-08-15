@@ -28,7 +28,13 @@
   },
   "testTargets" : [
     {
-      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "QsObjCTests",
+        "name" : "QsObjCTests"
+      }
+    },
+    {
       "target" : {
         "containerPath" : "container:",
         "identifier" : "QsSwiftTests",

@@ -124,12 +124,11 @@ internal enum Decoder {
         if options.charsetSentinel {
             for i in parts.indices {
                 let p = parts[i]
-                if p.hasPrefix("utf8=") {
-                    if p == Sentinel.charsetString {
-                        charset = .utf8
-                    } else if p == Sentinel.isoString {
-                        charset = .isoLatin1
-                    }
+                // Allow UTF8 case and hex-digit case variations
+                if p.lowercased().hasPrefix("utf8="),
+                    let s = Sentinel.match(encodedPart: p, caseInsensitive: true)
+                {
+                    charset = (s == .charset) ? .utf8 : .isoLatin1
                     skipIndex = i
                     break
                 }
@@ -315,29 +314,7 @@ internal enum Decoder {
         strictDepth: Bool
     ) throws -> [String] {
         // 1) dot → bracket (only if allowDots)
-        let key: String
-        if allowDots {
-            // replace `.<token>` with `[token]` using the cached regex
-            let rx = dotRegex
-            let ns = originalKey as NSString
-            let m = rx.matches(in: originalKey, range: NSRange(location: 0, length: ns.length))
-            var out = ""
-            var last = 0
-            for mm in m {
-                let r = mm.range
-                let g1 = mm.range(at: 1)
-                out += ns.substring(with: NSRange(location: last, length: r.location - last))
-                out += "["
-                out += ns.substring(with: g1)
-                out += "]"
-                last = r.location + r.length
-            }
-            out += ns.substring(from: last)
-            key = out
-        } else {
-            key = originalKey
-        }
-
+        let key: String = allowDots ? dotToBracket(originalKey) : originalKey
         let opens = key.reduce(0) { $0 + ($1 == "[" ? 1 : 0) }
         let closes = key.reduce(0) { $0 + ($1 == "]" ? 1 : 0) }
         if opens != closes {
@@ -506,6 +483,9 @@ internal enum Decoder {
     /// Rewrites `.segment` into `[segment]` when dot-notation is enabled,
     /// skipping pathological `..` and `.[` cases. Used by older path that relied on
     /// manual scanning (kept here for clarity/reference).
+    #if QSBENCH_INLINE
+        @inline(__always)
+    #endif
     private static func dotToBracket(_ s: String) -> String {
         if !s.contains(".") { return s }
         var out = ""

@@ -47,22 +47,58 @@ extension Qs {
         var obj: [String: Any] = [:]
         var objKeys: [Any]? = nil
         var arrayIndexKeys: [Any]? = nil
+        var keysLockedByFilter = false  // set when IterableFilter provides explicit order
 
         // Normalize the top-level container to [String: Any] and capture a stable key order.
         if let m = data as? [String: Any] {
-            // Build an ordered view so we can preserve the caller’s traversal order when desired.
+            // Preserve caller traversal order by building an ordered view.
             let od = OrderedDictionary(uniqueKeysWithValues: m.map { ($0.key, $0.value) })
             obj = m
             objKeys = Array(od.keys)
+
         } else if let od = data as? OrderedDictionary<String, Any> {
             obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
-            objKeys = Array(od.keys)  // preserves caller’s insertion order
+            objKeys = Array(od.keys)  // preserves insertion order
+
+        } else if let odNS = data as? OrderedDictionary<NSString, Any> {
+            // Preserve insertion order, normalize keys to Swift String
+            var od = OrderedDictionary<String, Any>()
+            od.reserveCapacity(odNS.count)
+            for (k, v) in odNS { od[String(k)] = v }
+            obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
+            objKeys = Array(od.keys)
+
+        } else if let odAH = data as? OrderedDictionary<AnyHashable, Any> {
+            // Preserve insertion order, normalize heterogeneous keys
+            var od = OrderedDictionary<String, Any>()
+            od.reserveCapacity(odAH.count)
+            for (k, v) in odAH { od[String(describing: k)] = v }
+            obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
+            objKeys = Array(od.keys)
+
+        } else if let dictAH = data as? [AnyHashable: Any] {
+            // Plain dictionary with non-String keys → stringified keys; order = hash map traversal
+            var od = OrderedDictionary<String, Any>()
+            od.reserveCapacity(dictAH.count)
+            for (k, v) in dictAH { od[String(describing: k)] = v }
+            obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
+            objKeys = Array(od.keys)
+
+        } else if let nd = data as? NSDictionary {
+            // Bridge NSDictionary; enumeration order is not guaranteed/deterministic
+            var od = OrderedDictionary<String, Any>()
+            od.reserveCapacity(nd.count)
+            nd.forEach { key, value in od[String(describing: key)] = value }
+            obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
+            objKeys = Array(od.keys)
+
         } else if let arr = data as? [Any] {
             // Promote array → object with string indices.
             var od = OrderedDictionary<String, Any>()
             for (i, v) in arr.enumerated() { od[String(i)] = v }
             obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
             arrayIndexKeys = Array(od.keys)
+
         } else {
             // Unsupported top-level type → empty output (matches other ports’ behavior).
             return ""
@@ -70,21 +106,43 @@ extension Qs {
 
         if obj.isEmpty { return "" }
 
-        // Apply optional filters:
-        // - FunctionFilter can transform/replace the full object.
-        // - IterableFilter provides an explicit key order.
+        // Root-level filters:
+        // - IterableFilter provides an explicit key order (authoritative).
+        // - FunctionFilter allows transforming the root object, but only adopt it if the result is container-shaped (map or array).
         if let f = options.filter as? FunctionFilter {
             let filtered = f.function("", obj)
-            if let m = filtered as? [AnyHashable: Any] {
+
+            // Adopt container results only; primitives are ignored at the root.
+            if let m = filtered as? [String: Any] {
+                obj = m
+                objKeys = Array(
+                    OrderedDictionary(uniqueKeysWithValues: m.map { ($0.key, $0.value) }).keys)
+            } else if let m = filtered as? [AnyHashable: Any] {
                 var out: [String: Any] = [:]
                 out.reserveCapacity(m.count)
                 for (k, v) in m { out[String(describing: k)] = v }
                 obj = out
-            } else if let m = filtered as? [String: Any] {
-                obj = m
+                objKeys = Array(
+                    OrderedDictionary(uniqueKeysWithValues: out.map { ($0.key, $0.value) }).keys)
+            } else if let od = filtered as? OrderedDictionary<String, Any> {
+                obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
+                objKeys = Array(od.keys)
+            } else if let nd = filtered as? NSDictionary {
+                var out: [String: Any] = [:]
+                nd.forEach { key, value in out[String(describing: key)] = value }
+                obj = out
+                objKeys = Array(out.keys)
+            } else if let arr = filtered as? [Any] {
+                var od = OrderedDictionary<String, Any>()
+                for (i, v) in arr.enumerated() { od[String(i)] = v }
+                obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
+                objKeys = Array(od.keys)
             }
-        } else if let it = options.filter as? IterableFilter {
+        }
+
+        if let it = options.filter as? IterableFilter {
             objKeys = it.iterable
+            keysLockedByFilter = true
         }
 
         // If no custom key list from filter, use the map keys (or array indices).
@@ -95,14 +153,14 @@ extension Qs {
         // --------- Ordering policy (see doc above) ---------
         if let sorter = options.sort {
             objKeys = objKeys!.sorted { sorter($0, $1) < 0 }
-        } else if arrayIndexKeys == nil && options.encode {
-            // Deterministic default only when percent-encoding is on.
+        } else if arrayIndexKeys == nil && options.encode && !keysLockedByFilter {
+            // Deterministic default only when percent-encoding is on and filter did not lock keys.
             var ks = objKeys!.compactMap { $0 as? String }  // top-level keys are Strings
             let split = ks.stablePartition { $0.isEmpty }  // empties → back, **stable**
             ks[..<split].sort()  // sort non-empty keys lexically
             objKeys = ks
         }
-        // else: preserve traversal order (no sorting)
+        // else: preserve traversal order (or filter’s order) as-is
 
         // Weak side-channel for cycle detection inside the recursive encoder.
         let sideChannel = NSMapTable<AnyObject, AnyObject>.weakToWeakObjects()

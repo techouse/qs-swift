@@ -15,6 +15,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "QsObjC"
+               BuildableName = "QsObjC"
+               BlueprintName = "QsObjC"
+               ReferencedContainer = "container:">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "QsSwift"
                BuildableName = "QsSwift"
                BlueprintName = "QsSwift"
@@ -27,14 +41,25 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES">
-      <TestPlans>
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      shouldAutocreateTestPlan = "YES">
+       <TestPlans>
          <TestPlanReference
-            reference = "container:.swiftpm/QsSwift.xctestplan"
+            reference = "container:.swiftpm/QsSwift-Package.xctestplan"
             default = "YES">
          </TestPlanReference>
       </TestPlans>
       <Testables>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "QsObjCTests"
+               BuildableName = "QsObjCTests"
+               BlueprintName = "QsObjCTests"
+               ReferencedContainer = "container:">
+            </BuildableReference>
+         </TestableReference>
          <TestableReference
             skipped = "NO">
             <BuildableReference
@@ -57,7 +82,7 @@
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
       allowLocationSimulation = "YES">
-      <EnvironmentVariables>
+       <EnvironmentVariables>
          <EnvironmentVariable
             key = "SWIFT_DETERMINISTIC_HASHING"
             value = "1"
@@ -74,9 +99,9 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "QsSwift"
-            BuildableName = "QsSwift"
-            BlueprintName = "QsSwift"
+            BlueprintIdentifier = "QsObjC"
+            BuildableName = "QsObjC"
+            BlueprintName = "QsObjC"
             ReferencedContainer = "container:">
          </BuildableReference>
       </MacroExpansion>

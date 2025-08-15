@@ -63,9 +63,9 @@ internal enum Encoder {
         var obj: Any? = data
 
         let objWrapper: WeakWrapper? = {
-            if let objRef = data as? AnyObject {
-                return WeakWrapper(objRef)
-            }
+            guard let objRef = data as? AnyObject else { return nil }
+            // Optional: narrow to Foundation containers if you like
+            if objRef is NSArray || objRef is NSDictionary { return WeakWrapper(objRef) }
             return nil
         }()
 
@@ -110,11 +110,11 @@ internal enum Encoder {
 
         // Then do type-specific normalization
         if let date = obj as? Date {
-            obj = serializeDate?(date) ?? ISO8601DateFormatter().string(from: date)
+            obj = serializeDate?(date) ?? Self.iso8601().string(from: date)
         } else if isComma, let iterable = obj as? [Any] {
             obj = iterable.map { v -> Any in
                 if let d = v as? Date {
-                    return serializeDate?(d) ?? ISO8601DateFormatter().string(from: d)
+                    return serializeDate?(d) ?? Self.iso8601().string(from: d)
                 }
                 return v
             }
@@ -158,23 +158,33 @@ internal enum Encoder {
             return []  // signal "no pairs produced"
         }
 
+        // ---- Normalize the scalar once (unwrap Optional, collapse Optional.none to nil) ----
+        let normalizedScalar: Any? = {
+            guard let some = obj else { return nil }
+            return unwrapOptional(some) ?? some
+        }()
+
         // Handle primitives
-        if Utils.isNonNullishPrimitive(obj, skipNulls: skipNulls) || obj is Data {
+        if Utils.isNonNullishPrimitive(normalizedScalar, skipNulls: skipNulls)
+            || normalizedScalar is Data
+        {
             if let enc = encoder {
                 let keyPart = encodeValuesOnly ? keyPrefix : enc(keyPrefix, nil, nil)
-                let valPart = enc(obj, nil, nil)
+                let valPart = enc(normalizedScalar, nil, nil)  // pass unwrapped
                 return "\(fmt.apply(keyPart))=\(fmt.apply(valPart))"
             }
-            return "\(fmt.apply(keyPrefix))=\(fmt.apply(describe(obj)))"
+            return "\(fmt.apply(keyPrefix))=\(fmt.apply(describe(normalizedScalar)))"  // unwrapped
         }
 
         var values: [Any] = []
 
         if undefined { return values }
 
+        let arrayView = arrayize(obj)
+
         // Determine object keys
         let objKeys: [Any] = {
-            if isComma, let elems0 = arrayize(obj) {
+            if isComma, let elems0 = arrayView {
                 var elems = elems0
                 if encodeValuesOnly, let encoder = encoder {
                     elems = elems0.map { el in encoder(describeForComma(el), nil, nil) }
@@ -212,21 +222,6 @@ internal enum Encoder {
                         }
                         return k
 
-                    case let od as OrderedDictionary<AnyHashable, Any>:
-                        var k = [AnyHashable]()
-                        k.reserveCapacity(od.count)
-                        for (kk, _) in od { k.append(kk) }
-                        if let sort = sort {
-                            k = k.sorted { sort($0, $1) < 0 }
-                        } else if depth > 0 {
-                            let split = k.stablePartition { key in isContainer(od[key]) }
-                            if encoder != nil {
-                                k[..<split].sort { String(describing: $0) < String(describing: $1) }
-                                k[split...].sort { String(describing: $0) < String(describing: $1) }
-                            }
-                        }
-                        return k
-
                     case let dict as [String: Any]:
                         // enumerate to preserve insertion order
                         var k = [String]()
@@ -244,23 +239,41 @@ internal enum Encoder {
                         }
                         return k
 
-                    case let dict as [AnyHashable: Any]:
-                        var k = [AnyHashable]()
-                        k.reserveCapacity(dict.count)
-                        for (kk, _) in dict { k.append(kk) }
-                        if let sort = sort {
-                            k = k.sorted { sort($0, $1) < 0 }
-                            return k
-                        }
-                        if depth > 0, encoder != nil {
-                            let split = k.stablePartition { key in isContainer(dict[key]) }
-                            k[..<split].sort { String(describing: $0) < String(describing: $1) }
-                            k[split...].sort { String(describing: $0) < String(describing: $1) }
-                        }
-                        return k
+                    case let nd as NSDictionary:
+                        var ks: [Any] = []
+                        ks.reserveCapacity(nd.count)
+                        nd.forEach { key, _ in ks.append(key) }
 
-                    case _ where arrayize(obj) != nil:
-                        let count = arrayize(obj)!.count
+                        if let sort = sort {
+                            ks = ks.sorted { sort($0, $1) < 0 }
+                        } else if depth > 0 {
+                            if encoder != nil {
+                                // Partition: primitives first, containers later (stable), like Swift dict.
+                                var prim: [Any] = []
+                                var cont: [Any] = []
+                                prim.reserveCapacity(ks.count)
+                                cont.reserveCapacity(ks.count)
+                                for k in ks {
+                                    let v = nd[k]
+                                    if isContainer(v) {
+                                        cont.append(k)
+                                    } else {
+                                        prim.append(k)
+                                    }
+                                }
+                                prim.sort { String(describing: $0) < String(describing: $1) }
+                                cont.sort { String(describing: $0) < String(describing: $1) }
+                                ks = prim + cont
+                            } else {
+                                // No custom encoder → match the “feel” of Swift dict literals:
+                                // sort lexicographically so "" comes before "a"
+                                ks.sort { String(describing: $0) < String(describing: $1) }
+                            }
+                        }
+                        return ks
+
+                    case _ where arrayView != nil:
+                        let count = arrayView!.count
                         return Array(0..<count)
 
                     default:
@@ -279,13 +292,13 @@ internal enum Encoder {
             : keyPrefix
 
         let adjustedPrefix: String = {
-            if isComma, commaRoundTrip, let arr = arrayize(obj), arr.count == 1 {
+            if isComma, commaRoundTrip, let arr = arrayView, arr.count == 1 {
                 return "\(encodedPrefix)[]"
             }
             return encodedPrefix
         }()
 
-        if allowEmptyLists, let arr = arrayize(obj), arr.isEmpty {
+        if allowEmptyLists, let arr = arrayView, arr.isEmpty {
             return "\(adjustedPrefix)[]"
         }
 
@@ -307,31 +320,20 @@ internal enum Encoder {
                         }
                         return (nil, true)
 
-                    case let od as OrderedDictionary<AnyHashable, Any>:
-                        if let k = key as? AnyHashable {
-                            let v = od[k]
-                            let contains = od.index(forKey: k) != nil
-                            return (v, v == nil && !contains)
-                        }
-                        return (nil, true)
-
                     case let dict as [String: Any]:
                         if let k = key as? String {
-                            let v = dict[k]
+                            let v = dict[k].flatMap { unwrapOptional($0) } ?? dict[k]
                             return (v, v == nil && !dict.keys.contains(k))
                         }
                         return (nil, true)
 
-                    case let dict as [AnyHashable: Any]:
-                        if let k = key as? AnyHashable {
-                            let v = dict[k]
-                            return (v, v == nil && !dict.keys.contains(k))
-                        }
-                        return (nil, true)
+                    case let nd as NSDictionary:
+                        let v = nd[key]
+                        // NSDictionary can’t store nil; nil here means “absent”
+                        return (v, v == nil)
 
                     default:
-                        if let arr = arrayize(obj), let idx = key as? Int, idx >= 0, idx < arr.count
-                        {
+                        if let arr = arrayView, let idx = key as? Int, idx >= 0, idx < arr.count {
                             return (arr[idx], false)
                         }
                         return (nil, true)
@@ -353,7 +355,7 @@ internal enum Encoder {
             }()
 
             let keyPrefix: String = {
-                if arrayize(obj) != nil {
+                if arrayView != nil {
                     return generator(adjustedPrefix, encodedKey)
                 }
                 return allowDots
@@ -367,6 +369,7 @@ internal enum Encoder {
             }
 
             // Create child side-channel and link to parent
+            // Link child → parent so ancestor walk can detect cycles via SENTINEL chain.
             let valueSideChannel = NSMapTable<AnyObject, AnyObject>.weakToWeakObjects()
             valueSideChannel.setObject(sideChannel, forKey: SENTINEL)
 
@@ -455,10 +458,19 @@ internal enum Encoder {
     @inline(__always)
     private static func isContainer(_ v: Any?) -> Bool {
         if v is [Any] || v is NSArray { return true }
-        if v is [String: Any] || v is [AnyHashable: Any] || v is NSDictionary { return true }
-        if v is OrderedDictionary<String, Any> || v is OrderedDictionary<AnyHashable, Any> {
-            return true
-        }
+        if v is [String: Any] || v is NSDictionary { return true }
+        if v is OrderedDictionary<String, Any> { return true }
         return false
+    }
+
+    @inline(__always)
+    private static func iso8601() -> ISO8601DateFormatter {
+        let key = "QsSwift.Encoder.iso8601"
+        let dict = Thread.current.threadDictionary
+        if let f = dict[key] as? ISO8601DateFormatter { return f }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        dict[key] = f
+        return f
     }
 }
