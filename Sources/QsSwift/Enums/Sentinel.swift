@@ -71,11 +71,33 @@ public enum Sentinel: CustomStringConvertible, Sendable {
 
     /// If `part` exactly matches an encoded sentinel, returns it; otherwise `nil`.
     /// Handy when scanning `key=value` parts during decoding.
-    @inlinable
-    public static func match(encodedPart part: String) -> Sentinel? {
-        if part == charsetString { return .charset }
-        if part == isoString { return .iso }
-        return nil
-        // (If you ever need case-insensitive matching, make that explicit here.)
+    public static func match(encodedPart part: String, caseInsensitive: Bool = false) -> Sentinel? {
+        if caseInsensitive {
+            if asciiCaseInsensitiveEquals(part, charsetString) { return .charset }
+            if asciiCaseInsensitiveEquals(part, isoString) { return .iso }
+            return nil
+        } else {
+            if part == charsetString { return .charset }
+            if part == isoString { return .iso }
+            return nil
+        }
+    }
+
+    @inline(__always)
+    private static func asciiCaseInsensitiveEquals(_ a: String, _ b: String) -> Bool {
+        // Fast path: length must match.
+        let au = a.utf8
+        let bu = b.utf8
+        guard au.count == bu.count else { return false }
+
+        var ia = au.makeIterator()
+        var ib = bu.makeIterator()
+        while let x = ia.next(), let y = ib.next() {
+            // Fold ASCII letters to lowercase by OR-ing 0x20; other bytes unchanged.
+            let fx = x | 0x20
+            let fy = y | 0x20
+            if fx != fy { return false }
+        }
+        return true
     }
 }
