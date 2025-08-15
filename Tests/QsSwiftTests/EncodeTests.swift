@@ -3034,6 +3034,104 @@ struct EncodeTests {
         let expected = "[][0]=2&[][1]=3&[a]=2"
         #expect(multisetParts(s) == multisetParts(expected))
     }
+
+    @Test(
+        "Encoder.encode: NSDictionary depth>0 (encoder != nil) partitions primitives before containers (NSDictionary path)"
+    )
+    func enc_nsdict_depth_encoder_partitioning() throws {
+        // Mix of primitive and container values
+        let nd: NSDictionary = [
+            "b": ["x": 1],  // container
+            "a": 1,  // primitive
+            "c": ["y": 2],  // container
+            "d": 0,  // primitive
+        ]
+
+        // Non-nil encoder to trigger the partition branch; identity is fine
+        let idEnc: ValueEncoder = { value, _, _ in
+            if let s = value as? String { return s }
+            return String(describing: value ?? "")
+        }
+
+        let any = try Encoder.encode(
+            data: nd,
+            undefined: false,
+            sideChannel: NSMapTable<AnyObject, AnyObject>.weakToWeakObjects(),
+            prefix: "outer",
+            generateArrayPrefix: ListFormat.indices.generator,
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: idEnc,  // <- encoder != nil
+            serializeDate: nil,
+            sort: nil,  // <- no external sort
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 1  // <- depth > 0
+        )
+
+        let s =
+            (any as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+            ?? String(describing: any)
+
+        // primitives ("a","d") A..Z first, then containers ("b","c") A..Z
+        #expect(s == "outer[a]=1&outer[d]=0&outer[b][x]=1&outer[c][y]=2")
+    }
+
+    @Test(
+        "Qs.encode: NSDictionary nested – partitions primitives before containers (encoder != nil)"
+    )
+    func qs_nsdict_partitioning_percentEncoded() throws {
+        // Same payload nested under a single top-level key (stable)
+        let nd: NSDictionary = ["b": ["x": 1], "a": 1, "c": ["y": 2], "d": 0]
+
+        // Qs.encode will pass a non-nil percent-encoder to the recursive call
+        let out = try Qs.encode(["outer": nd])
+
+        // outer[a]=1&outer[d]=0&outer[b][x]=1&outer[c][y]=2 (percent-encoded brackets)
+        #expect(out == "outer%5Ba%5D=1&outer%5Bd%5D=0&outer%5Bb%5D%5Bx%5D=1&outer%5Bc%5D%5By%5D=2")
+    }
+
+    // MARK: - Empty keys across list formats
+
+    @Test("encode: map with empty-string key across list formats (parametrized)")
+    func encodes_empty_key_across_list_formats() throws {
+        for (i, element) in emptyTestCases().enumerated() {
+            let label = (element["input"] as? String) ?? "case \(i)"
+
+            let withEmptyKeys = element["withEmptyKeys"] as! [String: Any]
+            let stringifyOutput = element["stringifyOutput"] as! [String: String]
+
+            // indices
+            let outIndices = try Qs.encode(
+                withEmptyKeys,
+                options: EncodeOptions(listFormat: .indices, encode: false)
+            )
+            #expect(outIndices == (stringifyOutput["indices"] ?? ""), "\(label) (indices)")
+
+            // brackets
+            let outBrackets = try Qs.encode(
+                withEmptyKeys,
+                options: EncodeOptions(listFormat: .brackets, encode: false)
+            )
+            #expect(outBrackets == (stringifyOutput["brackets"] ?? ""), "\(label) (brackets)")
+
+            // repeat
+            let outRepeat = try Qs.encode(
+                withEmptyKeys,
+                options: EncodeOptions(listFormat: .repeatKey, encode: false)
+            )
+            #expect(outRepeat == (stringifyOutput["repeat"] ?? ""), "\(label) (repeat)")
+        }
+    }
 }
 
 // MARK: - Helpers

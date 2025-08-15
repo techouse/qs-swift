@@ -126,7 +126,8 @@ internal enum Decoder {
                 let p = parts[i]
                 // Allow UTF8 case and hex-digit case variations
                 if p.lowercased().hasPrefix("utf8="),
-                   let s = Sentinel.match(encodedPart: p, caseInsensitive: true) {
+                    let s = Sentinel.match(encodedPart: p, caseInsensitive: true)
+                {
                     charset = (s == .charset) ? .utf8 : .isoLatin1
                     skipIndex = i
                     break

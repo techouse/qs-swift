@@ -221,11 +221,30 @@ extension Qs {
                 }
 
                 // (c) Otherwise, merge into the existing object
-                if let merged = Utils.merge(target: obj, source: parsed, options: finalOptions)
-                    as? [String: Any]
-                {
-                    obj = merged
-                }
+                //
+                // NOTE: Only objectify top-level *list* fragments to {"0":..., "1":...}.
+                // If `parsed` is nil, do not merge (avoids creating a "nil" key on inputs like "&").
+                if let list = parsed as? [Any] {
+                    // Top-level array fragment → convert to string-indexed map,
+                    // dropping Undefined placeholders so we only add real values.
+                    var m: [String: Any] = [:]
+                    m.reserveCapacity(list.count)
+                    for (i, v) in list.enumerated() {
+                        if !(v is Undefined) { m[String(i)] = v }
+                    }
+                    if let merged = Utils.merge(target: obj, source: m, options: finalOptions)
+                        as? [String: Any]
+                    {
+                        obj = merged
+                    }
+                } else if let parsed = parsed {
+                    // Non-array, non-nil fragment → merge as-is
+                    if let merged = Utils.merge(target: obj, source: parsed, options: finalOptions)
+                        as? [String: Any]
+                    {
+                        obj = merged
+                    }
+                }  // else: parsed == nil → nothing to merge
             }
         }
 

@@ -1230,24 +1230,6 @@ struct DecodeTests {
 
     // MARK: - Misc edge cases
 
-    @Test("decode - continue parsing when no parent is found")
-    func testDecode_NoParentContinues() async throws {
-        do {
-            let r = try Qs.decode("[]=&a=b")
-            #expect((r["0"] as? String) == "")
-            #expect((r["a"] as? String) == "b")
-        }
-        do {
-            let r = try Qs.decode("[]&a=b", options: DecodeOptions(strictNullHandling: true))
-            #expect(isNSNullValue(r["0"]))
-            #expect((r["a"] as? String) == "b")
-        }
-        do {
-            let r = try Qs.decode("[foo]=bar")
-            #expect((r["foo"] as? String) == "bar")
-        }
-    }
-
     @Test("decode - does not produce empty keys")
     func testDecode_NoEmptyKeys1() async throws {
         let r = try Qs.decode("_r=1&")
@@ -2954,7 +2936,7 @@ extension DecodeTests {
         }
     }
 
-    // MARK: parse other charset
+    // MARK: - parse other charset
 
     @Test("parse: other charset iso-8859-1")
     func parse_otherCharset() throws {
@@ -2962,7 +2944,7 @@ extension DecodeTests {
         #expect(r["¢"] as? String == "½")
     }
 
-    // MARK: charset sentinel (dup of charset suite, kept for parity)
+    // MARK: - charset sentinel (dup of charset suite, kept for parity)
 
     @Test("parse: charset sentinel variants")
     func parse_charsetSentinel() throws {
@@ -3003,7 +2985,7 @@ extension DecodeTests {
         #expect(r["Ã¸"] as? String == "Ã¸")
     }
 
-    // MARK: numeric entities
+    // MARK: - numeric entities
 
     @Test("parse: interpret numeric entities")
     func parse_numericEntities() throws {
@@ -3022,7 +3004,7 @@ extension DecodeTests {
         #expect(r["foo"] as? String == "&#9786;")
     }
 
-    // MARK: key/value decoder lowercasing
+    // MARK: - key/value decoder lowercasing
 
     @Test("parse: allow decoding keys and values")
     func parse_keyValueDecoder() throws {
@@ -3033,7 +3015,7 @@ extension DecodeTests {
         #expect(r["key"] as? String == "value")
     }
 
-    // MARK: proof of concept
+    // MARK: - proof of concept
 
     @Test("parse: proof of concept")
     func parse_poc() throws {
@@ -3044,6 +3026,47 @@ extension DecodeTests {
         #expect(name?[":eq"] as? String == "John")
         #expect(age?[":ge"] as? String == "18")
         #expect(age?[":le"] as? String == "60")
+    }
+
+    // MARK: - Empty test cases
+
+    @Test("decode: parses empty keys (skips empty-string keys)")
+    func decode_parses_empty_keys_parametrized() throws {
+        for (i, element) in emptyTestCases().enumerated() {
+            let label = (element["input"] as? String) ?? "case \(i)"
+            let input = element["input"] as! String
+            let expected = element["noEmptyKeys"] as! [String: Any]
+
+            // Decode
+            let decodedAny = try Qs.decode(input)
+            let decoded = decodedAny
+
+            // Deep compare via NSDictionary bridging
+            let equal = NSDictionary(dictionary: decoded).isEqual(to: expected)
+            #expect(
+                equal, "mismatch\nENCODED: \(label)\nDECODED: \(decoded)\nEXPECTED: \(expected)")
+        }
+    }
+
+    // MARK: - Only objectify top-level list*fragments to {"0":..., "1":...}
+
+    @Test("decode: '&' (or trailing &) does not create a 'nil' key")
+    func decode_does_not_create_nil_key() throws {
+        let r1 = try Qs.decode("&")
+        #expect(r1.isEmpty)
+
+        let r2 = try Qs.decode("_r=1&")
+        #expect(r2.keys.sorted() == ["_r"])
+        #expect(r2["_r"] as? String == "1")
+    }
+
+    @Test("decode: bracketed numeric top-level keys become string indices")
+    func decode_bracketed_numeric_top_level_to_string_indices() throws {
+        let r1 = try Qs.decode("[0]=a&[1]=b")
+        #expect(NSDictionary(dictionary: r1).isEqual(to: ["0": "a", "1": "b"]))
+
+        let r2 = try Qs.decode("%5B0%5D=a&%5B1%5D=b")
+        #expect(NSDictionary(dictionary: r2).isEqual(to: ["0": "a", "1": "b"]))
     }
 }
 
