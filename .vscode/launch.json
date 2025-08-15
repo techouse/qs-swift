@@ -1,25 +1,4 @@
 {
     "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Swift Tests (LLDB)",
-            "type": "lldb",
-            "request": "launch",
-            "program": "/usr/bin/swift",
-            "args": [
-                "test",
-                "--skip-build"
-            ],
-            "cwd": "${workspaceFolder}",
-            "console": "integratedTerminal"
-        },
-        {
-            "name": "Swift Executable (if you add one)",
-            "type": "lldb",
-            "request": "launch",
-            "program": "${workspaceFolder}/.build/debug/YourExecName",
-            "cwd": "${workspaceFolder}",
-            "preLaunchTask": "Swift: Build (debug)"
-        }
-    ]
+    "configurations": []
 }
