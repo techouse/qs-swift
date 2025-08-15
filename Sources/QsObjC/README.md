@@ -21,15 +21,15 @@ API closely and adds a few conveniences for Obj‑C style usage.
 ```swift
 // Package.swift (consumer)
 dependencies: [
-    .package(url: "https://github.com/techouse/qs-swift", from: "1.1.1")
+  .package(url: "https://github.com/techouse/qs-swift", from: "1.1.1")
 ],
 targets: [
-    .target(
-        name: "YourApp",
-        dependencies: [
-            .product(name: "QsObjC", package: "QsSwift") // Objective‑C bridge
-        ]
-    )
+  .target(
+      name: "YourApp",
+      dependencies: [
+        .product(name: "QsObjC", package: "QsSwift") // Objective‑C bridge
+      ]
+  )
 ]
 ```
 
@@ -78,10 +78,10 @@ NSDictionary *map = [Qs decode:@"a=b&c=d" options:nil error:&err];
 
 ```objc
 NSString *s1 = [Qs encodeOrEmpty:@{ @"a": @1 }];           // never nil, returns @"a=1"
-NSString *s2 = [Qs encodeOrNil:nil];                        // nil input → nil (not an error)
+NSString *s2 = [Qs encodeOrNil:nil];                       // nil input → nil (not an error)
 
 NSDictionary *m1 = [Qs decodeOrEmpty:@"a=1"];              // never nil, returns @{}
-NSDictionary *m2 = [Qs decodeOr:nil options:nil];           // same as decodeOrEmpty
+NSDictionary *m2 = [Qs decodeOr:nil options:nil];          // same as decodeOrEmpty
 NSDictionary *m3 = [Qs decodeOr:@"oops" options:nil default:@{ @"a": @"b" }];
 ```
 
@@ -114,10 +114,10 @@ o.encodeDotInKeys = NO;                 // force-encode '.' if true
 //    QsListFormatIndices  => a[0]=1&a[1]=2
 //    QsListFormatRepeatKey=> a=1&a=2
 //    QsListFormatComma    => a=1,2 (see commaRoundTrip)
-o.listFormat = QsListFormatIndices;
-o.indices    = @(YES);                  // only used when listFormat is nil (deprecated)
+o.listFormat      = QsListFormatIndices;
+o.indices         = @(YES);              // only used when listFormat is nil (deprecated)
 o.allowEmptyLists = NO;
-o.commaRoundTrip   = NO;                // append [] for singletons under .comma
+o.commaRoundTrip  = NO;                  // append [] for singletons under .comma
 
 // Nulls
 // - strictNullHandling: key with nil value → "key" (no '=')
@@ -214,8 +214,7 @@ NSError *err = nil;
 NSMutableDictionary *m = [NSMutableDictionary new];
 m[@"self"] = m; // cycle
 NSString *s = [Qs encode:m options:nil error:&err];
-if (!s && [err.domain isEqualToString:QsEncodeErrorInfo.domain] &&
-    err.code == QsEncodeErrorCodeCyclicObject) {
+if (!s && [err.domain isEqualToString:QsEncodeErrorInfo.domain] && err.code == QsEncodeErrorCodeCyclicObject) {
   // handle/expect cycles here
 }
 ```
@@ -228,9 +227,7 @@ The bridge offers callback‑style async wrappers that are `@Sendable` safe and 
 
 ```objc
 // Main‑thread callback
-[Qs encodeAsyncOnMain:@{
-@"a": @1
-} options:nil completion:^(NSString * _Nullable s, NSError * _Nullable err) {
+[Qs encodeAsyncOnMain:@{@"a": @1} options:nil completion:^(NSString * _Nullable s, NSError * _Nullable err) {
 // UI‑safe
 }];
 
@@ -239,9 +236,7 @@ The bridge offers callback‑style async wrappers that are `@Sendable` safe and 
 }];
 
 // Background callback (no hop to main)
-[Qs encodeAsync:@{
-@"a": @1
-} options:nil completion:^(NSString * _Nullable s, NSError * _Nullable err) {
+[Qs encodeAsync:@{@"a": @1} options:nil completion:^(NSString * _Nullable s, NSError * _Nullable err) {
 // background
 }];
 
