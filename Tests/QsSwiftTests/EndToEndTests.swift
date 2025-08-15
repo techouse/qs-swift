@@ -38,26 +38,17 @@ struct EndToEndTests {
     @Test("e2e: data <-> encoded (parametrized)")
     func e2e_parametrized_encode_decode_roundtrip() throws {
         for (i, element) in endToEndTestCases().enumerated() {
-            // Encode should match exactly (we’re passing encode: false in these fixtures)
             let gotEncoded = try Qs.encode(element.data, options: .init(encode: false))
             #expect(
                 gotEncoded == element.encoded,
                 "encode mismatch [case \(i)]:\nEXPECTED: \(element.encoded)\nENCODED: \(gotEncoded)"
             )
 
-            // Decode and deep-compare against a normalized plain dictionary
             let gotDecoded = try Qs.decode(element.encoded)
-            let expectedStd = normalizeToStdDict(element.data) as! [String: Any]
-
-            let equal = NSDictionary(dictionary: gotDecoded).isEqual(to: expectedStd)
+            // compare maps in a container-agnostic way
             #expect(
-                equal,
-                """
-                decode mismatch [case \(i)]:
-                ENCODED : \(element.encoded)
-                EXPECTED: \(expectedStd)
-                DECODED : \(gotDecoded)
-                """
+                deepEqual(element.data, gotDecoded),
+                "decode mismatch [case \(i)]:\nENCODED: \(element.encoded)\nEXPECTED: \(String(describing: normalizeToStdDict(element.data)))\nDECODED: \(gotDecoded)"
             )
         }
     }
