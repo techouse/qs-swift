@@ -1,10 +1,11 @@
 #if canImport(ObjectiveC) && (os(macOS) || os(iOS) || os(tvOS) || os(watchOS))
     import Foundation
+    import OrderedCollections
     import Testing
 
     @testable import QsObjC
 
-struct ObjCBridgeTests {
+    struct ObjCBridgeTests {
         @Test("encode → decode round-trip (flat)")
         func roundtripFlat() throws {
             let input: NSDictionary = [
@@ -143,9 +144,16 @@ struct ObjCBridgeTests {
         func encode_dictionary_keys_stringified() {
             let d: NSDictionary = [NSNumber(value: 7): "v", "k": "w"]
             let bridged = QsBridge.bridgeInputForEncode(d)
-            let out = bridged as? [String: Any]
-            #expect(out?["7"] as? String == "v")
-            #expect(out?["k"] as? String == "w")
+
+            if let od = bridged as? OrderedDictionary<String, Any> {
+                #expect(od["7"] as? String == "v")
+                #expect(od["k"] as? String == "w")
+            } else if let dict = bridged as? [String: Any] {
+                #expect(dict["7"] as? String == "v")
+                #expect(dict["k"] as? String == "w")
+            } else {
+                #expect(Bool(false), "Unexpected bridged type: \(type(of: bridged))")
+            }
         }
 
         @Test("bridgeInputForEncode: NSArray → [Any]")
@@ -185,7 +193,7 @@ struct ObjCBridgeTests {
         @Test("encode: NSArray cycle surfaces as EncodeError.cyclicObject (no crash)")
         func encode_array_cycle_maps_to_error() {
             let a = NSMutableArray()
-            a.add(a)  // self-cycle
+            a.add(a)  // cycle
             var err: NSError?
             let s = QsBridge.encode(a, options: nil, error: &err)
             #expect(s == nil)
@@ -298,9 +306,10 @@ struct ObjCBridgeTests {
 
         @Test("DecodeErrorObjC: parameterLimitExceeded exposes userInfo limit")
         func decode_error_mapping() {
-            var opts = DecodeOptionsObjC()
-            opts.parameterLimit = 1
-            opts.throwOnLimitExceeded = true
+            let opts = DecodeOptionsObjC().with {
+                $0.parameterLimit = 1
+                $0.throwOnLimitExceeded = true
+            }
 
             var err: NSError?
             let out = QsBridge.decode("a=b&c=d" as NSString, options: opts, error: &err)

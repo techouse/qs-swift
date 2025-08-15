@@ -1,4 +1,5 @@
 import Foundation
+import OrderedCollections
 import QsSwift
 
 @objc(Qs)
@@ -28,11 +29,13 @@ public final class QsBridge: NSObject {
         _ object: Any, options: EncodeOptionsObjC? = nil, error outError: NSErrorPointer = nil
     ) -> NSString? {
         do {
-            // 1) Normalize ObjC → Swift containers
-            let normalized = bridgeInputForEncode(object)
-            // 2) Bridge QsUndefined across the object graph
-            let bridged = _bridgeUndefined(normalized) ?? normalized
+            // 1) Convert everything to Swift containers, using OrderedDictionary and preserving identity for cycles
+            let ordered = bridgeInputForEncode(object)
 
+            // 2) Bridge Undefined while preserving ordered shape and cycles
+            let bridged = bridgeUndefinedPreservingOrder(ordered) ?? ordered
+
+            // 3) Let the core do its thing (and report cyclicObject if present)
             let str = try Qs.encode(bridged, options: options?.swift ?? QsSwift.EncodeOptions())
             return str as NSString
         } catch {
@@ -47,7 +50,7 @@ public final class QsBridge: NSObject {
     @inline(__always)
     internal static func bridgeInputForDecode(
         _ input: Any?,
-        forceReduce: Bool = false           // ← NEW
+        forceReduce: Bool = false  // ← NEW
     ) -> Any? {
         guard let input else { return nil }
 
@@ -75,29 +78,128 @@ public final class QsBridge: NSObject {
         return input
     }
 
-    /// Normalizes common Objective-C shapes to the Swift containers expected by the core encoder:
-    /// - NSString → String
-    /// - NSDictionary → [String: Any] (all keys stringified via `String(describing:)`)
-    /// - NSArray → [Any]
-    /// Everything else is returned as-is.
     @inline(__always)
     internal static func bridgeInputForEncode(_ input: Any) -> Any {
-        // NSString → String
-        if let s = input as? NSString { return s as String }
+        let seen = NSHashTable<AnyObject>.weakObjects()
+        return _bridgeInputForEncode(input, seen: seen)
+    }
 
-        // NSDictionary → [String: Any] (stringify *all* keys)
-        if let d = input as? NSDictionary {
-            var out = [String: Any]()
-            out.reserveCapacity(d.count)
-            d.forEach { (k, v) in out[String(describing: k)] = v }
+    @inline(__always)
+    private static func _bridgeInputForEncode(_ input: Any, seen: NSHashTable<AnyObject>) -> Any {
+        switch input {
+        case let s as NSString:
+            return s as String
+
+        case let od as OrderedDictionary<String, Any>:
+            var out = OrderedDictionary<String, Any>()
+            out.reserveCapacity(od.count)
+            for (k, v) in od { out[k] = _bridgeInputForEncode(v, seen: seen) }
             return out
+
+        case let od as OrderedDictionary<NSString, Any>:
+            var out = OrderedDictionary<String, Any>()
+            out.reserveCapacity(od.count)
+            for (k, v) in od { out[k as String] = _bridgeInputForEncode(v, seen: seen) }
+            return out
+
+        case let d as NSDictionary:
+            let obj = d as AnyObject
+            if seen.contains(obj) {
+                // Cycle detected: keep the original reference so the core can report cyclicObject.
+                return d
+            }
+            seen.add(obj)
+
+            var out = OrderedDictionary<String, Any>()
+            out.reserveCapacity(d.count)
+            d.forEach { (k, v) in
+                out[String(describing: k)] = _bridgeInputForEncode(v, seen: seen)
+            }
+            return out
+
+        case let a as NSArray:
+            let obj = a as AnyObject
+            if seen.contains(obj) {
+                return a
+            }
+            seen.add(obj)
+            return a.map { _bridgeInputForEncode($0, seen: seen) }
+
+        case let d as [String: Any]:
+            var out = OrderedDictionary<String, Any>()
+            out.reserveCapacity(d.count)
+            for (k, v) in d { out[k] = _bridgeInputForEncode(v, seen: seen) }
+            return out
+
+        case let a as [Any]:
+            return a.map { _bridgeInputForEncode($0, seen: seen) }
+
+        default:
+            return input
         }
+    }
 
-        // NSArray → [Any]
-        if let a = input as? NSArray { return a as? [Any] ?? a.map { $0 } }
+    @inline(__always)
+    private static func bridgeUndefinedPreservingOrder(_ v: Any?) -> Any? {
+        let seen = NSHashTable<AnyObject>.weakObjects()
+        return _bridgeUndefinedPreservingOrder(v, seen: seen)
+    }
 
-        // Already a Swift container / value? Just return it.
-        return input
+    @inline(__always)
+    private static func _bridgeUndefinedPreservingOrder(_ v: Any?, seen: NSHashTable<AnyObject>)
+        -> Any?
+    {
+        switch v {
+        case is UndefinedObjC:
+            return QsSwift.Undefined.instance
+
+        case let od as OrderedDictionary<String, Any>:
+            var out = OrderedDictionary<String, Any>()
+            out.reserveCapacity(od.count)
+            for (k, val) in od {
+                out[k] = _bridgeUndefinedPreservingOrder(val, seen: seen) ?? val
+            }
+            return out
+
+        case let od as OrderedDictionary<NSString, Any>:
+            var out = OrderedDictionary<String, Any>()
+            out.reserveCapacity(od.count)
+            for (k, val) in od {
+                out[k as String] = _bridgeUndefinedPreservingOrder(val, seen: seen) ?? val
+            }
+            return out
+
+        case let d as NSDictionary:
+            let obj = d as AnyObject
+            if seen.contains(obj) { return d }  // keep cycles
+            seen.add(obj)
+            var out = OrderedDictionary<String, Any>()
+            out.reserveCapacity(d.count)
+            d.forEach { (k, val) in
+                out[String(describing: k)] = _bridgeUndefinedPreservingOrder(val, seen: seen) ?? val
+            }
+            return out
+
+        case let a as NSArray:
+            let obj = a as AnyObject
+            if seen.contains(obj) { return a }
+            seen.add(obj)
+            return a.map { _bridgeUndefinedPreservingOrder($0, seen: seen) ?? $0 }
+
+        case let d as [String: Any]:
+            var out = OrderedDictionary<String, Any>()
+            out.reserveCapacity(d.count)
+            for (k, val) in d {
+                out[k] = _bridgeUndefinedPreservingOrder(val, seen: seen) ?? val
+            }
+            return out
+
+        case let a as [Any]:
+            return a.map { _bridgeUndefinedPreservingOrder($0, seen: seen) ?? $0 }
+
+        default:
+            return v
+        }
     }
 
     /// Recursively converts any `QsUndefined` (Obj-C) instances to the Swift `Undefined` sentinel,

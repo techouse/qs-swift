@@ -119,4 +119,10 @@ public final class EncodeOptionsObjC: NSObject, @unchecked Sendable {
             sort: swiftSorter
         )
     }
+
+    @discardableResult
+    func with(_ configure: (EncodeOptionsObjC) -> Void) -> Self {
+        configure(self)
+        return self
+    }
 }

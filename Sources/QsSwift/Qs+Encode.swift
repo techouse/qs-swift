@@ -51,19 +51,54 @@ extension Qs {
 
         // Normalize the top-level container to [String: Any] and capture a stable key order.
         if let m = data as? [String: Any] {
-            // Build an ordered view so we can preserve the caller’s traversal order when desired.
+            // Preserve caller traversal order by building an ordered view.
             let od = OrderedDictionary(uniqueKeysWithValues: m.map { ($0.key, $0.value) })
             obj = m
             objKeys = Array(od.keys)
+
         } else if let od = data as? OrderedDictionary<String, Any> {
             obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
-            objKeys = Array(od.keys)  // preserves caller’s insertion order
+            objKeys = Array(od.keys)  // preserves insertion order
+
+        } else if let odNS = data as? OrderedDictionary<NSString, Any> {
+            // Preserve insertion order, normalize keys to Swift String
+            var od = OrderedDictionary<String, Any>()
+            od.reserveCapacity(odNS.count)
+            for (k, v) in odNS { od[String(k)] = v }
+            obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
+            objKeys = Array(od.keys)
+
+        } else if let odAH = data as? OrderedDictionary<AnyHashable, Any> {
+            // Preserve insertion order, normalize heterogeneous keys
+            var od = OrderedDictionary<String, Any>()
+            od.reserveCapacity(odAH.count)
+            for (k, v) in odAH { od[String(describing: k)] = v }
+            obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
+            objKeys = Array(od.keys)
+
+        } else if let dictAH = data as? [AnyHashable: Any] {
+            // Plain dictionary with non-String keys → stringified keys; order = hash map traversal
+            var od = OrderedDictionary<String, Any>()
+            od.reserveCapacity(dictAH.count)
+            for (k, v) in dictAH { od[String(describing: k)] = v }
+            obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
+            objKeys = Array(od.keys)
+
+        } else if let nd = data as? NSDictionary {
+            // Bridge NSDictionary; enumeration order is not guaranteed/deterministic
+            var od = OrderedDictionary<String, Any>()
+            od.reserveCapacity(nd.count)
+            nd.forEach { key, value in od[String(describing: key)] = value }
+            obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
+            objKeys = Array(od.keys)
+
         } else if let arr = data as? [Any] {
             // Promote array → object with string indices.
             var od = OrderedDictionary<String, Any>()
             for (i, v) in arr.enumerated() { od[String(i)] = v }
             obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
             arrayIndexKeys = Array(od.keys)
+
         } else {
             // Unsupported top-level type → empty output (matches other ports’ behavior).
             return ""

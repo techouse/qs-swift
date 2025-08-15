@@ -66,4 +66,10 @@ public final class DecodeOptionsObjC: NSObject, @unchecked Sendable {
             throwOnLimitExceeded: throwOnLimitExceeded
         )
     }
+
+    @discardableResult
+    func with(_ configure: (DecodeOptionsObjC) -> Void) -> Self {
+        configure(self)
+        return self
+    }
 }
