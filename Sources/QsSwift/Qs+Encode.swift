@@ -73,18 +73,26 @@ extension Qs {
         // Apply optional filters:
         // - FunctionFilter can transform/replace the full object.
         // - IterableFilter provides an explicit key order.
+        var usedIterableKeys = false
         if let f = options.filter as? FunctionFilter {
             let filtered = f.function("", obj)
-            if let m = filtered as? [AnyHashable: Any] {
+            if let m = filtered as? [String: Any] {
+                obj = m
+                objKeys = nil
+            } else if let m = filtered as? [AnyHashable: Any] {
                 var out: [String: Any] = [:]
                 out.reserveCapacity(m.count)
                 for (k, v) in m { out[String(describing: k)] = v }
                 obj = out
-            } else if let m = filtered as? [String: Any] {
-                obj = m
+                objKeys = nil
             }
-        } else if let it = options.filter as? IterableFilter {
-            objKeys = it.iterable
+        }
+
+        // Root-level IterableFilter: whitelist + order, no leftovers.
+        if let it = options.filter as? IterableFilter {
+            let desired = it.iterable.compactMap { $0 as? String }
+            objKeys = desired.filter { obj[$0] != nil }
+            usedIterableKeys = true
         }
 
         // If no custom key list from filter, use the map keys (or array indices).
@@ -95,7 +103,7 @@ extension Qs {
         // --------- Ordering policy (see doc above) ---------
         if let sorter = options.sort {
             objKeys = objKeys!.sorted { sorter($0, $1) < 0 }
-        } else if arrayIndexKeys == nil && options.encode {
+        } else if !usedIterableKeys, arrayIndexKeys == nil, options.encode {
             // Deterministic default only when percent-encoding is on.
             var ks = objKeys!.compactMap { $0 as? String }  // top-level keys are Strings
             let split = ks.stablePartition { $0.isEmpty }  // empties → back, **stable**
