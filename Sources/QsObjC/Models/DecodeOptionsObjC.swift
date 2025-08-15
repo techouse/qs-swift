@@ -8,6 +8,16 @@ import QsSwift
 /// It mirrors the Swift API closely, including defaults.
 ///
 /// Thread-safety: not thread-safe. Configure on one thread, then pass into a call.
+///
+/// Obj-C usage example:
+/// ```objc
+/// QsDecodeOptions *opts = [QsDecodeOptions new];
+/// opts.ignoreQueryPrefix = YES;
+/// opts.allowDots = YES;                  // treat `a.b` as `a[b]`
+/// opts.delimiter = QsDelimiter.ampersand; // `&` (default)
+/// opts.duplicates = QsDuplicatesCombine; // combine duplicate keys
+/// NSDictionary *out = [Qs decode:@"?a=1&a=2" options:opts error:NULL];
+/// ```
 @objc(QsDecodeOptions)
 @objcMembers
 public final class DecodeOptionsObjC: NSObject, @unchecked Sendable {
@@ -19,11 +29,14 @@ public final class DecodeOptionsObjC: NSObject, @unchecked Sendable {
     /// or `nil` to let the core fall back to its standard behavior.
     ///
     /// - Parameters:
-    ///   - string:  The raw (still percent-decoded at the byte level) token. May be `nil`.
+    ///   - string:  The raw token as an Objective‑C string. May be `nil` if the source is empty.
     ///   - charset: `NSNumber` wrapping `String.Encoding.rawValue`, or `nil` if unspecified.
     ///
-    /// Tip: If you enable `interpretNumericEntities`, you generally don’t need to handle
-    /// HTML entities here—the core can do that for you.
+    /// Tips:
+    /// - If you enable `interpretNumericEntities`, you generally don’t need to handle HTML
+    ///   entities here—the core can do that for you.
+    /// - Return values are inserted verbatim into the decoded map, so ensure they are
+    ///   Foundation types (NSString/NSNumber/NSArray/NSDictionary/NSNull) for best bridging.
     public typealias ValueDecoderBlock = (NSString?, NSNumber?) -> Any?
     public var valueDecoderBlock: ValueDecoderBlock?
 
@@ -56,7 +69,7 @@ public final class DecodeOptionsObjC: NSObject, @unchecked Sendable {
     public var parseLists: Bool = true
 
     /// If `true`, enforce the exact nesting depth limit below; otherwise the core
-    /// may best-effort parse past the limit for compatibility.
+    /// may best‑effort parse past the limit for compatibility.
     public var strictDepth: Bool = false
 
     /// If `true`, `a` without value is `NSNull` rather than empty string. Mirrors Swift.
@@ -76,7 +89,7 @@ public final class DecodeOptionsObjC: NSObject, @unchecked Sendable {
 
     // MARK: - Charset / wire format
 
-    /// Desired input charset. Defaults to UTF-8.
+    /// Desired input charset. Defaults to UTF‑8.
     /// Bridged to `String.Encoding(rawValue:)` in Swift.
     public var charset: UInt = String.Encoding.utf8.rawValue
 
@@ -84,9 +97,10 @@ public final class DecodeOptionsObjC: NSObject, @unchecked Sendable {
     public var charsetSentinel: Bool = false
 
     /// Pair delimiter for query tokens (e.g. `&` or `;`).
+    /// Obj‑C: this is a reference type wrapper so it bridges cleanly.
     public var delimiter: DelimiterObjC = .ampersand
 
-    /// How to handle duplicate keys (e.g. `a=1&a=2`), e.g. combine vs. last-write-wins.
+    /// How to handle duplicate keys (e.g. `a=1&a=2`) — combine vs. last‑write‑wins.
     public var duplicates: DuplicatesObjC = .combine
 
     /// Ignore a leading `?` in the source string (useful when decoding full URLs or query parts).
@@ -98,7 +112,7 @@ public final class DecodeOptionsObjC: NSObject, @unchecked Sendable {
     // MARK: - Bridge to Swift core
 
     /// Internal bridge that constructs the Swift `DecodeOptions` used by the core.
-    /// We also normalize the dot-parsing flags so **either** Obj-C flag enables dots.
+    /// We also normalize the dot‑parsing flags so **either** Obj‑C flag enables dots.
     var swift: QsSwift.DecodeOptions {
         // Bridge valueDecoderBlock → Swift ValueDecoder
         let swiftDecoder: QsSwift.ValueDecoder? = {

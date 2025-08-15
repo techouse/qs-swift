@@ -78,7 +78,16 @@ public final class EncodeOptionsObjC: NSObject, @unchecked Sendable {
 
     /// List/array style (e.g. `.brackets`, `.indices`, `.comma`). If `nil`, the legacy
     /// `indices` setting above is consulted.
-    public var listFormat: ListFormatObjC? = nil
+    // Swift-facing storage (optional enum). Not visible to Obj-C.
+    @nonobjc public var listFormat: ListFormatObjC? = nil
+
+    // Obj-C-facing boxed accessor under the same Obj-C name.
+    // Obj-C will see: @property (nullable, nonatomic, strong) NSNumber *listFormat;
+    @objc(listFormat)
+    public var listFormatBoxed: NSNumber? {
+        get { listFormat.map { NSNumber(value: $0.rawValue) } }
+        set { listFormat = newValue.flatMap { ListFormatObjC(rawValue: $0.intValue) } }
+    }
 
     /// Drop `null` values instead of serializing them.
     public var skipNulls: Bool = false
