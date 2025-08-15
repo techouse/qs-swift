@@ -36,6 +36,7 @@ let package = Package(
             name: "QsObjC",
             dependencies: ["QsSwift"],
             path: "Sources/QsObjC",
+            exclude: ["README.md"],
             swiftSettings: [
                 .define("QS_OBJC_BRIDGE", .when(platforms: [.macOS, .iOS, .tvOS, .watchOS]))
             ]
