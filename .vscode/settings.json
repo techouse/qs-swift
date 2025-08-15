@@ -19,7 +19,10 @@
     "**/obj/**"
   ],
   "[swift]": {
-    "editor.defaultFormatter": "vknabel.vscode-apple-swift-format"
+    "editor.defaultFormatter": "vknabel.vscode-apple-swift-format",
   },
   "makefile.configureOnOpen": false,
+  "swift.testEnvironmentVariables": {
+    "SWIFT_DETERMINISTIC_HASHING": "YES"
+  }
 }
