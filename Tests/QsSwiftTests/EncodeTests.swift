@@ -98,18 +98,16 @@ struct EncodeTests {
             options: EncodeOptions(
                 encode: false,
                 filter: FunctionFilter { _, map in
-                    if let dict = map as? [String: Any?] {
-                        var out: [String: Any?] = [:]
-                        for (k, v) in dict {
-                            if let c = v as? CustomObject {
-                                out[k] = c["prop"]
-                            } else {
-                                out[k] = v
-                            }
+                    guard let dict = map as? [String: Any] else { return map }
+                    var out: [String: Any] = [:]
+                    for (k, v) in dict {
+                        if let c = v as? CustomObject {
+                            out[k] = c["prop"]  // "test"
+                        } else {
+                            out[k] = v
                         }
-                        return out
                     }
-                    return map
+                    return out
                 }
             )
         )
@@ -2561,6 +2559,208 @@ struct EncodeTests {
         let commaResult = try Qs.encode(
             value, options: EncodeOptions(listFormat: .comma, encodeValuesOnly: true))
         #expect(commaResult.contains("a="))
+    }
+
+    // MARK: - NSDictionary
+
+    @Test("encode: NSDictionary behaves like [String:Any] (order-insensitive across keys)")
+    func nsdictionary_encodes_like_swift_dict_order_insensitive() throws {
+        let inner: NSDictionary = ["": [2, 3], "a": 2]
+        let out = try Qs.encode(["": inner], options: EncodeOptions(encode: false))
+
+        let parts = out.split(separator: "&").map(String.init)
+        // All required pairs must be present
+        #expect(Set(parts) == Set(["[][0]=2", "[][1]=3", "[a]=2"]))
+
+        // Still enforce array element ordering (0 before 1)
+        let i0 = parts.firstIndex(of: "[][0]=2")
+        let i1 = parts.firstIndex(of: "[][1]=3")
+        #expect(i0 != nil && i1 != nil && i0! < i1!)
+    }
+
+    @Test("encode: NSDictionary cycle throws")
+    func nsdictionary_cycle_throws() {
+        let m = NSMutableDictionary()
+        m["self"] = m
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(m)
+        }
+    }
+
+    // MARK: - Edge cases
+
+    @Test(
+        "encode: OrderedDictionary<String,Any> partitions containers and sorts both halves at nested depth"
+    )
+    func sort_orderedDict_string_keys_nestedPartition() throws {
+        // Parent dict (depth 0) has a nested dict so children encode at depth 1.
+        let child: OrderedDictionary<String, Any> = [
+            "zContainer": ["k": "v"],  // container → should be sorted after primitives
+            "aPrim": "1",
+            "bPrim": "2",
+        ]
+        let root: OrderedDictionary<String, Any> = [
+            "child": child
+        ]
+
+        // Force `encoder != nil` so the nested block sorts both primitive and container halves.
+        let opts = EncodeOptions(
+            encoder: { v, _, _ in String(describing: v ?? "") }
+        )
+
+        let out = try Qs.encode(root, options: opts)
+        // child’s primitive keys aPrim,bPrim should come before zContainer; each group A..Z
+        #expect(out == "child[aPrim]=1&child[bPrim]=2&child[zContainer][k]=v")
+    }
+
+    @Test("encode: .comma + empty list returns no pairs (Undefined sentinel path)")
+    func comma_empty_returns_no_pairs() throws {
+        let opts = EncodeOptions(listFormat: .comma)
+        // Top-level has no prefix, so this yields no "k=" pair at all.
+        let out = try Qs.encode([Any](), options: opts)
+        #expect(out == "")
+    }
+
+    @Test("encode: .comma + single element + commaRoundTrip adds [] to key")
+    func comma_single_element_roundtrip() throws {
+        let payload: [String: Any] = ["a": ["x"]]
+        let opts = EncodeOptions(listFormat: .comma, commaRoundTrip: true)
+        let out = try Qs.encode(payload, options: opts)
+        #expect(out == "a%5B%5D=x")
+    }
+
+    @Test("encode: allowEmptyLists renders foo[] for empty arrays")
+    func empty_list_emits_brackets() throws {
+        let opts = EncodeOptions(allowEmptyLists: true)
+        let out = try Qs.encode(["foo": []], options: opts)
+        #expect(out == "foo[]")
+    }
+
+    @Test("encode: NSNull non-strict yields key=")
+    func nsnull_non_strict() throws {
+        let out = try Qs.encode(["a": NSNull()])
+        #expect(out == "a=")
+    }
+
+    @Test("encode: NSNull strict yields bare key")
+    func nsnull_strict() throws {
+        let out = try Qs.encode(["a": NSNull()], options: .init(strictNullHandling: true))
+        #expect(out == "a")
+    }
+
+    @Test("encode: skipNulls drops NSNull leaf")
+    func skip_nulls_drops() throws {
+        let opts = EncodeOptions(skipNulls: true)
+        let out = try Qs.encode(["a": NSNull(), "b": "1"], options: opts)
+        #expect(out == "b=1")
+    }
+
+    @Test("encode: IterableFilter supplies custom key iteration order")
+    func iterable_filter_orders_keys() throws {
+        let payload: [String: Any] = ["b": "2", "a": "1", "c": "3"]
+        let filter = IterableFilter(["c", "a", "b"])  // desired order
+        let out = try Qs.encode(payload, options: .init(filter: filter))
+        #expect(out == "c=3&a=1&b=2")
+    }
+
+    @Test("encode: FunctionFilter adopts container only when original was a container")
+    func function_filter_adoption_rules() throws {
+        // For a primitive leaf, filter returns a container → should NOT adopt (keeps primitive).
+        let f1 = FunctionFilter { key, value in
+            // Leave the root alone; only return a container at leaves.
+            if key.isEmpty { return value }
+            return ["x": "y"] as [String: Any]
+        }
+        let out1 = try Qs.encode(["a": "1"], options: .init(filter: f1))
+        #expect(out1 == "a=1")
+
+        // For a container leaf, filter returns scalar → should adopt.
+        let f2 = FunctionFilter { key, value in
+            if key.isEmpty { return value }  // don't touch the root
+            if value is [String: Any] { return "ZZ" }  // replace container leaf with scalar
+            return value
+        }
+        let out2 = try Qs.encode(["a": ["b": "1"]], options: .init(filter: f2))
+        #expect(out2 == "a=ZZ")
+    }
+
+    @Test("allowDots + encodeDotInKeys (default encode) matches qs.js")
+    func dots_and_percent2e_default_encoder() throws {
+        let payload = ["a": ["b.c": "v"]]
+        let opts = EncodeOptions(allowDots: true, encodeDotInKeys: true)  // encode = true (default)
+        let out = try Qs.encode(payload, options: opts)
+        // qs.js: "a.b%252Ec=v"
+        #expect(out == "a.b%252Ec=v")
+    }
+
+    @Test("allowDots + encodeDotInKeys with encode=false keeps single %2E")
+    func dots_and_percent2e_no_encode() throws {
+        let payload = ["a": ["b.c": "v"]]
+        let opts = EncodeOptions(allowDots: true, encode: false, encodeDotInKeys: true)
+        let out = try Qs.encode(payload, options: opts)
+        // No second pass encoder -> single-encoded
+        #expect(out == "a.b%2Ec=v")
+    }
+    
+    @Test("encode: dictionary cycle throws EncodeError.cyclicObject")
+    func cycle_throws() {
+        let d = NSMutableDictionary()
+        d["self"] = d  // true identity cycle
+
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(["root": d], options: .init())
+        }
+    }
+
+    @Test("encode: array cycle throws EncodeError.cyclicObject")
+    func array_cycle_throws() {
+        let a = NSMutableArray()
+        a.add(a)  // true identity cycle
+
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(["root": a], options: .init())
+        }
+    }
+
+    @Test("encode: NSMutableDictionary self-cycle throws EncodeError.cyclicObject")
+    func cycle_dict_ref_throws() {
+        let d = NSMutableDictionary()
+        d["self"] = d
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(["root": d])
+        }
+    }
+
+    @Test("encode: NSMutableArray self-cycle throws EncodeError.cyclicObject")
+    func cycle_array_ref_throws() {
+        let a = NSMutableArray()
+        a.add(a)
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(["root": a])
+        }
+    }
+
+    @Test("encode: cross-cycle NSDictionary <-> NSArray throws EncodeError.cyclicObject")
+    func cycle_cross_ref_throws() {
+        let d = NSMutableDictionary()
+        let a = NSMutableArray()
+        d["a"] = a
+        a.add(d)
+        #expect(throws: EncodeError.cyclicObject) {
+            _ = try Qs.encode(["root": d])
+        }
+    }
+
+    @Test("encode: default ISO8601 date serializer uses fractional seconds when present")
+    func date_iso8601_fractional() throws {
+        let withMillis = Date(timeIntervalSince1970: 1.234)
+        let noMillis = Date(timeIntervalSince1970: 2.0)
+
+        let out = try Qs.encode(["a": withMillis, "b": noMillis])
+        // Shapes (don’t pin exact time zone if you don’t want brittleness)
+        #expect(out.contains("a=") && out.contains("b="))
+        #expect(out.contains(".234"))  // fractional seconds present
+        #expect(!out.contains("b=."))
     }
 }
 

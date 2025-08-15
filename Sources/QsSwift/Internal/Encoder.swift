@@ -63,9 +63,9 @@ internal enum Encoder {
         var obj: Any? = data
 
         let objWrapper: WeakWrapper? = {
-            if let objRef = data as? AnyObject {
-                return WeakWrapper(objRef)
-            }
+            guard let objRef = data as? AnyObject else { return nil }
+            // Optional: narrow to Foundation containers if you like
+            if objRef is NSArray || objRef is NSDictionary { return WeakWrapper(objRef) }
             return nil
         }()
 
