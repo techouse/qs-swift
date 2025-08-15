@@ -2,12 +2,36 @@ import Foundation
 import OrderedCollections
 import QsSwift
 
+/// Objective-C ⇆ Swift shim for the Qs core.
+///
+/// Goals:
+/// - **Decode**: accept common Obj-C shapes (`NSString`, `NSDictionary`, `NSArray`) and
+///   hand the Swift core something it understands with *minimal* transformation.
+/// - **Encode**: accept common Obj-C shapes and materialize **ordered Swift containers**
+///   (`OrderedDictionary<String, Any>` / `[Any]`) while preserving **object identity**
+///   (so cycles can be detected by the core and reported as `.cyclicObject`).
+/// - **Undefined bridging**: convert `UndefinedObjC` → `QsSwift.Undefined` without
+///   disturbing container order or breaking identity cycles.
+///
+/// Notes on order:
+/// - `NSDictionary` does **not** guarantee enumeration order. Whenever callers
+///   pass a Swift `OrderedDictionary` or a Swift `[String: Any]`, we preserve
+///   that insertion order. When callers pass an `NSDictionary`, we emit an
+///   `OrderedDictionary` in the *enumeration* order we see (best effort),
+///   but this should not be relied upon for determinism across processes.
 @objc(Qs)
 @objcMembers
 public final class QsBridge: NSObject {
 
     // MARK: - Decode
 
+    /// Bridge Obj-C input to something `Qs.decode` accepts, then decode.
+    ///
+    /// - Parameters:
+    ///   - input: `NSString` / `String` / `NSDictionary` / `NSArray` / scalars.
+    ///   - options: Optional Obj-C decode options.
+    ///   - outError: Filled on failure with a Cocoa `NSError`.
+    /// - Returns: An `NSDictionary` tree (Swift dictionaries/arrays under the hood).
     public static func decode(
         _ input: Any?,
         options: DecodeOptionsObjC? = nil,
@@ -25,17 +49,25 @@ public final class QsBridge: NSObject {
 
     // MARK: - Encode
 
+    /// Bridge Obj-C containers to ordered Swift containers, translate `Undefined`,
+    /// and then call `Qs.encode`.
+    ///
+    /// - Parameters:
+    ///   - object: `NSString` / `NSDictionary` / `NSArray` / Swift containers / scalars.
+    ///   - options: Optional Obj-C encode options.
+    ///   - outError: Filled on failure with a Cocoa `NSError`.
+    /// - Returns: Encoded query string on success, `nil` and `outError` on failure.
     public static func encode(
         _ object: Any, options: EncodeOptionsObjC? = nil, error outError: NSErrorPointer = nil
     ) -> NSString? {
         do {
-            // 1) Convert everything to Swift containers, using OrderedDictionary and preserving identity for cycles
+            // 1) Convert everything to Swift containers using OrderedDictionary and track identity for cycles.
             let ordered = bridgeInputForEncode(object)
 
-            // 2) Bridge Undefined while preserving ordered shape and cycles
+            // 2) Bridge UndefinedObjC → QsSwift.Undefined without disturbing shape or identity.
             let bridged = bridgeUndefinedPreservingOrder(ordered) ?? ordered
 
-            // 3) Let the core do its thing (and report cyclicObject if present)
+            // 3) Let the core do its thing (and report EncodeError.cyclicObject if a cycle is present).
             let str = try Qs.encode(bridged, options: options?.swift ?? QsSwift.EncodeOptions())
             return str as NSString
         } catch {
@@ -44,20 +76,30 @@ public final class QsBridge: NSObject {
         }
     }
 
-    // MARK: - Bridging helpers
+    // MARK: - Bridging helpers (Decode path)
 
-    /// Minimal bridging so the core accepts common Obj-C shapes.
+    /// Minimal bridging so the Swift core accepts common Obj-C shapes.
+    ///
+    /// We keep this intentionally lightweight:
+    /// - `NSString` → `String`
+    /// - `NSDictionary` → `[AnyHashable: Any]` when possible; otherwise re-materialize by copying
+    ///   entries (stringifying non-hashable keys if necessary). This keeps decode permissive.
+    /// - `NSArray` → `[Any]`
+    /// - Scalars pass through
+    ///
+    /// `forceReduce` can be used to skip the cheap cast and always re-materialize,
+    /// which is useful in pathological cases where keys aren’t `AnyHashable`.
     @inline(__always)
     internal static func bridgeInputForDecode(
         _ input: Any?,
-        forceReduce: Bool = false  // ← NEW
+        forceReduce: Bool = false
     ) -> Any? {
         guard let input else { return nil }
 
-        // Strings must become Swift.String
+        // NSString → String
         if let s = input as? NSString { return s as String }
 
-        // NSDictionary → [AnyHashable: Any] (core will stringify keys)
+        // NSDictionary → [AnyHashable: Any] (fall back to re-materialization if needed)
         if let d = input as? NSDictionary {
             if !forceReduce, let cast = d as? [AnyHashable: Any] {
                 return cast
@@ -66,7 +108,7 @@ public final class QsBridge: NSObject {
                 if let (k, v) = kv as? (AnyHashable, Any) {
                     acc[k] = v
                 } else {
-                    acc[AnyHashable(String(describing: kv.key))] = kv.value
+                    acc[AnyHashable(stringifyKey(kv.key))] = kv.value
                 }
             }
         }
@@ -78,6 +120,21 @@ public final class QsBridge: NSObject {
         return input
     }
 
+    // MARK: - Bridging helpers (Encode path)
+
+    /// Convert Obj-C/Swift containers to **ordered** Swift containers and preserve identity for cycle detection.
+    ///
+    /// Shapes produced:
+    /// - `NSString` → `String`
+    /// - `NSDictionary` / `[String: Any]` / `OrderedDictionary<*, Any>` → `OrderedDictionary<String, Any>`
+    ///   (keys are stringified with `String(describing:)`)
+    /// - `NSArray` / `[Any]` → `[Any]`
+    /// - Scalars pass through untouched
+    ///
+    /// Cycles:
+    /// - If we re-encounter the **same** Foundation container instance (`NSDictionary`/`NSArray`),
+    ///   we return that instance unchanged to preserve the identity cycle. The core will
+    ///   throw `EncodeError.cyclicObject`, which we relay as `NSError`.
     @inline(__always)
     internal static func bridgeInputForEncode(_ input: Any) -> Any {
         let seen = NSHashTable<AnyObject>.weakObjects()
@@ -87,21 +144,25 @@ public final class QsBridge: NSObject {
     @inline(__always)
     private static func _bridgeInputForEncode(_ input: Any, seen: NSHashTable<AnyObject>) -> Any {
         switch input {
+        // Strings
         case let s as NSString:
             return s as String
 
+        // Already ordered Swift dict (String keys)
         case let od as OrderedDictionary<String, Any>:
             var out = OrderedDictionary<String, Any>()
             out.reserveCapacity(od.count)
             for (k, v) in od { out[k] = _bridgeInputForEncode(v, seen: seen) }
             return out
 
+        // Already ordered Swift dict (NSString keys)
         case let od as OrderedDictionary<NSString, Any>:
             var out = OrderedDictionary<String, Any>()
             out.reserveCapacity(od.count)
             for (k, v) in od { out[k as String] = _bridgeInputForEncode(v, seen: seen) }
             return out
 
+        // NSDictionary → OrderedDictionary<String, Any> (stringify keys)
         case let d as NSDictionary:
             let obj = d as AnyObject
             if seen.contains(obj) {
@@ -113,46 +174,57 @@ public final class QsBridge: NSObject {
             var out = OrderedDictionary<String, Any>()
             out.reserveCapacity(d.count)
             d.forEach { (k, v) in
-                out[String(describing: k)] = _bridgeInputForEncode(v, seen: seen)
+                out[stringifyKey(k)] = _bridgeInputForEncode(v, seen: seen)
             }
             return out
 
+        // NSArray → [Any]
         case let a as NSArray:
             let obj = a as AnyObject
-            if seen.contains(obj) {
-                return a
-            }
+            if seen.contains(obj) { return a }
             seen.add(obj)
             return a.map { _bridgeInputForEncode($0, seen: seen) }
 
+        // Plain Swift dict → OrderedDictionary<String, Any>
         case let d as [String: Any]:
             var out = OrderedDictionary<String, Any>()
             out.reserveCapacity(d.count)
             for (k, v) in d { out[k] = _bridgeInputForEncode(v, seen: seen) }
             return out
 
+        // Plain Swift array
         case let a as [Any]:
             return a.map { _bridgeInputForEncode($0, seen: seen) }
 
+        // Scalars / everything else
         default:
             return input
         }
     }
 
+    // MARK: - Undefined bridging (ordered & cycle-aware)
+
+    /// Recursively converts any `UndefinedObjC` to the Swift `Undefined` sentinel,
+    /// preserving:
+    /// - **Container shape** (keeps `OrderedDictionary` and `[Any]`)
+    /// - **Key stringification** (`String(describing:)`)
+    /// - **Identity cycles** (returns the original Foundation object when revisiting it)
     @inline(__always)
-    private static func bridgeUndefinedPreservingOrder(_ v: Any?) -> Any? {
+    internal static func bridgeUndefinedPreservingOrder(_ v: Any?) -> Any? {
         let seen = NSHashTable<AnyObject>.weakObjects()
         return _bridgeUndefinedPreservingOrder(v, seen: seen)
     }
 
     @inline(__always)
-    private static func _bridgeUndefinedPreservingOrder(_ v: Any?, seen: NSHashTable<AnyObject>)
+    internal static func _bridgeUndefinedPreservingOrder(_ v: Any?, seen: NSHashTable<AnyObject>)
         -> Any?
     {
         switch v {
+        // ObjC sentinel → Swift sentinel
         case is UndefinedObjC:
             return QsSwift.Undefined.instance
 
+        // Ordered Swift dict (String keys)
         case let od as OrderedDictionary<String, Any>:
             var out = OrderedDictionary<String, Any>()
             out.reserveCapacity(od.count)
@@ -161,6 +233,7 @@ public final class QsBridge: NSObject {
             }
             return out
 
+        // Ordered Swift dict (NSString keys)
         case let od as OrderedDictionary<NSString, Any>:
             var out = OrderedDictionary<String, Any>()
             out.reserveCapacity(od.count)
@@ -169,6 +242,7 @@ public final class QsBridge: NSObject {
             }
             return out
 
+        // NSDictionary → OrderedDictionary<String, Any>
         case let d as NSDictionary:
             let obj = d as AnyObject
             if seen.contains(obj) { return d }  // keep cycles
@@ -176,16 +250,18 @@ public final class QsBridge: NSObject {
             var out = OrderedDictionary<String, Any>()
             out.reserveCapacity(d.count)
             d.forEach { (k, val) in
-                out[String(describing: k)] = _bridgeUndefinedPreservingOrder(val, seen: seen) ?? val
+                out[stringifyKey(k)] = _bridgeUndefinedPreservingOrder(val, seen: seen) ?? val
             }
             return out
 
+        // NSArray → [Any]
         case let a as NSArray:
             let obj = a as AnyObject
             if seen.contains(obj) { return a }
             seen.add(obj)
             return a.map { _bridgeUndefinedPreservingOrder($0, seen: seen) ?? $0 }
 
+        // Plain Swift dict → OrderedDictionary<String, Any>
         case let d as [String: Any]:
             var out = OrderedDictionary<String, Any>()
             out.reserveCapacity(d.count)
@@ -194,67 +270,23 @@ public final class QsBridge: NSObject {
             }
             return out
 
+        // Plain Swift array
         case let a as [Any]:
             return a.map { _bridgeUndefinedPreservingOrder($0, seen: seen) ?? $0 }
 
+        // Scalars / everything else
         default:
             return v
         }
     }
 
-    /// Recursively converts any `QsUndefined` (Obj-C) instances to the Swift `Undefined` sentinel,
-    /// preserving container shape (always returns Swift `[String: Any]` / `[Any]` where possible).
+    // MARK: - Small utils
+
+    /// Consistently stringify any dictionary key (Obj-C or Swift).
     @inline(__always)
-    private static func _bridgeUndefined(_ v: Any?) -> Any? {
-        // kick off with a fresh identity set
-        let seen = NSHashTable<AnyObject>.weakObjects()
-        return _bridgeUndefined(v, seen: seen)
-    }
-
-    @inline(__always)
-    private static func _bridgeUndefined(_ v: Any?, seen: NSHashTable<AnyObject>) -> Any? {
-        switch v {
-        // ObjC sentinel → Swift sentinel
-        case is UndefinedObjC:
-            return QsSwift.Undefined.instance
-
-        // --- Foundation containers FIRST (so we can use identity to break cycles) ---
-
-        case let d as NSDictionary:
-            // If we've already seen this *exact* object, preserve the reference to keep the cycle;
-            // the core encoder will detect/throw on it later.
-            let obj = d as AnyObject
-            if seen.contains(obj) { return d }
-            seen.add(obj)
-
-            var out: [String: Any] = [:]
-            out.reserveCapacity(d.count)
-            d.forEach { k, val in
-                out[String(describing: k)] = _bridgeUndefined(val, seen: seen) ?? val
-            }
-            return out
-
-        case let a as NSArray:
-            let obj = a as AnyObject
-            if seen.contains(obj) { return a }
-            seen.add(obj)
-            return a.map { _bridgeUndefined($0, seen: seen) ?? $0 } as [Any]
-
-        // --- Pure Swift containers (value types; no identity cycles) ---
-
-        case let d as [String: Any]:
-            var out: [String: Any] = [:]
-            out.reserveCapacity(d.count)
-            for (k, val) in d {
-                out[k] = _bridgeUndefined(val, seen: seen) ?? val
-            }
-            return out
-
-        case let a as [Any]:
-            return a.map { _bridgeUndefined($0, seen: seen) ?? $0 }
-
-        default:
-            return v
-        }
+    internal static func stringifyKey(_ key: Any) -> String {
+        // We intentionally use `String(describing:)` so non-string keys (NSNumber, NSObject subclasses)
+        // become a readable string and round-trip deterministically in the encoder.
+        String(describing: key)
     }
 }
