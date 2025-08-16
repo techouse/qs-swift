@@ -1,4 +1,3 @@
-// ObjCBridgeExtrasTests.m
 @import XCTest;
 @import QsObjC;
 
