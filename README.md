@@ -543,8 +543,8 @@ make profile
 
 ## Objective-C
 
-An Objective‑C bridge is included as `QsObjC` (facade + delegate-style hooks). See
-the [QsObjC README](Sources/QsObjC/README.md) for installation, options, and examples.
+An Objective‑C bridge is included as [`QsObjC`](Sources/QsObjC) (facade + delegate-style hooks).
+See the [QsObjC README](Sources/QsObjC/README.md) for installation, options, and examples.
 
 ---
 
