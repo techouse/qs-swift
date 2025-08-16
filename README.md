@@ -550,6 +550,14 @@ See the [QsObjC README](Sources/QsObjC/README.md) for installation, options, and
 
 ---
 
+## Linux support status
+
+Linux support is currently **not available**. The package relies on Objective-C-only Foundation types (e.g., `NSMapTable` / `NSHashTable`) and behavior used by the encoder’s cycle-detection side channel and the Objective-C bridge. These APIs are unavailable on Swift Foundation for Linux, and a safe, pure-Swift replacement is still being evaluated.
+
+See **[LinuxSupport.md](LinuxSupport.md)** for background, limitations, and the migration plan (including ideas for a pure-Swift side-channel and conditional compilation guards).
+
+---
+
 Special thanks to the authors of [qs](https://www.npmjs.com/package/qs) for JavaScript:
 
 - [Jordan Harband](https://github.com/ljharb)
