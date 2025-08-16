@@ -1,6 +1,6 @@
 # QsSwift
 
-A fast, flexible query string **encoding/decoding** library for Swift.
+A fast, flexible query string **encoding/decoding** library for Swift and [Objective-C](#objective-c).
 
 Ported from [qs](https://www.npmjs.com/package/qs) for JavaScript.
 
