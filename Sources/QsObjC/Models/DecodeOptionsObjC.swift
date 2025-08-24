@@ -41,6 +41,11 @@
         public typealias ValueDecoderBlock = (NSString?, NSNumber?) -> Any?
         public var valueDecoderBlock: ValueDecoderBlock?
 
+        /// Preferred: KEY/VALUE-aware scalar decoder.
+        /// Signature: token, charset (String.Encoding.rawValue), kind (0=key, 1=value) -> Any?
+        public typealias DecoderBlock = (NSString?, NSNumber?, NSNumber?) -> Any?
+        public var decoderBlock: DecoderBlock?
+
         /// Back‑compat: legacy two‑argument decoder, mirroring Swift `LegacyDecoder` (deprecated).
         /// Prefer `valueDecoderBlock`, which also receives `DecodeKind` on the Swift side.
         /// Returning `nil` produces an absent value; the core will not fall back.
@@ -121,14 +126,31 @@
         /// Internal bridge that constructs the Swift `DecodeOptions` used by the core.
         /// We also normalize the dot‑parsing flags so **either** Obj‑C flag enables dots.
         var swift: QsSwift.DecodeOptions {
-            // Bridge valueDecoderBlock → Swift ScalarDecoder
+            // Bridge Obj-C decoder blocks → Swift ScalarDecoder
+            // Prefer the KEY/VALUE-aware `decoderBlock`; fall back to `valueDecoderBlock`.
             let swiftDecoder: QsSwift.ScalarDecoder? = {
-                guard let blk = valueDecoderBlock else { return nil }
-                let box = _BlockBox(blk)
-                return { (str: String?, charset: String.Encoding?, _: QsSwift.DecodeKind?) in
-                    let csNum = charset.map { NSNumber(value: $0.rawValue) }
-                    return box.block(str as NSString?, csNum)
+                if let blk = decoderBlock {
+                    let box = _BlockBox(blk)
+                    return { (str: String?, charset: String.Encoding?, kind: QsSwift.DecodeKind?) in
+                        let csNum = charset.map { NSNumber(value: $0.rawValue) }
+                        let kindNum: NSNumber =
+                            {
+                                switch kind ?? .value {
+                                case .key: return 0
+                                case .value: return 1
+                                }
+                            }() as NSNumber
+                        return box.block(str as NSString?, csNum, kindNum)
+                    }
                 }
+                if let blk = valueDecoderBlock {
+                    let box = _BlockBox(blk)
+                    return { (str: String?, charset: String.Encoding?, _: QsSwift.DecodeKind?) in
+                        let csNum = charset.map { NSNumber(value: $0.rawValue) }
+                        return box.block(str as NSString?, csNum)
+                    }
+                }
+                return nil
             }()
 
             // Bridge legacyDecoderBlock → Swift LegacyDecoder (deprecated)
