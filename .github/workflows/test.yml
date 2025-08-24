@@ -112,6 +112,12 @@ jobs:
             echo "Warning: $EXPECTED exists and is not a symlink; removing for CI."
             rm -rf "$EXPECTED"
           fi
+          if [ -L "$EXPECTED" ]; then
+            TARGET="$(readlink "$EXPECTED")"
+            if [ "$TARGET" != "$ACTUAL" ]; then
+              echo "Refreshing symlink: $EXPECTED -> $ACTUAL (was $TARGET)"
+            fi
+          fi
           ln -sfn "$ACTUAL" "$EXPECTED"
           ls -lah "$PARENT" || true
           ls -lah "$EXPECTED" || true
@@ -146,7 +152,7 @@ jobs:
             -scheme ObjCE2ETests \
             -configuration Debug \
             -derivedDataPath .derivedData-objc \
-            -destination "platform=macOS" \
+            -destination "platform=macOS" -sdk macosx \
             CODE_SIGNING_ALLOWED=NO \
             -enableCodeCoverage YES \
             -resultBundlePath ObjC-Tests.xcresult \
@@ -182,6 +188,7 @@ jobs:
         with:
           name: ObjC-Tests-xcode-${{ matrix.xcode }}
           path: ObjC-Tests.xcresult
+          if-no-files-found: warn
 
       - name: Collect macOS crash logs (ObjC job)
         if: ${{ failure() }}
@@ -191,6 +198,6 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: macOS-crashlogs-objc-xcode-${{ matrix.xcode }}
+          name: macOS-crashlogs-objc-xcode-${{ matrix.xcode }}-${{ matrix.os }}
           path: crashlogs-objc
           if-no-files-found: ignore
