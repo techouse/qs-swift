@@ -221,7 +221,19 @@ internal enum Decoder {
                 }
             }
 
-            // Interpret numeric entities if asked, only in ISO-8859-1 mode
+            // Interpret numeric entities if asked (ISO‑8859‑1 only).
+            //
+            // Behavioral note / Kotlin & reference‑port parity:
+            // When `comma == true` has produced an *array* at this point, we intentionally
+            // collapse that array into a single **comma‑joined String** and interpret HTML
+            // numeric entities on that scalar. If the key was written as `a[]=...`, the
+            // scalar result is then wrapped by the `[]` handling to yield a **single‑element
+            // list** (e.g., ["1,☺"]). This matches the semantics in the Kotlin port and
+            // keeps the decode pipeline deterministic even when values contained commas.
+            //
+            // If you need to preserve array shape while also interpreting numeric entities,
+            // do not enable `interpretNumericEntities`, or pre‑decode/transform your data
+            // before passing it to Qs.
             if let v = value, !Utils.isEmpty(v), options.interpretNumericEntities,
                 charset == .isoLatin1
             {
