@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: test-${{ github.ref }}
@@ -30,7 +31,7 @@ jobs:
             xcode: '15.4'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Select Xcode ${{ matrix.xcode }}
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -53,7 +54,7 @@ jobs:
             xcode: '16.3'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Select Xcode ${{ matrix.xcode }}
         uses: maxim-lobanov/setup-xcode@v1
@@ -123,3 +124,93 @@ jobs:
           name: QsSwift-${{ matrix.os }}-swift-${{ matrix.swift }}
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  objc-tests:
+    name: Objective-C E2E tests (Xcode)
+    runs-on: ${{ matrix.os }}
+    needs: tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            xcode: '16.3'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Select Xcode ${{ matrix.xcode }}
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ matrix.xcode }}
+
+      - name: Show Xcode & Swift versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Resolve SPM dependencies (ObjC test project)
+        run: |
+          set -euxo pipefail
+          xcodebuild \
+            -project ObjCE2ETests/ObjCE2ETests.xcodeproj \
+            -scheme ObjCE2ETests \
+            -resolvePackageDependencies
+
+      - name: Run Objective-C tests (macOS)
+        env:
+          NSUnbufferedIO: "YES"
+        run: |
+          set -euxo pipefail
+          xcodebuild \
+            -project ObjCE2ETests/ObjCE2ETests.xcodeproj \
+            -scheme ObjCE2ETests \
+            -configuration Debug \
+            -destination "platform=macOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            -resultBundlePath ObjC-Tests.xcresult \
+            test
+
+      - name: Upload ObjC test result bundle
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ObjC-Tests-xcode-${{ matrix.xcode }}
+          path: ObjC-Tests.xcresult
+
+      - name: Collect macOS crash logs (ObjC job)
+        if: ${{ failure() }}
+        run: |
+          set -euxo pipefail
+          mkdir -p crashlogs-objc
+          USER_DR="$HOME/Library/Logs/DiagnosticReports"
+          SYS_DR="/Library/Logs/DiagnosticReports"
+          for dir in "$USER_DR" "$SYS_DR"; do
+            if [ -d "$dir" ]; then
+              echo "=== Listing $dir ==="
+              ls -lah "$dir" || true
+            fi
+          done
+          for dir in "$USER_DR" "$SYS_DR"; do
+            if [ -d "$dir" ]; then
+              CP="cp"
+              if [ "$dir" = "$SYS_DR" ]; then CP="sudo cp"; fi
+              find "$dir" -type f \
+                \( -name '*.crash' -o -name '*.ips' -o -name '*.hang' -o -name '*.spin' \) \
+                -mmin -60 -print -exec $CP {} crashlogs-objc/ \; || true
+            fi
+          done
+          /usr/bin/log show --style syslog --last 30m \
+            --predicate 'eventMessage CONTAINS[c] "xctest" OR process CONTAINS[c] "xctest" OR process CONTAINS[c] "swift"' \
+            > crashlogs-objc/unified-log.txt 2>/dev/null || true
+          echo "Collected files:"
+          ls -lah crashlogs-objc || true
+
+      - name: Upload macOS crash logs (ObjC job, if any)
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS-crashlogs-objc-xcode-${{ matrix.xcode }}
+          path: crashlogs-objc
+          if-no-files-found: ignore
