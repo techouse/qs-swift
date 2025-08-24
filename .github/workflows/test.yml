@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 concurrency:
   group: test-${{ github.ref }}
@@ -149,10 +148,11 @@ jobs:
           NSUnbufferedIO: "YES"
         run: |
           set -euxo pipefail
-          xcodebuild \
+          xcodebuild -quiet \
             -project ObjCE2ETests/ObjCE2ETests.xcodeproj \
             -scheme ObjCE2ETests \
             -configuration Debug \
+            -derivedDataPath .derivedData-objc \
             -destination "platform=macOS" \
             CODE_SIGNING_ALLOWED=NO \
             -resultBundlePath ObjC-Tests.xcresult \
