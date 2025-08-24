@@ -155,8 +155,22 @@ jobs:
             -derivedDataPath .derivedData-objc \
             -destination "platform=macOS" \
             CODE_SIGNING_ALLOWED=NO \
+            -enableCodeCoverage YES \
             -resultBundlePath ObjC-Tests.xcresult \
             test
+
+      - name: Upload Objective-C coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ObjC-Tests.xcresult
+          flags: objc,${{ matrix.os }},xcode-${{ matrix.xcode }}
+          name: QsSwift-ObjC-${{ matrix.os }}-xcode-${{ matrix.xcode }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: ObjC coverage summary (debug)
+        run: |
+          xcrun xccov view --report ObjC-Tests.xcresult || true
 
       - name: Upload ObjC test result bundle
         if: ${{ always() }}
