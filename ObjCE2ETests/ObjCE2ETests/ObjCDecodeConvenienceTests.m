@@ -53,7 +53,7 @@ static NSDictionary * Qs_DecodeOrDefault(id _Nullable input, QsDecodeOptions * _
     // depthExceeded maps to rawValue 4 (see QsDecodeErrorCodeObjC).
     XCTAssertEqual(err.code, QsDecodeErrorCodeDepthExceeded);
     NSNumber *maxDepth = err.userInfo[QsDecodeErrorInfo.maxDepthKey];
-    XCTAssertEqual(maxDepth.intValue, QsDecodeErrorCodeParameterLimitExceeded);
+    XCTAssertEqual(maxDepth.intValue, 2);
 }
 
 - (void)test_decodeOrEmpty_success_and_failureFallback {
