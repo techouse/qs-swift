@@ -257,12 +257,13 @@
                 let obj = d as AnyObject
                 let id = ObjectIdentifier(obj)
                 if seen.contains(id) { return d }  // keep cycles
-                seen.insert(id)
+                let inserted = seen.insert(id).inserted
                 var out = OrderedDictionary<String, Any>()
                 out.reserveCapacity(d.count)
                 d.forEach { (k, val) in
                     out[stringifyKey(k)] = _bridgeUndefinedPreservingOrder(val, seen: &seen) ?? val
                 }
+                if inserted { seen.remove(id) }
                 return out
 
             // NSArray → [Any]
@@ -270,8 +271,10 @@
                 let obj = a as AnyObject
                 let id = ObjectIdentifier(obj)
                 if seen.contains(id) { return a }
-                seen.insert(id)
-                return a.map { _bridgeUndefinedPreservingOrder($0, seen: &seen) ?? $0 }
+                let inserted = seen.insert(id).inserted
+                let mapped = a.map { _bridgeUndefinedPreservingOrder($0, seen: &seen) ?? $0 }
+                if inserted { seen.remove(id) }
+                return mapped
 
             // Plain Swift dict → OrderedDictionary<String, Any>
             case let d as [String: Any]:
