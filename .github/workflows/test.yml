@@ -144,7 +144,6 @@ jobs:
           files: ${{ github.workspace }}/ObjC-Tests.xcresult
           flags: objc,${{ matrix.os }},xcode-${{ matrix.xcode }}
           name: QsSwift-ObjC-${{ matrix.os }}-xcode-${{ matrix.xcode }}
-          disable_search: true
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
