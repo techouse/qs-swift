@@ -31,73 +31,39 @@ jobs:
           set -euo pipefail
           swift --version
 
-          MODULES=("QsSwift" "QsObjC")
-          rm -rf "$OUT"
-          mkdir -p "$OUT/data/documentation" "$OUT/documentation"
+          OUT='docs'
+          REPO_NAME='qs-swift'
 
-          first=1
-          for t in "${MODULES[@]}"; do
-            echo "::group::Build DocC for $t"
-            TMP="docs-$t"
-            rm -rf "$TMP"
-            swift package --allow-writing-to-directory "$TMP" \
+          # Start fresh
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+
+          # Build each module as a fully self-contained DocC site under its own subfolder.
+          # This avoids index/index.json collisions across modules on static hosting.
+          for t in QsSwift QsObjC; do
+            lower=$(echo "$t" | tr '[:upper:]' '[:lower:]')
+            dest="$OUT/$lower"
+            echo "::group::Build DocC for $t → $dest"
+            rm -rf "$dest"
+            mkdir -p "$dest"
+
+            swift package --allow-writing-to-directory "$dest" \
               generate-documentation \
               --target "$t" \
-              --output-path "$TMP" \
+              --output-path "$dest" \
               --transform-for-static-hosting \
-              --hosting-base-path "$REPO_NAME"
+              --hosting-base-path "$REPO_NAME/$lower"
 
-            # Copy shared assets once (from the first module)
-            if [[ $first -eq 1 ]]; then
-              rsync -a "$TMP/data/" "$OUT/data/"
-              # Images (optional)
-              if [[ -d "$TMP/images" ]]; then rsync -a "$TMP/images/" "$OUT/images/"; fi
-
-              # Theme settings (DocC writes this at the site root in newer versions; in older ones it's under data/)
-              if [[ -f "$TMP/theme-settings.json" ]]; then
-                cp -f "$TMP/theme-settings.json" "$OUT/theme-settings.json"
-              elif [[ -f "$TMP/data/theme-settings.json" ]]; then
-                cp -f "$TMP/data/theme-settings.json" "$OUT/theme-settings.json"
-              fi
-
-              # DocC static assets (CSS/JS/etc.) live at the site root; copy them once
-              if [[ -d "$TMP/css" ]]; then rsync -a "$TMP/css/" "$OUT/css/"; fi
-              if [[ -d "$TMP/js" ]]; then rsync -a "$TMP/js/" "$OUT/js/"; fi
-
-              # DocC search/navigation index (required for the left-hand nav and search)
-              if [[ -d "$TMP/index" ]] && [[ ! -e "$OUT/index/index.json" ]]; then
-                rsync -a "$TMP/index/" "$OUT/index/"
-              fi
-
-              # Downloads (if present)
-              if [[ -d "$TMP/downloads" ]]; then rsync -a "$TMP/downloads/" "$OUT/downloads/"; fi
-
-              # Favicons (optional)
-              for f in favicon.ico favicon.svg; do
-                if [[ -f "$TMP/$f" ]]; then cp -f "$TMP/$f" "$OUT/"; fi
-              done
-              # Keep DocC's SPA index for debugging; the landing page step will write docs/index.html later
-              cp -f "$TMP/index.html" "$OUT/_docc-index.html" || true
-              first=0
+            # Sanity checks (non-fatal warnings to aid debugging)
+            if [[ ! -f "$dest/index/index.json" ]]; then
+              echo "::warning::$t index missing at $dest/index/index.json"
+            fi
+            if [[ ! -f "$dest/data/documentation/${lower}.json" ]]; then
+              echo "::warning::$t JSON missing at $dest/data/documentation/${lower}.json"
             fi
 
-            # Copy module-specific documentation + JSON
-            lower=$(echo "$t" | tr '[:upper:]' '[:lower:]')
-            mkdir -p "$OUT/documentation/$lower"
-            rsync -a "$TMP/documentation/$lower/" "$OUT/documentation/$lower/" || true
-            if [[ -f "$TMP/data/documentation/$lower.json" ]]; then
-              cp -f "$TMP/data/documentation/$lower.json" "$OUT/data/documentation/"
-            fi
             echo "::endgroup::"
           done
-
-          # Ensure DocC site-wide assets exist (helps avoid 404s on GitHub Pages)
-          test -f "$OUT/theme-settings.json" || echo "::warning::theme-settings.json missing (DocC may have changed layout)"
-          test -f "$OUT/index/index.json" || echo "::warning::DocC index/index.json missing; left-hand nav may fail"
-
-          # Sanity checks: both modules should be present
-          test -f "$OUT/data/documentation/qsswift.json"
-          test -f "$OUT/data/documentation/qsobjc.json"
       - name: Make landing page linking to both modules
         env:
           OUT: 'docs'
@@ -106,7 +72,7 @@ jobs:
           mkdir -p ${{ env.OUT }}
           # prevent Pages' Jekyll from messing with DocC assets
           touch docs/.nojekyll
-          # Simple landing page that links to both DocC module roots
+          # Simple landing page that links to both per-module DocC sites
           cat > docs/index.html <<'EOF'
           <!doctype html>
           <meta charset="utf-8">
@@ -127,10 +93,20 @@ jobs:
           <h1>Qs Documentation</h1>
           <p>Select a module:</p>
           <ul>
-            <li>• <a href="./documentation/qsswift/">QsSwift</a></li>
-            <li>• <a href="./documentation/qsobjc/">QsObjC</a></li>
+            <li>• <a href="./qsswift/documentation/qsswift/">QsSwift</a></li>
+            <li>• <a href="./qsobjc/documentation/qsobjc/">QsObjC</a></li>
           </ul>
-          <p class="note">Each link points to the DocC root for that module (<code>documentation/&lt;module&gt;/</code>). If you had previously bookmarked the QsSwift root, it still works.</p>
+          <p class="note">Each module is a self-contained DocC site under its own path to keep search/navigation indexes isolated.</p>
+          EOF
+
+          # Optional: keep a backwards-compatibility redirect for old bookmarks that pointed at /documentation/qsswift/
+          mkdir -p docs/documentation
+          cat > docs/documentation/index.html <<'EOF'
+          <!doctype html>
+          <meta charset="utf-8">
+          <meta http-equiv="refresh" content="0; url=../qsswift/documentation/qsswift/">
+          <title>Redirecting…</title>
+          <a href="../qsswift/documentation/qsswift/">Redirecting to QsSwift docs…</a>
           EOF
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
