@@ -19,7 +19,7 @@ SYS_DR="/Library/Logs/DiagnosticReports"
 for dir in "$USER_DR" "$SYS_DR"; do
   if [ -d "$dir" ]; then
     echo "=== Listing $dir ==="
-    ls -lah "$dir" || true
+    ls -lah "$dir" | tail -n 200 || true
   fi
 done
 
@@ -52,7 +52,7 @@ done
 # Ignore errors if log show is unavailable or lacks permission.
 if command -v log >/dev/null 2>&1; then
   /usr/bin/log show --style syslog --last "${MINUTES}m" \
-    --predicate 'eventMessage CONTAINS[c] "xctest" OR process CONTAINS[c] "xctest" OR process CONTAINS[c] "swift"' \
+    --predicate 'eventMessage CONTAINS[c] "xctest" OR process CONTAINS[c] "xctest" OR process CONTAINS[c] "swift" OR process CONTAINS[c] "xcodebuild" OR process CONTAINS[c] "CoreSimulator"' \
     > "$DEST/unified-log.txt" 2>/dev/null || true
 fi
 
