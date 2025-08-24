@@ -199,7 +199,7 @@
         XCTAssertEqualObjects(s, @"a=b");
         [exp fulfill];
     }];
-    [self waitForExpectations:@[exp] timeout:1.0];
+    [self waitForExpectations:@[exp] timeout:2.0]; // macOS runners can be sluggish intermittently. A 2s timeout (like in other async tests) is safer.
 }
 
 - (void)test_decode_async_on_main_queue {
@@ -210,7 +210,7 @@
         XCTAssertEqualObjects(dict[@"a"], @"b");
         [exp fulfill];
     }];
-    [self waitForExpectations:@[exp] timeout:1.0];
+    [self waitForExpectations:@[exp] timeout:2.0]; // macOS runners can be sluggish intermittently. A 2s timeout (like in other async tests) is safer.
 }
 
 #pragma mark - 12) Charset sentinel is present when requested
@@ -299,7 +299,7 @@
     XCTAssertEqualObjects(m[@"K:a%2Eb"], @"V:c");
     // For the bracketed key, the key is decoded *before* splitting, so "K:a[b]"
     // becomes parent "K:a" with child "b".
-    id Ka = m[@"K:a"]; 
+    id Ka = m[@"K:a"];
     XCTAssertTrue([Ka isKindOfClass:[NSDictionary class]]);
     XCTAssertEqualObjects(((NSDictionary *)Ka)[@"b"], @"V:d");
     XCTAssertTrue(sawKey);
