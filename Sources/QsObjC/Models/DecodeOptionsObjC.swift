@@ -47,7 +47,7 @@
         public var decoderBlock: DecoderBlock?
 
         /// Back‑compat: legacy two‑argument decoder, mirroring Swift `LegacyDecoder` (deprecated).
-        /// Prefer `valueDecoderBlock`, which also receives `DecodeKind` on the Swift side.
+        /// Prefer `decoderBlock` (the KEY/VALUE‑aware 3‑argument variant).
         /// Returning `nil` produces an absent value; the core will not fall back.
         public typealias LegacyDecoderBlock = (NSString?, NSNumber?) -> Any?
         public var legacyDecoderBlock: LegacyDecoderBlock?
