@@ -117,12 +117,8 @@ jobs:
           mkdir -p "$PARENT"
           # Idempotent: force-create/refresh the symlink
           if [ -e "$EXPECTED" ] && [ ! -L "$EXPECTED" ]; then
-            echo "Warning: $EXPECTED exists and is not a symlink; validating path and removing for CI."
-            case "$EXPECTED" in
-              "$PARENT"/*) : ;;
-              *) echo "Refusing to remove non-symlink outside $PARENT: $EXPECTED" >&2; exit 1 ;;
-            esac
-            [ "$EXPECTED" != "/" ] && rm -rf "$EXPECTED"
+            echo "Error: $EXPECTED exists and is not a symlink. Refusing to remove it." >&2
+            exit 1
           fi
           if [ -L "$EXPECTED" ]; then
             TARGET="$(readlink "$EXPECTED")"
@@ -166,6 +162,7 @@ jobs:
             -derivedDataPath .derivedData-objc \
             -destination "platform=macOS" -sdk macosx \
             CODE_SIGNING_ALLOWED=NO \
+            -disableAutomaticPackageResolution \
             -enableCodeCoverage YES \
             -resultBundlePath ObjC-Tests.xcresult \
             test
