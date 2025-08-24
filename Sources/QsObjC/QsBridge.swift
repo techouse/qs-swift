@@ -106,13 +106,15 @@
                 if !forceReduce, let cast = d as? [AnyHashable: Any] {
                     return cast
                 }
-                return d.reduce(into: [AnyHashable: Any]()) { acc, kv in
-                    if let (k, v) = kv as? (AnyHashable, Any) {
-                        acc[k] = v
+                var out: [AnyHashable: Any] = [:]
+                d.forEach { key, value in
+                    if let hk = key as? AnyHashable {
+                        out[hk] = value
                     } else {
-                        acc[AnyHashable(stringifyKey(kv.key))] = kv.value
+                        out[AnyHashable(stringifyKey(key))] = value
                     }
                 }
+                return out
             }
 
             // NSArray → [Any]
