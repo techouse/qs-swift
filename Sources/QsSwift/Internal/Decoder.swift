@@ -140,7 +140,14 @@ internal enum Decoder {
 
             let part = parts[i]
 
-            // Special handling when "]=" is present (prioritize that '=')
+            // IMPORTANT: We prefer the '=' that immediately follows a closing bracket (']=')
+            // when present anywhere in the token. Some inputs legitimately contain multiple
+            // '=' characters (e.g. values like "c=d"). Choosing the very first '=' can
+            // mis-split keys like "a[b]=c=d". Keeping this heuristic preserves historical
+            // qs behavior across ports.
+            //
+            // Also note: we *only* normalize %5B/%5D within the **key slice** after we find
+            // `pos`, so scanning for "]=" here does not interact with percent-decoding.
             let bracketEqualsPos: Int = {
                 if let range = part.range(of: "]=") {
                     return part.distance(from: part.startIndex, to: range.lowerBound) + 1
