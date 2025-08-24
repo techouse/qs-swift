@@ -3135,7 +3135,7 @@ struct DecodeOptionsDefaultDecodeBehaviorTests {
 // MARK: - DecodeOptions interplay
 
 @Suite("DecodeOptions: allowDots / decodeDotInKeys interplay")
-struct DecodeOptionsInterplayTests_Parity {
+struct DecodeOptionsInterplayParityTests {
     @Test(
         "decodeDotInKeys=true implies effective dot-splitting when allowDots is not explicitly false"
     )
