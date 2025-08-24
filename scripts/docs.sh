@@ -80,11 +80,14 @@ build_docc() {
   if [[ ! -f "${OUTDIR}/index/index.json" ]]; then
     error "Missing ${OUTDIR}/index/index.json (DocC index)."; exit 1
   fi
-  if [[ ! -f "${OUTDIR}/data/documentation.json" ]]; then
-    warn "Missing ${OUTDIR}/data/documentation.json (may be toolchain-dependent)."
+  # DocC places a per-bundle document under data/documentation/<bundle>.json (bundle ≈ target name lowercased).
+  # Some toolchains omit this file, so treat it as a warning only.
+  local lower="${SUBDIR}"
+  if [[ ! -f "${OUTDIR}/data/documentation/${lower}.json" ]]; then
+    warn "Missing ${OUTDIR}/data/documentation/${lower}.json (toolchain-dependent)."
   fi
   if [[ ! -f "${OUTDIR}/theme-settings.json" ]]; then
-    warn "Missing ${OUTDIR}/theme-settings.json (ok on some toolchains)."
+    warn "Missing ${OUTDIR}/theme-settings.json (expected on some toolchains)."
   fi
   ok "Built ${TARGET} docs"
 }
@@ -98,50 +101,45 @@ banner "Preparing Pages artifacts"
 mkdir -p "${OUT}"
 touch "${OUT}/.nojekyll"
 
-# Landing page + redirect to QsSwift by default (can be adjusted)
+# Landing page linking to both modules (no auto-redirect).
 INDEX_HTML="${OUT}/index.html"
 cat >"${INDEX_HTML}" <<'HTML'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>qs-swift docs</title>
-  <meta http-equiv="refresh" content="0; url=qsswift/documentation/qsswift/" />
-  <style>
-    html,body{font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,"Noto Sans",sans-serif;margin:0;padding:2rem;color:#111}
-    .container{max-width:800px;margin:0 auto}
-    h1{font-size:1.5rem;margin-bottom:1rem}
-    ul{line-height:1.9}
-    a{color:#0b5fff;text-decoration:none}
-    a:hover{text-decoration:underline}
-    code{background:#f3f3f5;padding:.1rem .3rem;border-radius:.25rem}
-  </style>
-  <script>
-    // JS fallback if meta refresh is blocked
-    (function(){
-      var target = 'qsswift/documentation/qsswift/';
-      if (location.pathname.endsWith('/')) {
-        location.replace(target);
-      }
-    })();
-  </script>
-</head>
-<body>
-  <div class="container">
-    <h1>qs-swift documentation</h1>
-    <p>You should be redirected automatically. If not, pick a library:</p>
-    <ul>
-      <li><a href="qsswift/documentation/qsswift/">QsSwift (Swift)</a></li>
-      <li><a href="qsobjc/documentation/qsobjc/">QsObjC (Objective‑C)</a></li>
-    </ul>
-    <p>Build produced by <code>scripts/docs.sh</code>.</p>
-  </div>
-</body>
-</html>
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Qs Documentation</title>
+<style>
+  :root { color-scheme: light dark; --fg: #111; --bg: #fff; --link:#0366d6; }
+  @media (prefers-color-scheme: dark) { :root { --fg:#ddd; --bg:#0b0b0b; --link:#58a6ff; } }
+  body { margin: 2rem auto; max-width: 48rem; padding: 0 1rem; font: 16px/1.5 -apple-system, system-ui, Helvetica, Arial, sans-serif; color: var(--fg); background: var(--bg); }
+  h1 { font-size: 1.75rem; margin: 0 0 1rem; }
+  ul { list-style: none; padding: 0; }
+  li { margin: .5rem 0; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .note { margin-top: 1.25rem; font-size: .95rem; opacity: .85; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+</style>
+<h1>Qs Documentation</h1>
+<p>Select a module:</p>
+<ul>
+  <li>• <a href="./qsswift/documentation/qsswift/">QsSwift</a></li>
+  <li>• <a href="./qsobjc/documentation/qsobjc/">QsObjC</a></li>
+</ul>
+<p class="note">Each module is a self-contained DocC site under its own path to keep search/navigation indexes isolated. Built by <code>scripts/docs.sh</code>.</p>
 HTML
 
 ok "Wrote ${INDEX_HTML}"
+
+# Back-compat redirect for old links that pointed at /documentation/qsswift/
+mkdir -p "${OUT}/documentation"
+cat > "${OUT}/documentation/index.html" <<'HTML'
+<!doctype html>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0; url=../qsswift/documentation/qsswift/">
+<title>Redirecting…</title>
+<a href="../qsswift/documentation/qsswift/">Redirecting to QsSwift docs…</a>
+HTML
 
 # Optional: a simple 404 that links back to landing page
 cat >"${OUT}/404.html" <<'HTML'
