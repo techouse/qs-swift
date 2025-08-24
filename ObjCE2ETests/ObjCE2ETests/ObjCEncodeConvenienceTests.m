@@ -56,6 +56,7 @@ static NSString * Qs_EncodeOrEmpty(id _Nullable object, QsEncodeOptions * _Nulla
     XCTAssertNotNil(err);
     XCTAssertEqualObjects(err.domain, QsEncodeErrorInfo.domain);
     XCTAssertTrue([QsEncodeError isCyclicObject:err]);
+    XCTAssertEqual(err.code, QsEncodeErrorCodeCyclicObject);
 }
 
 - (void)test_encodeOrEmpty_failure_cycle_returnsEmptyString {
