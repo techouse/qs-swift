@@ -26,14 +26,24 @@ done
 # Copy recent crash-like files (multiple common extensions)
 for dir in "$USER_DR" "$SYS_DR"; do
   if [ -d "$dir" ]; then
-    # Use sudo for system dir on CI; runners allow it.
+    # Default to plain cp; elevate only for system dir if non-interactive sudo is available.
     CP="cp"
-    if [ "$dir" = "$SYS_DR" ]; then CP="sudo cp"; fi
+    SKIP_COPY=0
+    if [ "$dir" = "$SYS_DR" ]; then
+      if sudo -n true 2>/dev/null; then
+        CP="sudo -n cp"
+      else
+        echo "Skipping copy from $SYS_DR (no non-interactive sudo); continuing without system logs." >&2
+        SKIP_COPY=1
+      fi
+    fi
 
     # -mmin filters by modification time in minutes
-    find "$dir" -type f \
-      \( -name '*.crash' -o -name '*.ips' -o -name '*.hang' -o -name '*.spin' \) \
-      -mmin "-$MINUTES" -print -exec $CP {} "$DEST"/ \; || true
+    if [ $SKIP_COPY -eq 0 ]; then
+      find "$dir" -type f \
+        \( -name '*.crash' -o -name '*.ips' -o -name '*.hang' -o -name '*.spin' \) \
+        -mmin "-$MINUTES" -print -exec $CP {} "$DEST"/ \; || true
+    fi
   fi
 done
 
