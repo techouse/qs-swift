@@ -34,7 +34,7 @@ let package = Package(
             exclude: ["README.md"],
             swiftSettings: [
                 .define("QS_OBJC_BRIDGE", .when(platforms: [.macOS, .iOS, .tvOS, .watchOS]))
-            ],
+            ]
         ),
         .testTarget(
             name: "QsSwiftTests",
