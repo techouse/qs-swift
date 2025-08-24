@@ -159,8 +159,16 @@ internal enum Decoder {
                 return bracketEqualsPos
             }()
 
-            // Track if the raw part literally had "[]="
-            let hadBracketedEmpty = part.contains("[]=")
+            // Detect literal "[]" in the key only; support encoded forms.
+            let hadBracketedEmpty: Bool = {
+                if pos == -1 { return false }
+                let keyOnly = String(part.prefix(pos))
+                let normalized =
+                    keyOnly
+                    .replacingOccurrences(of: "%5B", with: "[", options: .caseInsensitive)
+                    .replacingOccurrences(of: "%5D", with: "]", options: .caseInsensitive)
+                return normalized.hasSuffix("[]")
+            }()
 
             let key: String
             var value: Any?
