@@ -139,7 +139,7 @@
         ///   throw `EncodeError.cyclicObject`, which we relay as `NSError`.
         @inline(__always)
         internal static func bridgeInputForEncode(_ input: Any) -> Any {
-            var seen = Set<ObjectIdentifier>()
+            var seen = Set<ObjectIdentifier>()  // path-local
             return _bridgeInputForEncode(input, seen: &seen)
         }
 
@@ -163,24 +163,24 @@
             case let od as OrderedDictionary<NSString, Any>:
                 var out = OrderedDictionary<String, Any>()
                 out.reserveCapacity(od.count)
-                for (k, v) in od { out[k as String] = _bridgeInputForEncode(v, seen: &seen) }
+                for (k, v) in od {
+                    out[k as String] = _bridgeInputForEncode(v, seen: &seen)
+                }
                 return out
 
             // NSDictionary → OrderedDictionary<String, Any> (stringify keys)
             case let d as NSDictionary:
                 let obj = d as AnyObject
                 let id = ObjectIdentifier(obj)
-                if seen.contains(id) {
-                    // Cycle detected: keep the original reference so the core can report cyclicObject.
-                    return d
-                }
-                seen.insert(id)
+                if seen.contains(id) { return d }  // true cycle
+                let inserted = seen.insert(id).inserted
 
                 var out = OrderedDictionary<String, Any>()
                 out.reserveCapacity(d.count)
                 d.forEach { (k, v) in
                     out[stringifyKey(k)] = _bridgeInputForEncode(v, seen: &seen)
                 }
+                if inserted { seen.remove(id) }
                 return out
 
             // NSArray → [Any]
