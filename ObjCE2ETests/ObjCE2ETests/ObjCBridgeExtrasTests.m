@@ -279,11 +279,11 @@
     d.decoderBlock = ^id _Nullable(NSString * _Nullable token,
                                    NSNumber * _Nullable charsetNum,
                                    NSNumber * _Nullable kindNum) {
-        NSInteger kind = kindNum.integerValue; // 0 = key, 1 = value
+        QsDecodeKind kind = (QsDecodeKind)kindNum.integerValue; // enum-backed
         if (kind == 0) {
             sawKey = YES;
             return [NSString stringWithFormat:@"K:%@", token ?: @"<nil>"];
-        } else {
+        } else { // QsDecodeKindValue
             sawValue = YES;
             return [NSString stringWithFormat:@"V:%@", token ?: @"<nil>"];
         }
