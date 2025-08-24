@@ -16,7 +16,7 @@
     QsEncodeOptions *opts = [QsEncodeOptions new];
     opts.sortKeysCaseInsensitively = YES; // ensures a=1&b=2
     
-    [Qs encodeAsyncOnMain:input options:opts completion:^(__unsafe_unretained NSString * _Nullable s, NSError * _Nullable err) {
+    [Qs encodeAsyncOnMain:input options:opts completion:^(NSString * _Nullable s, NSError * _Nullable err) {
         XCTAssertTrue([NSThread isMainThread], @"Completion for encodeAsyncOnMain must run on main thread");
         XCTAssertNil(err);
         XCTAssertNotNil(s);
@@ -34,7 +34,7 @@
     QsEncodeOptions *opts = [QsEncodeOptions new];
     opts.sortKeysCaseInsensitively = YES;
     
-    [Qs encodeAsync:input options:opts completion:^(__unsafe_unretained NSString * _Nullable s, NSError * _Nullable err) {
+    [Qs encodeAsync:input options:opts completion:^(NSString * _Nullable s, NSError * _Nullable err) {
         XCTAssertFalse([NSThread isMainThread], @"Completion for encodeAsync should not run on main thread");
         XCTAssertNil(err);
         XCTAssertNotNil(s);
@@ -54,7 +54,7 @@
     a[@"loop"] = b;
     b[@"loop"] = a;
     
-    [Qs encodeAsync:a options:nil completion:^(__unsafe_unretained NSString * _Nullable s, NSError * _Nullable err) {
+    [Qs encodeAsync:a options:nil completion:^(NSString * _Nullable s, NSError * _Nullable err) {
         XCTAssertFalse([NSThread isMainThread]);
         XCTAssertNil(s);
         XCTAssertNotNil(err);
@@ -74,7 +74,7 @@
     a[@"self"] = b;
     b[@"self"] = a;
     
-    [Qs encodeAsyncOnMain:a options:nil completion:^(__unsafe_unretained NSString * _Nullable s, NSError * _Nullable err) {
+    [Qs encodeAsyncOnMain:a options:nil completion:^(NSString * _Nullable s, NSError * _Nullable err) {
         XCTAssertTrue([NSThread isMainThread]);
         XCTAssertNil(s);
         XCTAssertNotNil(err);
