@@ -3402,7 +3402,7 @@ struct EncodedDotKeyBehaviorTests {
         #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
     }
 
-    // FIXME: this one fails the precondition
+    // NOTE: intentionally disabled — this combination violates a precondition in the initializer
     @Test(
         "allowDots=false, decodeDotInKeys=true is invalid",
         .enabled(if: false, "initializer precondition; cannot be caught with #expect(throws:)")
@@ -3484,7 +3484,7 @@ struct EncodedDotKeyBehaviorTests {
         #expect(((a?["b[c]"] as? [String: Any])?["e"] as? String) == "x")
     }
 
-    // FIXME: this one fails the precondition
+    // NOTE: intentionally disabled — this combination violates a precondition in the initializer
     @Test(
         "mixed-case encoded brackets + encoded dot with allowDots=false & decodeDotInKeys=true throws",
         .enabled(if: false, "initializer precondition; cannot be caught with #expect(throws:)")
