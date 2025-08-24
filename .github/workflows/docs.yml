@@ -23,91 +23,11 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
-      - name: Build DocC (QsSwift + QsObjC)
+      - name: Generate docs (QsSwift + QsObjC)
         env:
           OUT: 'docs'
           REPO_NAME: 'qs-swift'
-        run: |
-          set -euo pipefail
-          swift --version
-
-          OUT='docs'
-          REPO_NAME='qs-swift'
-
-          # Start fresh
-          rm -rf "$OUT"
-          mkdir -p "$OUT"
-
-          # Build each module as a fully self-contained DocC site under its own subfolder.
-          # This avoids index/index.json collisions across modules on static hosting.
-          for t in QsSwift QsObjC; do
-            lower=$(echo "$t" | tr '[:upper:]' '[:lower:]')
-            dest="$OUT/$lower"
-            echo "::group::Build DocC for $t → $dest"
-            rm -rf "$dest"
-            mkdir -p "$dest"
-
-            swift package --allow-writing-to-directory "$dest" \
-              generate-documentation \
-              --target "$t" \
-              --output-path "$dest" \
-              --transform-for-static-hosting \
-              --hosting-base-path "$REPO_NAME/$lower"
-
-            # Sanity checks (non-fatal warnings to aid debugging)
-            if [[ ! -f "$dest/index/index.json" ]]; then
-              echo "::warning::$t index missing at $dest/index/index.json"
-            fi
-            if [[ ! -f "$dest/data/documentation/${lower}.json" ]]; then
-              echo "::warning::$t JSON missing at $dest/data/documentation/${lower}.json"
-            fi
-
-            echo "::endgroup::"
-          done
-      - name: Make landing page linking to both modules
-        env:
-          OUT: 'docs'
-        run: |
-          set -e
-          mkdir -p ${{ env.OUT }}
-          # prevent Pages' Jekyll from messing with DocC assets
-          touch docs/.nojekyll
-          # Simple landing page that links to both per-module DocC sites
-          cat > docs/index.html <<'EOF'
-          <!doctype html>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width,initial-scale=1">
-          <title>Qs Documentation</title>
-          <style>
-            :root { color-scheme: light dark; --fg: #111; --bg: #fff; --link:#0366d6; }
-            @media (prefers-color-scheme: dark) { :root { --fg:#ddd; --bg:#0b0b0b; --link:#58a6ff; } }
-            body { margin: 2rem auto; max-width: 48rem; padding: 0 1rem; font: 16px/1.5 -apple-system, system-ui, Helvetica, Arial, sans-serif; color: var(--fg); background: var(--bg); }
-            h1 { font-size: 1.75rem; margin: 0 0 1rem; }
-            ul { list-style: none; padding: 0; }
-            li { margin: .5rem 0; }
-            a { color: var(--link); text-decoration: none; }
-            a:hover { text-decoration: underline; }
-            .note { margin-top: 1.25rem; font-size: .95rem; opacity: .85; }
-            code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-          </style>
-          <h1>Qs Documentation</h1>
-          <p>Select a module:</p>
-          <ul>
-            <li>• <a href="./qsswift/documentation/qsswift/">QsSwift</a></li>
-            <li>• <a href="./qsobjc/documentation/qsobjc/">QsObjC</a></li>
-          </ul>
-          <p class="note">Each module is a self-contained DocC site under its own path to keep search/navigation indexes isolated.</p>
-          EOF
-
-          # Optional: keep a backwards-compatibility redirect for old bookmarks that pointed at /documentation/qsswift/
-          mkdir -p docs/documentation
-          cat > docs/documentation/index.html <<'EOF'
-          <!doctype html>
-          <meta charset="utf-8">
-          <meta http-equiv="refresh" content="0; url=../qsswift/documentation/qsswift/">
-          <title>Redirecting…</title>
-          <a href="../qsswift/documentation/qsswift/">Redirecting to QsSwift docs…</a>
-          EOF
+        run: bash scripts/docs.sh
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
