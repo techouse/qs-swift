@@ -31,6 +31,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Select Xcode ${{ matrix.xcode }}
         uses: maxim-lobanov/setup-xcode@v1
@@ -48,6 +50,7 @@ jobs:
           path: |
             ~/.swiftpm
             .build
+            ~/Library/Caches/org.swift.swiftpm
           key: spm-${{ runner.os }}-swift-${{ matrix.swift }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
             spm-${{ runner.os }}-swift-${{ matrix.swift }}-
@@ -97,6 +100,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Select Xcode ${{ matrix.xcode }}
         uses: maxim-lobanov/setup-xcode@v1
@@ -111,9 +116,12 @@ jobs:
       - name: Work around stale local SwiftPM path (symlink)
         run: |
           set -euxo pipefail
+          # Some SPM/Xcode setups expect the package folder name "QsSwift" (package name)
+          # while the repo slug is "qs-swift"; create/refresh a sibling symlink to avoid stale paths.
           ACTUAL="${GITHUB_WORKSPACE}"
           PARENT="$(dirname "$ACTUAL")"
           EXPECTED="${PARENT}/QsSwift"
+          test -w "$PARENT"
           mkdir -p "$PARENT"
           # Idempotent: force-create/refresh the symlink
           if [ -e "$EXPECTED" ] && [ ! -L "$EXPECTED" ]; then
