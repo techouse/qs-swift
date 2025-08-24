@@ -600,7 +600,7 @@ struct ExampleTests {
 
     @Test("charset: custom decoder for different charsets (mock)")
     func charset_customDecoderMock() throws {
-        let dec: ValueDecoder = { str, _ in
+        let dec: ScalarDecoder = { str, _, _ in
             switch str {
             case "%61": return "a"
             case "%68%65%6c%6c%6f": return "hello"
