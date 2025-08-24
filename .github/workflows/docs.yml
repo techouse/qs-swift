@@ -52,6 +52,14 @@ jobs:
               rsync -a "$TMP/data/" "$OUT/data/"
               if [[ -d "$TMP/images" ]]; then rsync -a "$TMP/images/" "$OUT/images/"; fi
               if [[ -f "$TMP/theme-settings.json" ]]; then cp -f "$TMP/theme-settings.json" "$OUT/"; fi
+              # DocC static assets (CSS/JS/etc.) live at the site root; copy them once
+              if [[ -d "$TMP/css" ]]; then rsync -a "$TMP/css/" "$OUT/css/"; fi
+              if [[ -d "$TMP/js" ]]; then rsync -a "$TMP/js/" "$OUT/js/"; fi
+              if [[ -d "$TMP/downloads" ]]; then rsync -a "$TMP/downloads/" "$OUT/downloads/"; fi
+              # Favicons (optional)
+              for f in favicon.ico favicon.svg; do
+                if [[ -f "$TMP/$f" ]]; then cp -f "$TMP/$f" "$OUT/"; fi
+              done
               # Keep DocC's SPA index for debugging; the landing page step will write docs/index.html later
               cp -f "$TMP/index.html" "$OUT/_docc-index.html" || true
               first=0
