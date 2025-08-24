@@ -2,6 +2,13 @@ import Foundation
 
 // MARK: - Supporting Types
 
+/// Unified scalar decoder. Implementations may ignore `charset` and/or `kind`.
+public typealias ScalarDecoder = @Sendable (_ value: String?, _ charset: String.Encoding?, _ kind: DecodeKind?) -> Any?
+
+/// Back‑compat adapter for `(value, charset) -> Any?` decoders.
+@available(*, deprecated, message: "Use ScalarDecoder; adapt as { v, c, _ in legacy(v, c) }")
+public typealias LegacyDecoder = @Sendable (_ value: String?, _ charset: String.Encoding?) -> Any?
+
 /// A function that decodes a single percent-encoded scalar from a query string.
 ///
 /// Use this to customize how individual *values* (and keys, since the same decoder is used
@@ -23,7 +30,7 @@ import Foundation
 ///   - charset: The character set to use (`.utf8` or `.isoLatin1`). Respect this if you’re
 ///     doing custom decoding; it may have been overridden by the UTF-8 sentinel logic.
 /// - Returns: The decoded scalar, or `nil` to represent an absent value.
-public typealias ValueDecoder = @Sendable (_ value: String?, _ charset: String.Encoding?) -> Any?
+// public typealias ValueDecoder = @Sendable (_ value: String?, _ charset: String.Encoding?) -> Any?
 
 /// Options that configure how query strings are *decoded* into a `[String: Any]`.
 ///
@@ -64,10 +71,9 @@ public struct DecodeOptions: @unchecked Sendable {
     /// Prefer accessing `getAllowDots` which also considers `decodeDotInKeys`.
     private let allowDots: Bool?
 
-    /// Custom scalar decoder used for *both* keys and values.
-    ///
-    /// See `ValueDecoder` for return semantics and concurrency notes.
-    private let decoder: ValueDecoder?
+    @usableFromInline internal let decoder: ScalarDecoder?
+    @available(*, deprecated, message: "Use `decoder` (ScalarDecoder); this will be removed in a future major release.")
+    @usableFromInline internal let legacyDecoder: LegacyDecoder?
 
     /// Set to `true` to *decode literal `%2E`* in keys into dots (i.e., `"name%252Eobj.first"`
     /// becomes `"name.obj"`). Requires dot notation to be enabled; see precondition in `init`.
@@ -157,7 +163,8 @@ public struct DecodeOptions: @unchecked Sendable {
     ///     defaults to `true` via `getAllowDots`). Violations trigger a precondition failure.
     public init(
         allowDots: Bool? = nil,
-        decoder: ValueDecoder? = nil,
+        decoder: ScalarDecoder? = nil,
+        legacyDecoder: LegacyDecoder? = nil,
         decodeDotInKeys: Bool? = nil,
         allowEmptyLists: Bool = false,
         allowSparseLists: Bool = false,
@@ -183,6 +190,7 @@ public struct DecodeOptions: @unchecked Sendable {
 
         self.allowDots = allowDots
         self.decoder = decoder
+        self.legacyDecoder = legacyDecoder
         self.decodeDotInKeys = decodeDotInKeys
         self.allowEmptyLists = allowEmptyLists
         self.allowSparseLists = allowSparseLists
@@ -212,25 +220,47 @@ public struct DecodeOptions: @unchecked Sendable {
 
     // MARK: - Methods
 
-    /// Resolve the effective decoder and apply it to a single scalar.
-    ///
-    /// If a custom `decoder` was provided, it’s used; otherwise the internal default
-    /// (`Utils.decode`) is used, honoring `charset` (and sentinel overrides).
-    ///
-    /// - Parameters:
-    ///   - value: The raw percent-encoded token (or `nil`).
-    ///   - charset: Optional override; falls back to `self.charset` when `nil`.
-    /// - Returns: The decoded scalar, or `nil` to represent absence.
     public func getDecoder(_ value: String?, charset: String.Encoding? = nil) -> Any? {
-        let charsetToUse = charset ?? self.charset
-        if let decoder = decoder {
-            return decoder(value, charsetToUse)
-        }
-        return Utils.decode(value, charset: charsetToUse)
+        // Back‑compat: treat this as a VALUE decode.
+        return decode(value, charset ?? self.charset, .value)
     }
 
-    /// Internal helper: clone with a different `parseLists` flag.
-    @inline(__always) internal var _decoder: ValueDecoder? { decoder }
+    /// Unified scalar decode with key/value context (testing/internal).
+    /// - Note: Custom decoders receive `kind`; legacy decoders do not.
+    @inlinable
+    internal func decode(_ value: String?, _ charset: String.Encoding? = nil, _ kind: DecodeKind = .value) -> Any? {
+        if let dec = decoder {
+            return dec(value, charset ?? self.charset, kind)
+        }
+        if let legacy = legacyDecoder {
+            return legacy(value, charset ?? self.charset)
+        }
+        return defaultDecode(value, charset ?? self.charset)
+    }
+
+    /// Default library decode (keys and values decode identically).
+    /// Whether a `.` participates in key splitting is decided later by the parser.
+    @usableFromInline
+    internal func defaultDecode(_ value: String?, _ charset: String.Encoding) -> Any? {
+        guard value != nil else { return nil }
+        return Utils.decode(value, charset: charset)
+    }
+
+    /// Decode a key (or key segment). Always coerces the result to `String?`.
+    /// Mirrors Kotlin’s `toString()` behavior.
+    @inlinable
+    public func decodeKey(_ value: String?, charset: String.Encoding? = nil) -> String? {
+        let out = decode(value, charset ?? self.charset, .key)
+        return out.map { String(describing: $0) }
+    }
+
+    /// Decode a value token (scalar).
+    @inlinable
+    public func decodeValue(_ value: String?, charset: String.Encoding? = nil) -> Any? {
+        return decode(value, charset ?? self.charset, .value)
+    }
+
+    @inline(__always) internal var _decoder: ScalarDecoder? { decoder }
 
     /// Returns a copy of these options with any provided overrides.
     ///
@@ -242,7 +272,8 @@ public struct DecodeOptions: @unchecked Sendable {
     ///   this will automatically force `allowDots = true` to satisfy the precondition.
     public func copy(
         allowDots: Bool? = nil,
-        decoder: ValueDecoder? = nil,
+        decoder: ScalarDecoder? = nil,
+        legacyDecoder: LegacyDecoder? = nil,
         decodeDotInKeys: Bool? = nil,
         allowEmptyLists: Bool? = nil,
         allowSparseLists: Bool? = nil,
@@ -269,6 +300,7 @@ public struct DecodeOptions: @unchecked Sendable {
         return DecodeOptions(
             allowDots: newAllowDots,
             decoder: decoder ?? self._decoder,
+            legacyDecoder: legacyDecoder ?? self.legacyDecoder,
             decodeDotInKeys: newDecodeDot,
             allowEmptyLists: allowEmptyLists ?? self.allowEmptyLists,
             allowSparseLists: allowSparseLists ?? self.allowSparseLists,
