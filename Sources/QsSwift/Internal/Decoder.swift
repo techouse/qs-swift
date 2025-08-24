@@ -482,6 +482,8 @@ internal enum Decoder {
                         of: "%2E", with: ".", options: .caseInsensitive)
                     : cleanRoot
 
+                // Parity: when list parsing is disabled or listLimit < 0,
+                // treat "[]" as a dictionary key "0".
                 if (!options.parseLists || options.listLimit < 0) && decodedRoot.isEmpty {
                     // Treat "[]" as dictionary key "0"
                     mutableObj["0"] = (leaf ?? NSNull())
