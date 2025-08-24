@@ -91,13 +91,11 @@ internal enum Decoder {
     ) throws -> OrderedDictionary<String, Any> {
         var obj: OrderedDictionary<String, Any> = [:]
 
-        // Strip "?" if requested, and normalize bracket encodings
+        // Strip "?" if requested (do not globally normalize %5B/%5D; normalize only within the key slice).
         let cleanStr =
-            options.ignoreQueryPrefix && str.hasPrefix("?")
+            (options.ignoreQueryPrefix && str.hasPrefix("?"))
             ? String(str.dropFirst())
             : str
-                .replacingOccurrences(of: "%5B", with: "[", options: [.caseInsensitive])
-                .replacingOccurrences(of: "%5D", with: "]", options: [.caseInsensitive])
 
         // Parameter limit handling (Int.max == effectively unlimited)
         let limit: Int? = (options.parameterLimit == .max) ? nil : options.parameterLimit
