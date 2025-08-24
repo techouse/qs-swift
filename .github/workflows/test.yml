@@ -194,10 +194,6 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-      - name: ObjC coverage summary (debug)
-        run: |
-          xcrun xccov view --report ObjC-Tests.xcresult || true
-
       - name: Upload ObjC test result bundle
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
