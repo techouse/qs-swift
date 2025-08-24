@@ -42,6 +42,12 @@ internal enum Decoder {
         options: DecodeOptions,
         currentListLength: Int
     ) throws -> Any? {
+        if options.throwOnLimitExceeded, options.listLimit <= 0 {
+            // Defer to existing global validation or treat as exceeded uniformly.
+            if currentListLength >= options.listLimit {
+                throw DecodeError.listLimitExceeded(limit: options.listLimit)
+            }
+        }
         if let s = value as? String, !s.isEmpty, options.comma, s.contains(",") {
             let splitVal = s.split(separator: ",", omittingEmptySubsequences: false).map(
                 String.init)
