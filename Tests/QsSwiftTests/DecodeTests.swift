@@ -1681,6 +1681,108 @@ struct DataDateRegexTests {
     }
 }
 
+// MARK: - DecodeOptions parity with Kotlin (DecodeOptionsSpec.kt)
+@Suite("DecodeOptions (Kotlin parity)")
+struct DecodeOptionsParityTests {
+    private let charsets: [String.Encoding] = [.utf8, .isoLatin1]
+
+    @Test("KEY maps %2E/%2e inside brackets to '.' when allowDots=true (UTF-8/ISO-8859-1)")
+    func keyProtectsEncodedDotsInsideBrackets_allowDotsTrue() throws {
+        for cs in charsets {
+            let opts = DecodeOptions(allowDots: true)
+            #expect((opts.decode("a[%2E]", cs, .key) as? String) == "a[.]")
+            #expect((opts.decode("a[%2e]", cs, .key) as? String) == "a[.]")
+        }
+    }
+
+    @Test(
+        "KEY maps %2E outside brackets to '.' when allowDots=true; independent of decodeDotInKeys")
+    func keyMapsEncodedDotOutsideBrackets_allowDotsTrue() throws {
+        for cs in charsets {
+            let opts1 = DecodeOptions(allowDots: true, decodeDotInKeys: false)
+            let opts2 = DecodeOptions(allowDots: true, decodeDotInKeys: true)
+            #expect((opts1.decode("a%2Eb", cs, .key) as? String) == "a.b")
+            #expect((opts2.decode("a%2Eb", cs, .key) as? String) == "a.b")
+        }
+    }
+
+    @Test("non-KEY (VALUE) decodes %2E to '.' (control)")
+    func nonKeyDecodesPercentNormally() throws {
+        for cs in charsets {
+            let opts = DecodeOptions(allowDots: true)
+            #expect((opts.decode("%2E", cs, .value) as? String) == ".")
+        }
+    }
+
+    @Test("KEY maps %2E/%2e inside brackets even when allowDots=false")
+    func keyMapsInsideBrackets_allowDotsFalse() throws {
+        for cs in charsets {
+            let opts = DecodeOptions(allowDots: false)
+            #expect((opts.decode("a[%2E]", cs, .key) as? String) == "a[.]")
+            #expect((opts.decode("a[%2e]", cs, .key) as? String) == "a[.]")
+        }
+    }
+
+    @Test("KEY outside %2E decodes to '.' when allowDots=false (no protection outside brackets)")
+    func keyOutsideBracket_allowDotsFalse() throws {
+        for cs in charsets {
+            let opts = DecodeOptions(allowDots: false)
+            #expect((opts.decode("a%2Eb", cs, .key) as? String) == "a.b")
+            #expect((opts.decode("a%2eb", cs, .key) as? String) == "a.b")
+        }
+    }
+
+    @Test("decodeDotInKeys=true implies getAllowDots=true when allowDots not explicitly false")
+    func decodeDotInKeysImpliesAllowDots() throws {
+        let opts = DecodeOptions(decodeDotInKeys: true)
+        #expect(opts.getAllowDots == true)
+    }
+
+    @Test("Decoder null return is honored (no fallback to default)")
+    func decoderNilIsHonored() throws {
+        let opts = DecodeOptions(decoder: { _, _, _ in nil })
+        #expect(opts.decode("foo", .utf8, .value) == nil)
+        #expect(opts.decode("bar", .utf8, .key) == nil)
+    }
+
+    @Test("Single decoder acts like 'legacy' when ignoring kind (no default applied first)")
+    func singleDecoderBehavesLikeLegacy() throws {
+        let opts = DecodeOptions(decoder: { s, _, _ in s?.uppercased() })
+        #expect((opts.decode("abc", .utf8, .value) as? String) == "ABC")
+        // For keys, custom decoder gets the raw token; no default percent-decoding first.
+        #expect((opts.decode("a%2Eb", .utf8, .key) as? String) == "A%2EB")
+    }
+
+    @Test("copy() preserves and overrides the decoder")
+    func copyPreservesAndOverridesDecoder() throws {
+        let original = DecodeOptions(decoder: { s, _, k in
+            guard let s else { return nil }
+            let tag = (k == .key) ? "KEY" : "VALUE"
+            return "K:\(tag):\(s)"
+        })
+
+        // Copy without overrides preserves decoder
+        let copy1 = original.copy()
+        #expect((copy1.decode("v", .utf8, .value) as? String) == "K:VALUE:v")
+        #expect((copy1.decode("k", .utf8, .key) as? String) == "K:KEY:k")
+
+        // Override the decoder
+        let copy2 = original.copy(decoder: { s, _, k in
+            guard let s else { return nil }
+            let tag = (k == .key) ? "KEY" : "VALUE"
+            return "K2:\(tag):\(s)"
+        })
+        #expect((copy2.decode("v", .utf8, .value) as? String) == "K2:VALUE:v")
+        #expect((copy2.decode("k", .utf8, .key) as? String) == "K2:KEY:k")
+    }
+
+    @Test("decodeKey coerces non-string decoder result via String(describing:)")
+    func decodeKeyCoercesNonString() throws {
+        let opts = DecodeOptions(decoder: { _, _, _ in 42 })
+        #expect(opts.decodeKey("anything", charset: .utf8) == "42")
+    }
+}
+
 // MARK: - Charset tests
 
 @Suite("charset")
