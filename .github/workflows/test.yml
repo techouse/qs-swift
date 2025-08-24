@@ -162,9 +162,10 @@ jobs:
       - name: Upload Objective-C coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: ObjC-Tests.xcresult
+          files: ${{ github.workspace }}/ObjC-Tests.xcresult
           flags: objc,${{ matrix.os }},xcode-${{ matrix.xcode }}
           name: QsSwift-ObjC-${{ matrix.os }}-xcode-${{ matrix.xcode }}
+          disable_search: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
