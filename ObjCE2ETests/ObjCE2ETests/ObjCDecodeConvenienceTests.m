@@ -51,9 +51,9 @@ static NSDictionary * Qs_DecodeOrDefault(id _Nullable input, QsDecodeOptions * _
     // Sanity: error domain/code and attached metadata.
     XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
     // depthExceeded maps to rawValue 4 (see QsDecodeErrorCodeObjC).
-    XCTAssertEqual(err.code, 4);
+    XCTAssertEqual(err.code, QsDecodeErrorCodeDepthExceeded);
     NSNumber *maxDepth = err.userInfo[QsDecodeErrorInfo.maxDepthKey];
-    XCTAssertEqual(maxDepth.intValue, 2);
+    XCTAssertEqual(maxDepth.intValue, QsDecodeErrorCodeParameterLimitExceeded);
 }
 
 - (void)test_decodeOrEmpty_success_and_failureFallback {
