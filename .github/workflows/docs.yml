@@ -23,38 +23,86 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
-      - name: Build DocC
+      - name: Build DocC (QsSwift + QsObjC)
         env:
           OUT: 'docs'
-          TARGET: 'QsSwift'
           REPO_NAME: 'qs-swift'
         run: |
-          set -e
+          set -euo pipefail
           swift --version
-          swift package --allow-writing-to-directory "$OUT" \
-            generate-documentation \
-            --target "$TARGET" \
-            --output-path "$OUT" \
-            --transform-for-static-hosting \
-            --hosting-base-path "$REPO_NAME"
-      - name: Make root URL redirect to module docs
+
+          MODULES=("QsSwift" "QsObjC")
+          rm -rf "$OUT"
+          mkdir -p "$OUT/data/documentation" "$OUT/documentation"
+
+          first=1
+          for t in "${MODULES[@]}"; do
+            echo "::group::Build DocC for $t"
+            TMP="docs-$t"
+            rm -rf "$TMP"
+            swift package --allow-writing-to-directory "$TMP" \
+              generate-documentation \
+              --target "$t" \
+              --output-path "$TMP" \
+              --transform-for-static-hosting \
+              --hosting-base-path "$REPO_NAME"
+
+            # Copy shared assets once (from the first module)
+            if [[ $first -eq 1 ]]; then
+              rsync -a "$TMP/data/" "$OUT/data/"
+              if [[ -d "$TMP/images" ]]; then rsync -a "$TMP/images/" "$OUT/images/"; fi
+              if [[ -f "$TMP/theme-settings.json" ]]; then cp -f "$TMP/theme-settings.json" "$OUT/"; fi
+              # Keep DocC's SPA index for debugging; the landing page step will write docs/index.html later
+              cp -f "$TMP/index.html" "$OUT/_docc-index.html" || true
+              first=0
+            fi
+
+            # Copy module-specific documentation + JSON
+            lower=$(echo "$t" | tr '[:upper:]' '[:lower:]')
+            mkdir -p "$OUT/documentation/$lower"
+            rsync -a "$TMP/documentation/$lower/" "$OUT/documentation/$lower/" || true
+            if [[ -f "$TMP/data/documentation/$lower.json" ]]; then
+              cp -f "$TMP/data/documentation/$lower.json" "$OUT/data/documentation/"
+            fi
+            echo "::endgroup::"
+          done
+
+          # Sanity checks: both modules should be present
+          test -f "$OUT/data/documentation/qsswift.json"
+          test -f "$OUT/data/documentation/qsobjc.json"
+      - name: Make landing page linking to both modules
         env:
           OUT: 'docs'
-          TARGET: 'qsswift'
         run: |
           set -e
           mkdir -p ${{ env.OUT }}
           # prevent Pages' Jekyll from messing with DocC assets
           touch docs/.nojekyll
-          # Redirect root to /documentation/${{ env.TARGET }}/
+          # Simple landing page that links to both DocC module roots
           cat > docs/index.html <<'EOF'
           <!doctype html>
           <meta charset="utf-8">
-          <title>Redirecting…</title>
-          <meta http-equiv="refresh" content="0; url=./documentation/${{ env.TARGET }}/">
-          <link rel="canonical" href="./documentation/${{ env.TARGET }}/">
-          <script>location.replace('./documentation/${{ env.TARGET }}/');</script>
-          <p><a href="./documentation/${{ env.TARGET }}/">Continue to the documentation</a></p>
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>Qs Documentation</title>
+          <style>
+            :root { color-scheme: light dark; --fg: #111; --bg: #fff; --link:#0366d6; }
+            @media (prefers-color-scheme: dark) { :root { --fg:#ddd; --bg:#0b0b0b; --link:#58a6ff; } }
+            body { margin: 2rem auto; max-width: 48rem; padding: 0 1rem; font: 16px/1.5 -apple-system, system-ui, Helvetica, Arial, sans-serif; color: var(--fg); background: var(--bg); }
+            h1 { font-size: 1.75rem; margin: 0 0 1rem; }
+            ul { list-style: none; padding: 0; }
+            li { margin: .5rem 0; }
+            a { color: var(--link); text-decoration: none; }
+            a:hover { text-decoration: underline; }
+            .note { margin-top: 1.25rem; font-size: .95rem; opacity: .85; }
+            code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+          </style>
+          <h1>Qs Documentation</h1>
+          <p>Select a module:</p>
+          <ul>
+            <li>• <a href="./documentation/qsswift/">QsSwift</a></li>
+            <li>• <a href="./documentation/qsobjc/">QsObjC</a></li>
+          </ul>
+          <p class="note">Each link points to the DocC root for that module (<code>documentation/&lt;module&gt;/</code>). If you had previously bookmarked the QsSwift root, it still works.</p>
           EOF
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
