@@ -122,6 +122,7 @@ jobs:
           path: |
             ~/.swiftpm
             ~/Library/Developer/Xcode/DerivedData/SourcePackages
+            .derivedData-objc/SourcePackages
           key: spm-${{ runner.os }}-xcode-${{ matrix.xcode }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
             spm-${{ runner.os }}-xcode-${{ matrix.xcode }}-
@@ -132,6 +133,7 @@ jobs:
           xcodebuild \
             -project ObjCE2ETests/ObjCE2ETests.xcodeproj \
             -scheme ObjCE2ETests \
+            -derivedDataPath .derivedData-objc \
             -resolvePackageDependencies
 
       - name: Run Objective-C tests (macOS)
