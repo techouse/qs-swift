@@ -1,5 +1,12 @@
 # QsObjC — Objective‑C bridge for QsSwift
 
+[![Docs](https://img.shields.io/badge/Docs-QsObjC-blue)](https://techouse.github.io/qs-swift/qsobjc/documentation/qsobjc/)
+[![License](https://img.shields.io/github/license/techouse/qs-swift)](LICENSE)
+[![Test](https://github.com/techouse/qs-swift/actions/workflows/test.yml/badge.svg)](https://github.com/techouse/qs-swift/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/techouse/qs-swift/graph/badge.svg?token=hk2eROAKOo)](https://codecov.io/gh/techouse/qs-swift)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/techouse)](https://github.com/sponsors/techouse)
+[![GitHub Repo stars](https://img.shields.io/github/stars/techouse/qs-swift)](https://github.com/techouse/qs-swift/stargazers)
+
 `QsObjC` exposes the Swift implementation of the popular `qs` query‑string library to Objective‑C. It mirrors the Swift
 API closely and adds a few conveniences for Obj‑C style usage.
 
