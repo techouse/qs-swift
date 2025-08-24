@@ -58,15 +58,6 @@ internal enum Decoder {
         return value
     }
 
-    // MARK: - Cached regexes
-
-    /// Legacy regex for dot‑notation (`.segment` → `[segment]`).
-    /// Kept for historical reference/benchmarks; **not used** by the current path
-    /// which performs a depth‑aware, top‑level only scan in `dotToBracket(...)`.
-    private static let dotRegex = try! NSRegularExpression(
-        pattern: #"\.([^.\[]+)"#, options: []
-    )
-
     // MARK: - Public-ish internals
 
     /// Parses a raw query string into an ordered map of `key → value`, where `value` may be:
