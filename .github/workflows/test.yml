@@ -170,7 +170,6 @@ jobs:
       - name: Zip .xcresult and extract xccov JSON
         run: |
           set -euxo pipefail
-          ls -lah
           test -d ObjC-Tests.xcresult
           /usr/bin/zip -qry ObjC-Tests.xcresult.zip ObjC-Tests.xcresult
           xcrun xccov view --report --json ObjC-Tests.xcresult > objc-coverage.json
