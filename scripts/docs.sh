@@ -51,13 +51,30 @@ build_docc() {
 
   # --transform-for-static-hosting ensures relative asset paths; --hosting-base-path
   # points DocC at our GitHub Pages sub-path (user.github.io/${REPO_NAME}/${SUBDIR}).
-  swift package \
-    --disable-sandbox \
-    preview-documentation \
-    --target "${TARGET}" \
-    --output-path "${OUTDIR}" \
-    --transform-for-static-hosting \
-    --hosting-base-path "${REPO_NAME}/${SUBDIR}"
+  # Prefer the non-interactive generator; fall back to preview if unavailable.
+  # You can force preview with FORCE_PREVIEW=1 env var.
+  if [[ ${FORCE_PREVIEW:-0} != 1 ]] && swift package --disable-sandbox generate-documentation --help >/dev/null 2>&1; then
+    # Note: generate-documentation requires explicit write allowance for OUTDIR.
+    swift package \
+      --disable-sandbox \
+      --allow-writing-to-directory "${OUTDIR}" \
+      generate-documentation \
+      --target "${TARGET}" \
+      --output-path "${OUTDIR}" \
+      --transform-for-static-hosting \
+      --hosting-base-path "${REPO_NAME}/${SUBDIR}"
+  else
+    warn "Falling back to 'preview-documentation' for ${TARGET} (generator unavailable or FORCE_PREVIEW=1)."
+    swift package \
+      --disable-sandbox \
+      preview-documentation \
+      --target "${TARGET}" \
+      --output-path "${OUTDIR}" \
+      --transform-for-static-hosting \
+      --hosting-base-path "${REPO_NAME}/${SUBDIR}"
+  fi
+
+  ok "Compilation complete for ${TARGET}; starting DocC conversion (this can take a minute)..."
 
   # Sanity checks for common assets that must exist for DocC JS to boot.
   if [[ ! -f "${OUTDIR}/index/index.json" ]]; then
