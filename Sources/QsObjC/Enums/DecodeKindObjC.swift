@@ -15,7 +15,7 @@
         case value
 
         /// Bridge to the Swift counterpart.
-        var swift: QsSwift.DecodeKind {
+        public var swift: QsSwift.DecodeKind {
             switch self {
             case .key: return .key
             case .value: return .value
