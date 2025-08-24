@@ -9,7 +9,7 @@ on:
 
 permissions:
   contents: read
-  actions: write
+  actions: read
 
 concurrency:
   group: test-${{ github.ref }}
@@ -17,6 +17,9 @@ concurrency:
 
 jobs:
   tests:
+    permissions:
+      contents: read
+      actions: write
     name: Swift tests + coverage (${{ matrix.os }}, Swift ${{ matrix.swift }})
     timeout-minutes: 45
     runs-on: ${{ matrix.os }}
@@ -36,8 +39,10 @@ jobs:
         with:
           xcode-version: ${{ matrix.xcode }}
 
-      - name: Show Swift toolchain
-        run: swift --version
+      - name: Show Xcode & Swift versions
+        run: |
+          xcodebuild -version
+          swift --version
 
       - name: Run tests with coverage
         env:
@@ -67,6 +72,9 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   objc-tests:
+    permissions:
+      contents: read
+      actions: write
     name: Objective-C E2E tests (Xcode)
     timeout-minutes: 45
     runs-on: ${{ matrix.os }}
@@ -100,6 +108,10 @@ jobs:
           EXPECTED="${PARENT}/QsSwift"
           mkdir -p "$PARENT"
           # Idempotent: force-create/refresh the symlink
+          if [ -e "$EXPECTED" ] && [ ! -L "$EXPECTED" ]; then
+            echo "Warning: $EXPECTED exists and is not a symlink; removing for CI."
+            rm -rf "$EXPECTED"
+          fi
           ln -sfn "$ACTUAL" "$EXPECTED"
           ls -lah "$PARENT" || true
           ls -lah "$EXPECTED" || true
