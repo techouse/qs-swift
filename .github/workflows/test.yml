@@ -150,12 +150,24 @@ jobs:
             -resultBundlePath ObjC-Tests.xcresult \
             test
 
+      - name: Zip .xcresult and extract xccov JSON (debug)
+        run: |
+          set -euxo pipefail
+          ls -lah
+          test -d ObjC-Tests.xcresult
+          /usr/bin/zip -qry ObjC-Tests.xcresult.zip ObjC-Tests.xcresult
+          xcrun xccov view --report --json ObjC-Tests.xcresult > objc-coverage.json
+          ls -lah ObjC-Tests.xcresult*
+
       - name: Upload Objective-C coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: ${{ github.workspace }}/ObjC-Tests.xcresult
+          files: |
+            ${{ github.workspace }}/ObjC-Tests.xcresult.zip
+            ${{ github.workspace }}/objc-coverage.json
           flags: objc,${{ matrix.os }},xcode-${{ matrix.xcode }}
           name: QsSwift-ObjC-${{ matrix.os }}-xcode-${{ matrix.xcode }}
+          verbose: true
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
