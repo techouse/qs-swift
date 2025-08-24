@@ -43,6 +43,16 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Cache SwiftPM artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.swiftpm
+            .build
+          key: spm-${{ runner.os }}-swift-${{ matrix.swift }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-swift-${{ matrix.swift }}-
+
       - name: Run tests with coverage
         env:
           SKIP_EXPENSIVE_TESTS: 1
@@ -67,6 +77,7 @@ jobs:
           files: coverage/info.lcov
           flags: swift,${{ matrix.os }},swift-${{ matrix.swift }}
           name: QsSwift-${{ matrix.os }}-swift-${{ matrix.swift }}
+          fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
@@ -107,8 +118,12 @@ jobs:
           mkdir -p "$PARENT"
           # Idempotent: force-create/refresh the symlink
           if [ -e "$EXPECTED" ] && [ ! -L "$EXPECTED" ]; then
-            echo "Warning: $EXPECTED exists and is not a symlink; removing for CI."
-            rm -rf "$EXPECTED"
+            echo "Warning: $EXPECTED exists and is not a symlink; validating path and removing for CI."
+            case "$EXPECTED" in
+              "$PARENT"/*) : ;;
+              *) echo "Refusing to remove non-symlink outside $PARENT: $EXPECTED" >&2; exit 1 ;;
+            esac
+            [ "$EXPECTED" != "/" ] && rm -rf "$EXPECTED"
           fi
           if [ -L "$EXPECTED" ]; then
             TARGET="$(readlink "$EXPECTED")"
