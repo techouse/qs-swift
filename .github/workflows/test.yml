@@ -46,41 +46,7 @@ jobs:
 
       - name: Collect macOS crash logs
         if: ${{ failure() }}
-        run: |
-          set -euxo pipefail
-          mkdir -p crashlogs
-          # Where crash logs usually live
-          USER_DR="$HOME/Library/Logs/DiagnosticReports"
-          SYS_DR="/Library/Logs/DiagnosticReports"
-
-          # List what’s there (for debugging)
-          for dir in "$USER_DR" "$SYS_DR"; do
-            if [ -d "$dir" ]; then
-              echo "=== Listing $dir ==="
-              ls -lah "$dir" || true
-            fi
-          done
-
-          # Copy recent crash-like files (last 60 minutes, multiple extensions)
-          for dir in "$USER_DR" "$SYS_DR"; do
-            if [ -d "$dir" ]; then
-              # Use sudo for system dir; it’s allowed on macOS runners
-              CP="cp"
-              if [ "$dir" = "$SYS_DR" ]; then CP="sudo cp"; fi
-
-              find "$dir" -type f \
-                \( -name '*.crash' -o -name '*.ips' -o -name '*.hang' -o -name '*.spin' \) \
-                -mmin -60 -print -exec $CP {} crashlogs/ \; || true
-            fi
-          done
-
-          # Always include a unified log snippet around the failure time (very helpful when no .crash exists)
-          /usr/bin/log show --style syslog --last 30m \
-            --predicate 'eventMessage CONTAINS[c] "xctest" OR process CONTAINS[c] "xctest" OR process CONTAINS[c] "swift"' \
-            > crashlogs/unified-log.txt 2>/dev/null || true
-
-          echo "Collected files:"
-          ls -lah crashlogs || true
+        run: bash scripts/collect-macos-crashlogs.sh crashlogs
 
       - name: Upload macOS crash logs (if any)
         if: ${{ failure() }}
@@ -194,31 +160,7 @@ jobs:
 
       - name: Collect macOS crash logs (ObjC job)
         if: ${{ failure() }}
-        run: |
-          set -euxo pipefail
-          mkdir -p crashlogs-objc
-          USER_DR="$HOME/Library/Logs/DiagnosticReports"
-          SYS_DR="/Library/Logs/DiagnosticReports"
-          for dir in "$USER_DR" "$SYS_DR"; do
-            if [ -d "$dir" ]; then
-              echo "=== Listing $dir ==="
-              ls -lah "$dir" || true
-            fi
-          done
-          for dir in "$USER_DR" "$SYS_DR"; do
-            if [ -d "$dir" ]; then
-              CP="cp"
-              if [ "$dir" = "$SYS_DR" ]; then CP="sudo cp"; fi
-              find "$dir" -type f \
-                \( -name '*.crash' -o -name '*.ips' -o -name '*.hang' -o -name '*.spin' \) \
-                -mmin -60 -print -exec $CP {} crashlogs-objc/ \; || true
-            fi
-          done
-          /usr/bin/log show --style syslog --last 30m \
-            --predicate 'eventMessage CONTAINS[c] "xctest" OR process CONTAINS[c] "xctest" OR process CONTAINS[c] "swift"' \
-            > crashlogs-objc/unified-log.txt 2>/dev/null || true
-          echo "Collected files:"
-          ls -lah crashlogs-objc || true
+        run: bash scripts/collect-macos-crashlogs.sh crashlogs-objc
 
       - name: Upload macOS crash logs (ObjC job, if any)
         if: ${{ failure() }}
