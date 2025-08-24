@@ -190,8 +190,10 @@
                 let obj = a as AnyObject
                 let id = ObjectIdentifier(obj)
                 if seen.contains(id) { return a }
-                seen.insert(id)
-                return a.map { _bridgeInputForEncode($0, seen: &seen) }
+                let inserted = seen.insert(id).inserted
+                let mapped = a.map { _bridgeInputForEncode($0, seen: &seen) }
+                if inserted { seen.remove(id) }
+                return mapped
 
             // Plain Swift dict → OrderedDictionary<String, Any>
             case let d as [String: Any]:
