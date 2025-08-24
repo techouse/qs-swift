@@ -204,8 +204,8 @@ internal enum Decoder {
                 // IMPORTANT: distinguish custom decoder vs default decoder
                 if let arr = parsed as? [String] {
                     if let custom = options._decoder {
-                        // preserve element-level nils from custom decoder
-                        value = arr.map { custom($0, charset, .value) } as [Any?]
+                        let mapped = arr.map { custom($0, charset, .value) }
+                        value = mapped.map { $0 ?? NSNull() } as [Any]
                     } else {
                         // default decoder: fall back to original literal when decoding fails
                         value = arr.map { Utils.decode($0, charset: charset) ?? $0 } as [Any]
