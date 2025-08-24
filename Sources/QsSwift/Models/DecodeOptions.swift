@@ -226,6 +226,9 @@ public struct DecodeOptions: @unchecked Sendable {
 
     /// Convenience back‑compat entry point (treat as VALUE decoding).
     /// Prefer `decodeValue(_:charset:)` in new code. Custom decoders still receive `kind = .value`.
+    @available(
+        *, deprecated, message: "Use decodeValue(_:charset:) or decodeKey(_:charset:) instead"
+    )
     public func getDecoder(_ value: String?, charset: String.Encoding? = nil) -> Any? {
         // Back‑compat: treat this as a VALUE decode.
         return decode(value, charset ?? self.charset, .value)
