@@ -165,13 +165,13 @@ internal enum Decoder {
             var value: Any?
 
             if pos == -1 {
-                key = (options.getDecoder(part, charset: charset) as? String) ?? part
+                key = options.decodeKey(part, charset: charset) ?? part
                 value = options.strictNullHandling ? NSNull() : ""
             } else {
                 let keyRaw = String(part.prefix(pos))
                 let rhs = String(part.dropFirst(pos + 1))
 
-                key = (options.getDecoder(keyRaw, charset: charset) as? String) ?? keyRaw
+                key = options.decodeKey(keyRaw, charset: charset) ?? keyRaw
 
                 // Determine current list length for limit checks (only if key already has a list)
                 let currentLen: Int = (obj[key] as? [Any])?.count ?? 0
@@ -183,14 +183,14 @@ internal enum Decoder {
                 if let arr = parsed as? [String] {
                     if let custom = options._decoder {
                         // preserve element-level nils from custom decoder
-                        value = arr.map { custom($0, charset) } as [Any?]
+                        value = arr.map { custom($0, charset, .value) } as [Any?]
                     } else {
                         // default decoder: fall back to original literal when decoding fails
                         value = arr.map { Utils.decode($0, charset: charset) ?? $0 } as [Any]
                     }
                 } else if let s = parsed as? String {
                     if let custom = options._decoder {
-                        value = custom(s, charset)  // may be nil; keep it nil
+                        value = custom(s, charset, .value)  // may be nil; keep it nil
                     } else {
                         value = Utils.decode(s, charset: charset) ?? s
                     }
@@ -214,16 +214,14 @@ internal enum Decoder {
                 value = Utils.interpretNumericEntities(text)
             }
 
-            // Only do the "[]=" single-element wrapping when list parsing is enabled.
-            // When parseLists is false, "[]" becomes a string key "0" in parseObject.
-            if hadBracketedEmpty, options.parseLists {
+            // Force list-of-lists only when RHS is already an array (comma path).
+            if hadBracketedEmpty {
                 if let arr = value as? [Any] {
                     value = [arr]
                 } else if let arrOpt = value as? [Any?] {
                     value = [arrOpt.map { $0 ?? NSNull() }]
-                } else {
-                    value = [value ?? NSNull()]
                 }
+                // else leave scalars as-is; parseObject will handle "[]"
             }
 
             // Duplicates handling (only arrayify on subsequent duplicates, like Kotlin)
@@ -313,55 +311,83 @@ internal enum Decoder {
         maxDepth: Int,
         strictDepth: Bool
     ) throws -> [String] {
-        // 1) dot → bracket (only if allowDots)
-        let key: String = allowDots ? dotToBracket(originalKey) : originalKey
-        let opens = key.reduce(0) { $0 + ($1 == "[" ? 1 : 0) }
-        let closes = key.reduce(0) { $0 + ($1 == "]" ? 1 : 0) }
-        if opens != closes {
-            // Treat the whole thing as a literal key (e.g. "[", "[[", "[hello[")
-            return [key]
-        }
-
-        // Depth == 0: never split, never throw.
+        // Depth 0 semantics: never split, never transform (qs/Kotlin parity).
         if maxDepth <= 0 {
-            return [key]
+            return [originalKey]
         }
 
-        // 2) Scan for parent and bracket segments
+        // Apply top-level dot→bracket only when allowDots is enabled.
+        let key: String = allowDots ? dotToBracket(originalKey) : originalKey
+
+        // Prepare result; reserve based on '[' count.
         var segments: [String] = []
         segments.reserveCapacity(key.filter { $0 == "[" }.count + 1)
 
+        // Work with a character array for index arithmetic.
         let chars = Array(key)
         let n = chars.count
-        var i = 0
 
-        // parent before first '['
-        while i < n, chars[i] != "[" { i += 1 }
-        if i > 0 { segments.append(String(chars[0..<i])) }
+        // Find the first '[' to separate the non-bracket parent prefix.
+        var firstOpen = -1
+        var idx = 0
+        while idx < n, chars[idx] != "[" { idx += 1 }
+        firstOpen = (idx < n) ? idx : -1
 
-        var depth = 0
-        while i < n, depth < maxDepth {
-            guard chars[i] == "[" else { break }
-            let start = i
-            i += 1
-            while i < n, chars[i] != "]" { i += 1 }
-            if i >= n { break }  // unmatched '['; remainder handled below
-            // include the brackets, eg "[0]" or "[]"
-            segments.append(String(chars[start...i]))
-            depth += 1
-            i += 1
-            // advance to next '['
-            while i < n, chars[i] != "[" { i += 1 }
+        // Append the parent prefix (if any).
+        if firstOpen > 0 {
+            segments.append(String(chars[0..<firstOpen]))
+        } else if firstOpen == -1 {
+            // No brackets at all → the whole key is a single literal segment.
+            return [key]
         }
 
-        // 3) Remainder (if any)
-        if i < n {
-            if strictDepth {
+        // Walk bracket groups, collecting up to maxDepth balanced segments.
+        var open = firstOpen
+        var collected = 0
+        var unterminated = false
+
+        while open >= 0, collected < maxDepth {
+            var i2 = open + 1
+            var level = 1
+            var close = -1
+
+            // Balance nested '[' and ']' *within the same group* so "[with[inner]]" stays one segment.
+            while i2 < n {
+                if chars[i2] == "[" {
+                    level += 1
+                } else if chars[i2] == "]" {
+                    level -= 1
+                    if level == 0 {
+                        close = i2
+                        break
+                    }
+                }
+                i2 += 1
+            }
+
+            if close < 0 {
+                // Unterminated bracket group: stop collecting; stash from `open` as opaque remainder.
+                unterminated = true
+                break
+            }
+
+            // Include the surrounding brackets for this balanced group.
+            segments.append(String(chars[open...close]))
+            collected += 1
+
+            // Advance to the next '[' after this closed group.
+            var nextOpen = close + 1
+            while nextOpen < n, chars[nextOpen] != "[" { nextOpen += 1 }
+            open = (nextOpen < n) ? nextOpen : -1
+        }
+
+        // Handle remainder (either depth overflow or unterminated group).
+        if open >= 0 {
+            if strictDepth && !unterminated {
                 throw DecodeError.depthExceeded(maxDepth: maxDepth)
             }
-            // Stash the rest as a single bracketed segment, like Kotlin does:
-            // "[" + key.substring(open) + "]"
-            segments.append("[" + String(chars[i..<n]) + "]")
+            // Kotlin parity: wrap the raw remainder (from the next unprocessed '[') in one synthetic segment.
+            segments.append("[" + String(chars[open..<n]) + "]")
         }
 
         return segments
@@ -450,8 +476,8 @@ internal enum Decoder {
                         of: "%2E", with: ".", options: .caseInsensitive)
                     : cleanRoot
 
-                if !options.parseLists && decodedRoot.isEmpty {
-                    // "[]": treat as dict with *string* key "0"
+                if (!options.parseLists || options.listLimit < 0) && decodedRoot.isEmpty {
+                    // Treat "[]" as dictionary key "0"
                     mutableObj["0"] = (leaf ?? NSNull())
                     obj = mutableObj
                 } else if let idx = Int(decodedRoot),
@@ -487,34 +513,64 @@ internal enum Decoder {
         @inline(__always)
     #endif
     private static func dotToBracket(_ s: String) -> String {
+        // Depth-aware scanner that only splits dots at top level.
         if !s.contains(".") { return s }
-        var out = ""
+
+        var out = String()
         out.reserveCapacity(s.count)
+        let chars = Array(s)
+        let n = chars.count
+        var i = 0
+        var depth = 0
 
-        let end = s.endIndex
-        var i = s.startIndex
+        while i < n {
+            let ch = chars[i]
+            switch ch {
+            case "[":
+                depth += 1
+                out.append(ch)
+                i += 1
 
-        while i < end {
-            let ch = s[i]
-            if ch == "." {
-                let j = s.index(after: i)
-                if j < end, s[j] != ".", s[j] != "[" {
-                    var k = j
-                    while k < end {
-                        let c = s[k]
-                        if c == "." || c == "[" { break }
-                        k = s.index(after: k)
+            case "]":
+                if depth > 0 { depth -= 1 }
+                out.append(ch)
+                i += 1
+
+            case ".":
+                if depth == 0 {
+                    let hasNext = (i + 1) < n
+                    let next = hasNext ? chars[i + 1] : "\0"
+
+                    if next == "[" {
+                        // Skip the dot so "a.[b]" behaves like "a[b]"
+                        i += 1
+                    } else if !hasNext || next == "." {
+                        // Trailing dot, or first dot in "a..b": keep literal "."
+                        out.append(".")
+                        i += 1
+                    } else {
+                        // Normal split: ".segment" → "[segment]"
+                        var j = i + 1
+                        while j < n && chars[j] != "." && chars[j] != "[" { j += 1 }
+                        out.append("[")
+                        out.append(String(chars[(i + 1)..<j]))
+                        out.append("]")
+                        i = j
                     }
-                    let seg = s[j..<k]
-                    out.append("[")
-                    out.append(contentsOf: seg)
-                    out.append("]")
-                    i = k
-                    continue
+                } else {
+                    out.append(".")
+                    i += 1
                 }
+
+            case "%":
+                // Preserve percent sequences verbatim; we never split on %2E here.
+                out.append("%")
+                i += 1
+
+            default:
+                out.append(ch)
+                i += 1
             }
-            out.append(ch)
-            i = s.index(after: i)
         }
 
         return out
