@@ -1135,7 +1135,7 @@ struct DecodeTests {
 
     @Test("decode - custom number decoder with comma=true")
     func testDecode_NumberDecoder_Comma() async throws {
-        let numberDecoder: ValueDecoder = { s, _ in
+        let numberDecoder: ScalarDecoder = { s, _, _ in
             if let s, let n = Int(s) { return n }
             return Utils.decode(s, charset: .utf8)
         }
@@ -1533,7 +1533,7 @@ struct DecodeTests {
 struct CustomDecoderTests {
     @Test("decode - custom decoder (toy kanji example)")
     func testDecode_CustomDecoder() async throws {
-        let custom: ValueDecoder = { s, _ in
+        let custom: ScalarDecoder = { s, _, _ in
             s?
                 .replacingOccurrences(of: "%8c%a7", with: "県")
                 .replacingOccurrences(of: "%91%e5%8d%e3%95%7b", with: "大阪府")
@@ -1681,6 +1681,108 @@ struct DataDateRegexTests {
     }
 }
 
+// MARK: - DecodeOptions parity with Kotlin (DecodeOptionsSpec.kt)
+@Suite("DecodeOptions (Kotlin parity)")
+struct DecodeOptionsParityTests {
+    private let charsets: [String.Encoding] = [.utf8, .isoLatin1]
+
+    @Test("KEY maps %2E/%2e inside brackets to '.' when allowDots=true (UTF-8/ISO-8859-1)")
+    func keyProtectsEncodedDotsInsideBrackets_allowDotsTrue() throws {
+        for cs in charsets {
+            let opts = DecodeOptions(allowDots: true)
+            #expect((opts.decode("a[%2E]", cs, .key) as? String) == "a[.]")
+            #expect((opts.decode("a[%2e]", cs, .key) as? String) == "a[.]")
+        }
+    }
+
+    @Test(
+        "KEY maps %2E outside brackets to '.' when allowDots=true; independent of decodeDotInKeys")
+    func keyMapsEncodedDotOutsideBrackets_allowDotsTrue() throws {
+        for cs in charsets {
+            let opts1 = DecodeOptions(allowDots: true, decodeDotInKeys: false)
+            let opts2 = DecodeOptions(allowDots: true, decodeDotInKeys: true)
+            #expect((opts1.decode("a%2Eb", cs, .key) as? String) == "a.b")
+            #expect((opts2.decode("a%2Eb", cs, .key) as? String) == "a.b")
+        }
+    }
+
+    @Test("non-KEY (VALUE) decodes %2E to '.' (control)")
+    func nonKeyDecodesPercentNormally() throws {
+        for cs in charsets {
+            let opts = DecodeOptions(allowDots: true)
+            #expect((opts.decode("%2E", cs, .value) as? String) == ".")
+        }
+    }
+
+    @Test("KEY maps %2E/%2e inside brackets even when allowDots=false")
+    func keyMapsInsideBrackets_allowDotsFalse() throws {
+        for cs in charsets {
+            let opts = DecodeOptions(allowDots: false)
+            #expect((opts.decode("a[%2E]", cs, .key) as? String) == "a[.]")
+            #expect((opts.decode("a[%2e]", cs, .key) as? String) == "a[.]")
+        }
+    }
+
+    @Test("KEY outside %2E decodes to '.' when allowDots=false (no protection outside brackets)")
+    func keyOutsideBracket_allowDotsFalse() throws {
+        for cs in charsets {
+            let opts = DecodeOptions(allowDots: false)
+            #expect((opts.decode("a%2Eb", cs, .key) as? String) == "a.b")
+            #expect((opts.decode("a%2eb", cs, .key) as? String) == "a.b")
+        }
+    }
+
+    @Test("decodeDotInKeys=true implies getAllowDots=true when allowDots not explicitly false")
+    func decodeDotInKeysImpliesAllowDots() throws {
+        let opts = DecodeOptions(decodeDotInKeys: true)
+        #expect(opts.getAllowDots == true)
+    }
+
+    @Test("Decoder null return is honored (no fallback to default)")
+    func decoderNilIsHonored() throws {
+        let opts = DecodeOptions(decoder: { _, _, _ in nil })
+        #expect(opts.decode("foo", .utf8, .value) == nil)
+        #expect(opts.decode("bar", .utf8, .key) == nil)
+    }
+
+    @Test("Single decoder acts like 'legacy' when ignoring kind (no default applied first)")
+    func singleDecoderBehavesLikeLegacy() throws {
+        let opts = DecodeOptions(decoder: { s, _, _ in s?.uppercased() })
+        #expect((opts.decode("abc", .utf8, .value) as? String) == "ABC")
+        // For keys, custom decoder gets the raw token; no default percent-decoding first.
+        #expect((opts.decode("a%2Eb", .utf8, .key) as? String) == "A%2EB")
+    }
+
+    @Test("copy() preserves and overrides the decoder")
+    func copyPreservesAndOverridesDecoder() throws {
+        let original = DecodeOptions(decoder: { s, _, k in
+            guard let s else { return nil }
+            let tag = (k == .key) ? "KEY" : "VALUE"
+            return "K:\(tag):\(s)"
+        })
+
+        // Copy without overrides preserves decoder
+        let copy1 = original.copy()
+        #expect((copy1.decode("v", .utf8, .value) as? String) == "K:VALUE:v")
+        #expect((copy1.decode("k", .utf8, .key) as? String) == "K:KEY:k")
+
+        // Override the decoder
+        let copy2 = original.copy(decoder: { s, _, k in
+            guard let s else { return nil }
+            let tag = (k == .key) ? "KEY" : "VALUE"
+            return "K2:\(tag):\(s)"
+        })
+        #expect((copy2.decode("v", .utf8, .value) as? String) == "K2:VALUE:v")
+        #expect((copy2.decode("k", .utf8, .key) as? String) == "K2:KEY:k")
+    }
+
+    @Test("decodeKey coerces non-string decoder result via String(describing:)")
+    func decodeKeyCoercesNonString() throws {
+        let opts = DecodeOptions(decoder: { _, _, _ in 42 })
+        #expect(opts.decodeKey("anything", charset: .utf8) == "42")
+    }
+}
+
 // MARK: - Charset tests
 
 @Suite("charset")
@@ -1746,7 +1848,7 @@ struct CharsetDecodeTests {
 
     @Test("custom decoder may return nil (iso-8859-1 + interpretNumericEntities)")
     func customDecoderReturningNilIso() throws {
-        let decoder: ValueDecoder = { str, charset in
+        let decoder: ScalarDecoder = { str, charset, _ in
             guard let s = str, !s.isEmpty else { return nil }
             return Utils.decode(s, charset: charset ?? .utf8)
         }
@@ -2785,7 +2887,7 @@ extension DecodeTests {
 
     @Test("parse: number decoder")
     func parse_numberDecoder() throws {
-        let numberDecoder: ValueDecoder = { value, _ in
+        let numberDecoder: ScalarDecoder = { value, _, _ in
             if let v = value, let n = Int(v) { return "[\(n)]" }
             return value
         }
@@ -2915,7 +3017,7 @@ extension DecodeTests {
         }
 
         // Make the closure type explicitly @Sendable.
-        let decoder: @Sendable (String?, String.Encoding?) -> Any? = { s, _ in
+        let decoder: @Sendable (String?, String.Encoding?, DecodeKind?) -> Any? = { s, _, _ in
             guard let s else { return nil }
             return percentDecode(s, encoding: .shiftJIS) ?? s
         }
@@ -3008,7 +3110,7 @@ extension DecodeTests {
 
     @Test("parse: allow decoding keys and values")
     func parse_keyValueDecoder() throws {
-        let dec: ValueDecoder = { s, _ in s?.lowercased() }
+        let dec: ScalarDecoder = { s, _, _ in s?.lowercased() }
         let opt = DecodeOptions(decoder: dec)
 
         let r = try Qs.decode("KeY=vAlUe", options: opt)
@@ -3067,6 +3169,557 @@ extension DecodeTests {
 
         let r2 = try Qs.decode("%5B0%5D=a&%5B1%5D=b")
         #expect(NSDictionary(dictionary: r2).isEqual(to: ["0": "a", "1": "b"]))
+    }
+}
+
+// MARK: - DecodeOptions.defaultDecode (Kotlin parity — behavior-level port)
+
+@Suite("DecodeOptions.defaultDecode — key protections (behavioral parity)")
+struct DecodeOptionsDefaultDecodeBehaviorTests {
+    let charsets: [String.Encoding] = [.utf8, .isoLatin1]
+
+    @Test("KEY maps %2E/%2e inside brackets to '.' when allowDots=true (UTF-8/ISO-8859-1)")
+    func keyMapsEncodedDotInsideBrackets_allowDotsTrue() throws {
+        for cs in charsets {
+            let r1 = try Qs.decode("a[%2E]=x", options: .init(allowDots: true, charset: cs))
+            #expect(((r1["a"] as? [String: Any])?["."] as? String) == "x")
+
+            let r2 = try Qs.decode("a[%2e]=x", options: .init(allowDots: true, charset: cs))
+            #expect(((r2["a"] as? [String: Any])?["."] as? String) == "x")
+        }
+    }
+
+    @Test(
+        "KEY maps %2E outside brackets to '.' when allowDots=true; independent of decodeDotInKeys (UTF-8/ISO)"
+    )
+    func keyMapsEncodedDotTopLevel_allowDotsTrue_independentOfDecodeDotInKeys() throws {
+        for cs in charsets {
+            var r = try Qs.decode(
+                "a%2Eb=c",
+                options: .init(allowDots: true, decodeDotInKeys: false, charset: cs))
+            #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+
+            r = try Qs.decode(
+                "a%2Eb=c",
+                options: .init(allowDots: true, decodeDotInKeys: true, charset: cs))
+            #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+        }
+    }
+
+    @Test("non-KEY decodes %2E to '.' (control)")
+    func valueDecodesEncodedDot() throws {
+        for cs in charsets {
+            let r = try Qs.decode("x=%2E", options: .init(charset: cs))
+            #expect(r["x"] as? String == ".")
+        }
+    }
+
+    @Test("KEY maps %2E/%2e inside brackets even when allowDots=false")
+    func keyMapsEncodedDotInsideBrackets_allowDotsFalse() throws {
+        for cs in charsets {
+            let r1 = try Qs.decode("a[%2E]=x", options: .init(allowDots: false, charset: cs))
+            #expect(((r1["a"] as? [String: Any])?["."] as? String) == "x")
+
+            let r2 = try Qs.decode("a[%2e]=x", options: .init(allowDots: false, charset: cs))
+            #expect(((r2["a"] as? [String: Any])?["."] as? String) == "x")
+        }
+    }
+
+    @Test("KEY outside %2E decodes to '.' when allowDots=false (no protection outside brackets)")
+    func keyTopLevelEncodedDot_allowDotsFalse() throws {
+        for cs in charsets {
+            let r = try Qs.decode("a%2Eb=c", options: .init(allowDots: false, charset: cs))
+            #expect(r["a.b"] as? String == "c")
+        }
+    }
+}
+
+// MARK: - DecodeOptions interplay
+
+@Suite("DecodeOptions: allowDots / decodeDotInKeys interplay")
+struct DecodeOptionsInterplayParityTests {
+    @Test(
+        "decodeDotInKeys=true implies effective dot-splitting when allowDots is not explicitly false"
+    )
+    func decodeDotInKeysImpliesEffectiveAllowDots() throws {
+        // When only decodeDotInKeys=true is provided, the implementation should behave as if top-level
+        // dot-splitting were enabled.
+        let r = try Qs.decode("a.b=c", options: .init(decodeDotInKeys: true))
+        #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+    }
+}
+
+// MARK: - DecodeOptions key/value decoding + custom decoder behavior (C# parity)
+
+@Suite("DecodeOptions: key/value decoding + custom decoder behavior")
+struct DecodeOptionsCustomDecoderParity {
+
+    @Test("kind-aware decoder receives KEY for top-level and bracketed keys")
+    func kindAwareDecoderReceivesKey() throws {
+        // Thread-safe, sendable sink that avoids capturing a non-sendable mutable array.
+        final class CallSink: @unchecked Sendable {
+            private var _items: [(String?, DecodeKind)] = []
+            private let lock = NSLock()
+            func add(_ s: String?, _ k: DecodeKind?) {
+                lock.lock()
+                defer { lock.unlock() }
+                _items.append((s, k ?? .value))
+            }
+            var items: [(String?, DecodeKind)] {
+                lock.lock()
+                defer { lock.unlock() }
+                return _items
+            }
+        }
+
+        let sink = CallSink()
+
+        let dec: ScalarDecoder = { s, _, k in
+            sink.add(s, k)
+            return s  // echo back
+        }
+
+        _ = try Qs.decode(
+            "a%2Eb=c&a[b]=d",
+            options: .init(allowDots: true, decoder: dec, decodeDotInKeys: true)
+        )
+
+        #expect(
+            sink.items.contains {
+                $0.1 == .key && ($0.0 == "a%2Eb" || $0.0 == "a[b]")
+            })
+        #expect(
+            sink.items.contains {
+                $0.1 == .value && ($0.0 == "c" || $0.0 == "d")
+            })
+    }
+
+    @Test(
+        "Single decoder acts like 'legacy' when ignoring kind (no default percent-decoding first)")
+    func singleDecoderLegacyBehavior() throws {
+        let dec: ScalarDecoder = { s, _, _ in s?.uppercased() }
+
+        // Keys and values are fed raw to the decoder; no default percent-decoding first.
+        var r = try Qs.decode("abc=def", options: .init(decoder: dec))
+        #expect(r["ABC"] as? String == "DEF")
+
+        // Encoded dot stays encoded because our custom decoder never percent-decodes.
+        r = try Qs.decode("a%2Eb=z", options: .init(allowDots: false, decoder: dec))
+        #expect(r["A%2EB"] as? String == "Z")
+    }
+
+    @Test("decoder wins over legacyDecoder when both are provided")
+    func decoderWinsOverLegacyDecoder() throws {
+        @available(*, deprecated) typealias Legacy = LegacyDecoder
+        let legacy: Legacy = { v, _ in "L:\(v ?? "null")" }
+        let dec: ScalarDecoder = { v, _, k in "K:\(k ?? .value):\(v ?? "null")" }
+        let opt = DecodeOptions(decoder: dec, legacyDecoder: legacy)
+
+        let r = try Qs.decode("x=y", options: opt)
+        #expect(r["K:key:x"] as? String == "K:value:y")
+    }
+
+    @Test("decodeKey coerces non-string decoder result via String(describing:)")
+    func decodeKeyCoercesToString() throws {
+        let dec: ScalarDecoder = { _, _, k in
+            if k == .key { return 42 } else { return "v" }
+        }
+        let r = try Qs.decode("anything=v", options: .init(decoder: dec))
+        #expect(r["42"] as? String == "v")
+    }
+
+    // Note: The Kotlin test that asserts constructor-time validation throwing for
+    // (allowDots=false, decodeDotInKeys=true) is not portable here because Swift enforces
+    // it via a precondition (crash), not a throwable initializer. We already cover this
+    // invalid combo in other suites by marking such tests disabled.
+}
+
+// MARK: - Encoded dot behavior in keys (%2E / %2e) — comprehensive coverage
+
+@Suite("encoded dot behavior in keys (%2E / %2e)")
+struct EncodedDotKeyBehaviorTests {
+
+    @Test(
+        "allowDots=false, decodeDotInKeys=false: encoded dots decode to literal '.'; no dot-splitting"
+    )
+    func encodedDot_noAllow_noDecodeDotKeys() throws {
+        let opt = DecodeOptions(allowDots: false, decodeDotInKeys: false)
+
+        var r = try Qs.decode("a%2Eb=c", options: opt)
+        #expect(r["a.b"] as? String == "c")
+
+        r = try Qs.decode("a%2eb=c", options: opt)
+        #expect(r["a.b"] as? String == "c")
+    }
+
+    @Test(
+        "allowDots=true, decodeDotInKeys=false: double-encoded dots are preserved inside segments; encoded and plain dots split"
+    )
+    func allowDots_true_decodeDotInKeys_false_behavior() throws {
+        // Plain dot splits
+        var r = try Qs.decode("a.b=c", options: .init(allowDots: true, decodeDotInKeys: false))
+        #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+
+        // Double-encoded dot stays encoded inside first segment (no extra split for that part)
+        r = try Qs.decode(
+            "name%252Eobj.first=John",
+            options: .init(allowDots: true, decodeDotInKeys: false))
+        let seg = r["name%2Eobj"] as? [String: Any]
+        #expect((seg?["first"] as? String) == "John")
+
+        // Lowercase single-encoded inside the *first* segment → upstream percent-decoding
+        // exposes the '.'; allowDots splits: "a%2eb.c=d" → a → b → c
+        r = try Qs.decode(
+            "a%2eb.c=d",
+            options: .init(allowDots: true, decodeDotInKeys: false))
+        let a = r["a"] as? [String: Any]
+        let b = a?["b"] as? [String: Any]
+        #expect((b?["c"] as? String) == "d")
+    }
+
+    @Test(
+        "allowDots=true, decodeDotInKeys=true: encoded dots become literal '.' inside a segment (no extra split)"
+    )
+    func allowDots_true_decodeDotInKeys_true_behavior() throws {
+        var r = try Qs.decode(
+            "name%252Eobj.first=John",
+            options: .init(allowDots: true, decodeDotInKeys: true))
+        #expect(((r["name.obj"] as? [String: Any])?["first"] as? String) == "John")
+
+        // Double-encoded single segment becomes a literal dot
+        r = try Qs.decode(
+            "a%252Eb=c",
+            options: .init(allowDots: true, decodeDotInKeys: true))
+        #expect(r["a.b"] as? String == "c")
+
+        // Lowercase variant inside brackets
+        r = try Qs.decode(
+            "a[%2e]=x",
+            options: .init(allowDots: true, decodeDotInKeys: true))
+        #expect(((r["a"] as? [String: Any])?["."] as? String) == "x")
+    }
+
+    @Test("bracket segment: %2E mapped based on decodeDotInKeys; case-insensitive")
+    func bracketSegment_mapping_caseInsensitive() throws {
+        // When disabled, keep '.' result (percent-decoding inside bracket) without further mapping
+        var r = try Qs.decode(
+            "a[%2E]=x",
+            options: .init(allowDots: false, decodeDotInKeys: false))
+        #expect(((r["a"] as? [String: Any])?["."] as? String) == "x")
+
+        r = try Qs.decode(
+            "a[%2e]=x",
+            options: .init(allowDots: true, decodeDotInKeys: false))
+        #expect(((r["a"] as? [String: Any])?["."] as? String) == "x")
+
+        // When enabled, convert to '.' regardless of case
+        r = try Qs.decode(
+            "a[%2E]=x",
+            options: .init(allowDots: true, decodeDotInKeys: true))
+        #expect(((r["a"] as? [String: Any])?["."] as? String) == "x")
+    }
+
+    /// Invalid combination (decodeDotInKeys=true while allowDots=false) is enforced by a precondition
+    /// in DecodeOptions init; cannot be caught here. See dedicated disabled test below.
+    @Test(
+        "allowDots=false, decodeDotInKeys=true is invalid (precondition in initializer)",
+        .enabled(if: false, "initializer precondition; cannot be caught with #expect(throws:)")
+    )
+    func parity_invalidCombo_PRECONDITION() throws {
+        _ = try Qs.decode(
+            "a[%2e]=x",
+            options: .init(allowDots: false, decodeDotInKeys: true)
+        )
+    }
+
+    @Test("bare-key (no '='): behavior matches key decoding path")
+    func bareKey_behavesLikeKeyDecoding() throws {
+        // allowDots=false → %2E becomes '.'; no splitting; strictNullHandling → NSNull
+        var r = try Qs.decode(
+            "a%2Eb",
+            options: .init(
+                allowDots: false,
+                decodeDotInKeys: false,
+                strictNullHandling: true))
+        #expect(r.keys.contains("a.b"))
+        #expect((r["a.b"] is NSNull))
+
+        // allowDots=true & decodeDotInKeys=false — upstream exposes '.'; split on dot; empty value
+        r = try Qs.decode(
+            "a%2Eb",
+            options: .init(allowDots: true, decodeDotInKeys: false))
+        let a = r["a"] as? [String: Any]
+        #expect((a?["b"] as? String) == "")
+    }
+
+    @Test("depth=0 with allowDots=true: do not split key")
+    func depthZero_disablesTopLevelDotSplitting() throws {
+        let r = try Qs.decode("a.b=c", options: .init(allowDots: true, depth: 0))
+        #expect(r["a.b"] as? String == "c")
+    }
+
+    @Test("top-level dot→bracket conversion guardrails: leading/trailing/double dots")
+    func dotToBracket_guardrails() throws {
+        // Leading dot: ".a" → { "a": "x" } (when allowDots=true)
+        var r = try Qs.decode(".a=x", options: .init(allowDots: true, decodeDotInKeys: false))
+        #expect(((r["a"] as? String) == "x"))
+
+        // Trailing dot: "a." remains literal
+        r = try Qs.decode("a.=x", options: .init(allowDots: true, decodeDotInKeys: false))
+        #expect(r["a."] as? String == "x")
+
+        // Double dots: only the second dot (before a token) causes a split; middle dot is literal
+        r = try Qs.decode("a..b=x", options: .init(allowDots: true, decodeDotInKeys: false))
+        let a = r["a."] as? [String: Any]
+        #expect((a?["b"] as? String) == "x")
+    }
+
+    // --- C# parity subset (top-level + bracket + charset) ---
+
+    @Test(
+        "top-level: allowDots=true, decodeDotInKeys=true → plain & encoded dots split (upper/lower)"
+    )
+    func parity_topLevel_allowDots_decodeDotInKeys_true() throws {
+        let opt = DecodeOptions(allowDots: true, decodeDotInKeys: true)
+
+        var r = try Qs.decode("a.b=c", options: opt)
+        #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+
+        r = try Qs.decode("a%2Eb=c", options: opt)
+        #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+
+        r = try Qs.decode("a%2eb=c", options: opt)
+        #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+    }
+
+    @Test(
+        "top-level: allowDots=true, decodeDotInKeys=false → encoded dot also splits (upper/lower)")
+    func parity_topLevel_allowDots_true_decodeDotInKeys_false() throws {
+        let opt = DecodeOptions(allowDots: true, decodeDotInKeys: false)
+
+        var r = try Qs.decode("a%2Eb=c", options: opt)
+        #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+
+        r = try Qs.decode("a%2eb=c", options: opt)
+        #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+    }
+
+    // NOTE: intentionally disabled — this combination violates a precondition in the initializer
+    @Test(
+        "allowDots=false, decodeDotInKeys=true is invalid",
+        .enabled(if: false, "initializer precondition; cannot be caught with #expect(throws:)")
+    )
+    func parity_invalidCombo() throws {
+        _ = try Qs.decode(
+            "a%2Eb=c",
+            options: .init(allowDots: false, decodeDotInKeys: true)
+        )
+    }
+
+    @Test("bracket segment: maps to '.' when decodeDotInKeys=true (case-insensitive)")
+    func parity_bracket_mapsToDot_whenDecodeDotInKeysTrue() throws {
+        let opt = DecodeOptions(allowDots: true, decodeDotInKeys: true)
+        var r = try Qs.decode("a[%2E]=x", options: opt)
+        #expect(((r["a"] as? [String: Any])?["."] as? String) == "x")
+        r = try Qs.decode("a[%2e]=x", options: opt)
+        #expect(((r["a"] as? [String: Any])?["."] as? String) == "x")
+    }
+
+    @Test(
+        "bracket segment: when decodeDotInKeys=false, percent-decoding inside brackets yields '.' (case-insensitive)"
+    )
+    func parity_bracket_percentDecoding_whenDecodeDotInKeysFalse() throws {
+        let opt = DecodeOptions(allowDots: true, decodeDotInKeys: false)
+        var r = try Qs.decode("a[%2E]=x", options: opt)
+        #expect(((r["a"] as? [String: Any])?["."] as? String) == "x")
+        r = try Qs.decode("a[%2e]=x", options: opt)
+        #expect(((r["a"] as? [String: Any])?["."] as? String) == "x")
+    }
+
+    @Test("value tokens always decode %2E → '.'")
+    func parity_valueTokens_decode_percentDot() throws {
+        let r = try Qs.decode("x=%2E")
+        #expect(r["x"] as? String == ".")
+    }
+
+    @Test("latin1: allowDots=true, decodeDotInKeys=true behaves like UTF-8 for top-level & bracket")
+    func parity_latin1_allowDots_true_decodeDotInKeys_true() throws {
+        let opt = DecodeOptions(allowDots: true, decodeDotInKeys: true, charset: .isoLatin1)
+        var r = try Qs.decode("a%2Eb=c", options: opt)
+        #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+        r = try Qs.decode("a[%2E]=x", options: opt)
+        #expect(((r["a"] as? [String: Any])?["."] as? String) == "x")
+    }
+
+    @Test(
+        "latin1: allowDots=true, decodeDotInKeys=false also splits top-level and decodes inside brackets"
+    )
+    func parity_latin1_allowDots_true_decodeDotInKeys_false() throws {
+        let opt = DecodeOptions(allowDots: true, decodeDotInKeys: false, charset: .isoLatin1)
+        var r = try Qs.decode("a%2Eb=c", options: opt)
+        #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+        r = try Qs.decode("a[%2E]=x", options: opt)
+        #expect(((r["a"] as? [String: Any])?["."] as? String) == "x")
+    }
+
+    @Test(
+        "mixed-case encoded brackets + encoded dot after brackets (allowDots=true, decodeDotInKeys=true)"
+    )
+    func parity_mixedCase_encodedBrackets_plus_encodedDot_after() throws {
+        let opt = DecodeOptions(allowDots: true, decodeDotInKeys: true)
+        var r = try Qs.decode("a%5Bb%5D%5Bc%5D%2Ed=x", options: opt)
+        #expect(
+            (((r["a"] as? [String: Any])?["b"] as? [String: Any])?["c"] as? [String: Any])?["d"]
+                as? String == "x")
+        r = try Qs.decode("a%5bb%5d%5bc%5d%2ed=x", options: opt)
+        #expect(
+            (((r["a"] as? [String: Any])?["b"] as? [String: Any])?["c"] as? [String: Any])?["d"]
+                as? String == "x")
+    }
+
+    @Test("nested brackets inside a bracket segment (balanced as one segment)")
+    func parity_nestedBrackets_insideSegment() throws {
+        let opt = DecodeOptions(allowDots: true, decodeDotInKeys: true)
+        // "a[b%5Bc%5D].e=x" → key "b[c]" stays one segment; then ".e" splits
+        let r = try Qs.decode("a[b%5Bc%5D].e=x", options: opt)
+        let a = r["a"] as? [String: Any]
+        #expect(((a?["b[c]"] as? [String: Any])?["e"] as? String) == "x")
+    }
+
+    // NOTE: intentionally disabled — this combination violates a precondition in the initializer
+    @Test(
+        "mixed-case encoded brackets + encoded dot with allowDots=false & decodeDotInKeys=true throws",
+        .enabled(if: false, "initializer precondition; cannot be caught with #expect(throws:)")
+    )
+    func parity_mixedCase_invalidCombo_throws() throws {
+        _ = try Qs.decode(
+            "a%5Bb%5D%5Bc%5D%2Ed=x",
+            options: .init(allowDots: false, decodeDotInKeys: true)
+        )
+    }
+
+    @Test("bracket then encoded dot to next segment with allowDots=true")
+    func parity_bracket_then_encodedDot_nextSegment() throws {
+        let opt = DecodeOptions(allowDots: true, decodeDotInKeys: true)
+        var r = try Qs.decode("a[b]%2Ec=x", options: opt)
+        #expect((((r["a"] as? [String: Any])?["b"] as? [String: Any])?["c"] as? String) == "x")
+        r = try Qs.decode("a[b]%2ec=x", options: opt)
+        #expect((((r["a"] as? [String: Any])?["b"] as? [String: Any])?["c"] as? String) == "x")
+    }
+
+    @Test("mixed-case: top-level encoded dot then bracket with allowDots=true")
+    func parity_topLevel_encodedDot_then_bracket() throws {
+        let opt = DecodeOptions(allowDots: true, decodeDotInKeys: true)
+        let r = try Qs.decode("a%2E[b]=x", options: opt)
+        #expect(((r["a"] as? [String: Any])?["b"] as? String) == "x")
+    }
+
+    @Test("top-level lowercase encoded dot splits when allowDots=true (decodeDotInKeys=false)")
+    func parity_lowercaseEncodedDot_allowDots_true_decodeDotInKeys_false() throws {
+        let opt = DecodeOptions(allowDots: true, decodeDotInKeys: false)
+        let r = try Qs.decode("a%2eb=c", options: opt)
+        #expect(((r["a"] as? [String: Any])?["b"] as? String) == "c")
+    }
+
+    @Test("dot before index with allowDots=true: index remains index")
+    func parity_dotBeforeIndex_allowDots_true() throws {
+        let opt = DecodeOptions(allowDots: true)
+        let r = try Qs.decode("foo[0].baz[0]=15&foo[0].bar=2", options: opt)
+        let foo = r["foo"] as? [Any]
+        let zero = foo?.first as? [String: Any]
+        #expect((zero?["bar"] as? String) == "2")
+        #expect((zero?["baz"] as? [String]) == ["15"])
+    }
+
+    @Test("trailing dot ignored when allowDots=true")
+    func parity_trailingDot_ignored_allowDots_true() throws {
+        let r = try Qs.decode("user.email.=x", options: .init(allowDots: true))
+        #expect(((r["user"] as? [String: Any])?["email"] as? String) == "x")
+    }
+
+    // NOTE: The Kotlin test "kind-aware decoder receives KEY ..." is omitted here:
+    // Swift's ValueDecoder currently has the signature (String?, String.Encoding?) -> Any?
+    // and does not receive a DecodeKind. Once you add a kind-aware hook, you can port that test.
+}
+
+// MARK: - Remainder wrapping & strictDepth behavior (ported expectations)
+
+@Suite("splitKeyIntoSegments — remainder wrapping & strictDepth behavior")
+struct RemainderWrappingStrictDepthTests {
+
+    @Test(
+        "allowDots=true, depth=1: wrap the remainder from the next unprocessed bracket"
+    )
+    func remainderWrapped_allowDots_depth1() throws {
+        let segs = try QsSwift.Decoder.splitKeyIntoSegments(
+            originalKey: "a.b.c",
+            allowDots: true,
+            maxDepth: 1,
+            strictDepth: false
+        )
+        #expect(segs == ["a", "[b]", "[[c]]"])  // Kotlin: ["a","[b]","[[c]]"]
+    }
+
+    @Test(
+        "bracketed input, depth=2: collect two groups, wrap remainder as a single synthetic segment"
+    )
+    func remainderWrapped_bracketed_depth2() throws {
+        let segs = try QsSwift.Decoder.splitKeyIntoSegments(
+            originalKey: "a[b][c][d]",
+            allowDots: false,
+            maxDepth: 2,
+            strictDepth: false
+        )
+        #expect(segs == ["a", "[b]", "[c]", "[[d]]"])  // Kotlin: ["a","[b]","[c]","[[d]]"]
+    }
+
+    @Test(
+        "unterminated bracket group: do not throw even with strictDepth=true; wrap raw remainder"
+    )
+    func unterminatedBracket_noThrowStrict() throws {
+        // Unterminated after first '[': "a[b[c" -> ["a", "[[b[c]"]
+        let segs = try QsSwift.Decoder.splitKeyIntoSegments(
+            originalKey: "a[b[c",
+            allowDots: false,
+            maxDepth: 5,
+            strictDepth: true
+        )
+        #expect(segs == ["a", "[[b[c]"])
+    }
+
+    @Test("strictDepth=true: well-formed depth overflow throws")
+    func wellFormedDepthOverflow_throws() {
+        var didThrow = false
+        do {
+            _ = try QsSwift.Decoder.splitKeyIntoSegments(
+                originalKey: "a[b][c][d]",
+                allowDots: false,
+                maxDepth: 2,
+                strictDepth: true
+            )
+        } catch {
+            didThrow = true
+        }
+        #expect(didThrow)
+    }
+
+    @Test("depth=0: never split; return the original key as a single segment")
+    func depthZero_neverSplit() throws {
+        var segs = try QsSwift.Decoder.splitKeyIntoSegments(
+            originalKey: "a.b.c",
+            allowDots: true,
+            maxDepth: 0,
+            strictDepth: false
+        )
+        #expect(segs == ["a.b.c"])  // depth=0: never split
+
+        segs = try QsSwift.Decoder.splitKeyIntoSegments(
+            originalKey: "a[b][c]",
+            allowDots: false,
+            maxDepth: 0,
+            strictDepth: false
+        )
+        #expect(segs == ["a[b][c]"])  // depth=0: never split
     }
 }
 

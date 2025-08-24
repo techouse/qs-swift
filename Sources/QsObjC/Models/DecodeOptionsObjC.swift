@@ -27,7 +27,7 @@
 
         /// If set, called to decode a single percent-encoded scalar **before** it’s interpreted
         /// by the core. Return the decoded value (e.g. `NSString`, `NSNumber`, `NSNull`, etc.),
-        /// or `nil` to let the core fall back to its standard behavior.
+        /// or `nil` to produce an absent value. The core will honor `nil` (no fallback).
         ///
         /// - Parameters:
         ///   - string:  The raw token as an Objective‑C string. May be `nil` if the source is empty.
@@ -40,6 +40,17 @@
         ///   Foundation types (NSString/NSNumber/NSArray/NSDictionary/NSNull) for best bridging.
         public typealias ValueDecoderBlock = (NSString?, NSNumber?) -> Any?
         public var valueDecoderBlock: ValueDecoderBlock?
+
+        /// Preferred: KEY/VALUE-aware scalar decoder.
+        /// Signature: token, charset (String.Encoding.rawValue), kind (0=key, 1=value) -> Any?
+        public typealias DecoderBlock = (NSString?, NSNumber?, NSNumber?) -> Any?
+        public var decoderBlock: DecoderBlock?
+
+        /// Back‑compat: legacy two‑argument decoder, mirroring Swift `LegacyDecoder` (deprecated).
+        /// Prefer `decoderBlock` (the KEY/VALUE‑aware 3‑argument variant).
+        /// Returning `nil` produces an absent value; the core will not fall back.
+        public typealias LegacyDecoderBlock = (NSString?, NSNumber?) -> Any?
+        public var legacyDecoderBlock: LegacyDecoderBlock?
 
         // MARK: - Key syntax
 
@@ -115,11 +126,38 @@
         /// Internal bridge that constructs the Swift `DecodeOptions` used by the core.
         /// We also normalize the dot‑parsing flags so **either** Obj‑C flag enables dots.
         var swift: QsSwift.DecodeOptions {
-            // Bridge valueDecoderBlock → Swift ValueDecoder
-            let swiftDecoder: QsSwift.ValueDecoder? = {
-                guard let blk = valueDecoderBlock else { return nil }
+            // Bridge Obj-C decoder blocks → Swift ScalarDecoder
+            // Prefer the KEY/VALUE-aware `decoderBlock`; fall back to `valueDecoderBlock`.
+            let swiftDecoder: QsSwift.ScalarDecoder? = {
+                if let blk = decoderBlock {
+                    let box = _BlockBox(blk)
+                    return { (str: String?, charset: String.Encoding?, kind: QsSwift.DecodeKind?) in
+                        let csNum = charset.map { NSNumber(value: $0.rawValue) }
+                        let kindNum: NSNumber =
+                            {
+                                switch kind ?? .value {
+                                case .key: return 0
+                                case .value: return 1
+                                }
+                            }() as NSNumber
+                        return box.block(str as NSString?, csNum, kindNum)
+                    }
+                }
+                if let blk = valueDecoderBlock {
+                    let box = _BlockBox(blk)
+                    return { (str: String?, charset: String.Encoding?, _: QsSwift.DecodeKind?) in
+                        let csNum = charset.map { NSNumber(value: $0.rawValue) }
+                        return box.block(str as NSString?, csNum)
+                    }
+                }
+                return nil
+            }()
+
+            // Bridge legacyDecoderBlock → Swift LegacyDecoder (deprecated)
+            let swiftLegacy: QsSwift.LegacyDecoder? = {
+                guard let blk = legacyDecoderBlock else { return nil }
                 let box = _BlockBox(blk)
-                return { str, charset in
+                return { (str: String?, charset: String.Encoding?) in
                     let csNum = charset.map { NSNumber(value: $0.rawValue) }
                     return box.block(str as NSString?, csNum)
                 }
@@ -129,6 +167,7 @@
                 // Dot handling: either flag enables it (compat with other ports).
                 allowDots: allowDots || decodeDotInKeys,
                 decoder: swiftDecoder,
+                legacyDecoder: swiftLegacy,
                 decodeDotInKeys: decodeDotInKeys,
 
                 // Lists / arrays
@@ -166,7 +205,7 @@
         /// }
         /// ```
         @discardableResult
-        func with(_ configure: (DecodeOptionsObjC) -> Void) -> Self {
+        public func with(_ configure: (DecodeOptionsObjC) -> Void) -> Self {
             configure(self)
             return self
         }
