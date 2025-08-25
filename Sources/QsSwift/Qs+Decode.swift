@@ -228,7 +228,7 @@ extension Qs {
                 //     objectify it as "0","1",... so tests like "[]=&a=b" pass.
                 if obj.isEmpty, let firstList = parsed as? [Any] {
                     var indexedMap: [String: Any] = [:]
-                    for (index, element) in firstList.enumerated() {
+                    for (index, element) in firstList.enumerated() where !(element is Undefined) {
                         indexedMap[String(index)] = element
                     }
                     obj = indexedMap
