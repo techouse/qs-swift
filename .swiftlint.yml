@@ -9,6 +9,7 @@ excluded:
   - Bench
   - ObjCE2ETests
   - Tests
+  - Tools
 
 disabled_rules:
   - trailing_whitespace
