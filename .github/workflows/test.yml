@@ -270,14 +270,28 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Install Node.js
+      - name: Cache SwiftPM artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.swiftpm
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+            Tools/QsSwiftComparison/.build
+          key: spm-${{ runner.os }}-xcode-16.3-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode-16.3-
+
+      - name: Install Node.js (with npm cache)
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: Tools/QsSwiftComparison/js/package-lock.json
 
       - name: Install qs.js
         working-directory: Tools/QsSwiftComparison/js
-        run: npm install
+        run: npm ci
 
       - name: Show qs.js version
         working-directory: Tools/QsSwiftComparison/js
