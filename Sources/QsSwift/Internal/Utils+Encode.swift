@@ -57,8 +57,14 @@ extension QsSwift.Utils {
 
         // Fast path: if no byte needs encoding, return the original
         let allowParens = (format == .rfc1738)
+
+        @inline(__always)
+        func shouldPreserve(_ byte: UInt8) -> Bool {
+            return isUnreserved(byte) || (allowParens && (byte == 0x28 || byte == 0x29))
+        }
+
         var needsEncoding = false
-        for byte in str.utf8 where !(isUnreserved(byte) || (allowParens && (byte == 0x28 || byte == 0x29))) {
+        for byte in str.utf8 where !shouldPreserve(byte) {
             needsEncoding = true
             break
         }
