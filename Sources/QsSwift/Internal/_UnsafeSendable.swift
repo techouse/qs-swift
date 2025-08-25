@@ -35,5 +35,7 @@
 /// Prefer safer alternatives whenever possible; use this as a last resort.
 @frozen public struct _UnsafeSendable<T>: @unchecked Sendable {
     public let value: T
-    public init(_ inputValue: T) { value = inputValue }
+    @inlinable public init(_ inputValue: T) { self.value = inputValue }
+    // Convenience for readability at call sites
+    public init(wrapping inputValue: T) { self.value = inputValue }
 }
