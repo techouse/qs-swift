@@ -100,4 +100,12 @@ public enum Sentinel: CustomStringConvertible, Sendable {
         }
         return true
     }
+
+    #if DEBUG
+        /// Test-only hook that exposes the ASCII case-insensitive comparison used by `Sentinel.match`.
+        /// This is compiled only in Debug builds (e.g., when running unit tests).
+        internal static func __test_asciiEquals(_ left: String, _ right: String) -> Bool {
+            asciiCaseInsensitiveEquals(left, right)
+        }
+    #endif
 }
