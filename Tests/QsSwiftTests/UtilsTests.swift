@@ -680,6 +680,49 @@ struct UtilsTests {
         #expect(resultDict2.keys.contains("foo"))
     }
 
+    @Test("Utils.merge - array overlay with Undefined preserves/replaces by index (default options)")
+    func testMergeArrayOverlayWithUndefined_Default() async throws {
+        let target: [Any?] = ["x", Undefined(), "z"]
+        let source: [Any?] = [Undefined(), "Y", Undefined()]
+        let merged = Utils.merge(target: target, source: source) as! [Any?]
+        #expect(merged.count == 3)
+        #expect(merged[0] as? String == "x") // undefined in source leaves target
+        #expect(merged[1] as? String == "Y") // replaced
+        #expect(merged[2] as? String == "z") // undefined in source leaves target
+    }
+
+    @Test("Utils.merge - array overlay with parseLists=false prunes remaining Undefined")
+    func testMergeArrayOverlayWithUndefined_ParseListsFalsePrunes() async throws {
+        let target: [Any?] = [Undefined(), "b", Undefined()]
+        let source: [Any?] = [Undefined(), Undefined()]
+        let opts = DecodeOptions(parseLists: false)
+        let merged = Utils.merge(target: target, source: source, options: opts) as! [Any?]
+        // remaining Undefined entries are pruned under parseLists=false
+        #expect(merged.count == 1)
+        #expect(merged[0] as? String == "b")
+    }
+
+    @Test("Utils.merge - non-sequence source appends to array")
+    func testMergeArrayWithNonSequenceSourceAppends() async throws {
+        let target: [Any] = ["a", "b"]
+        let merged = Utils.merge(target: target, source: 42) as! [Any]
+        #expect(merged.count == 3)
+        #expect(merged[0] as? String == "a")
+        #expect(merged[1] as? String == "b")
+        #expect(merged[2] as? Int == 42)
+    }
+
+    @Test("Utils.merge - set target stays Set<AnyHashable> and ignores Undefined in source")
+    func testMergeSetTargetPreservesTypeAndIgnoresUndefined() async throws {
+        let undefined = Undefined()
+        let target = Set<AnyHashable>(["a"])
+        let source: [Any?] = [undefined, "c", "a"]
+        let merged = Utils.merge(target: target, source: source) as! Set<AnyHashable>
+        #expect(merged.contains("a"))
+        #expect(merged.contains("c"))
+        #expect(merged.count == 2)
+    }
+
     // MARK: - Utils.combine tests
 
     @Test("Utils.combine - combines both lists")
