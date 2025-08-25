@@ -41,8 +41,8 @@ jobs:
         run: |
           set -euo pipefail
           brew update
-          brew install swiftlint
-          swiftlint version
+          brew install mint
+          mint run realm/SwiftLint@0.59.1 swiftlint version
 
       - name: Run SwiftLint
         run: |
