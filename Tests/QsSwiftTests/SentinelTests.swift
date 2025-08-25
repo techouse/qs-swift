@@ -70,6 +70,9 @@ struct SentinelTests {
 
             // ASCII letters should compare case-insensitively across the whole string.
             #expect(Sentinel.__test_asciiEquals("UTF8=%E2%9C%93", "utf8=%e2%9c%93") == true)
+
+            // Letters fold; digits/punctuation remain exact.
+            #expect(Sentinel.__test_asciiEquals("A0Zz", "a0zz") == true)
         #else
             // Fallback assertion through the public API when debug-only hook isn't available.
             #expect(Sentinel.match(encodedPart: "UTF8=%E2%9C%93", caseInsensitive: true) == .charset)
