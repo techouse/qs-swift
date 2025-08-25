@@ -27,6 +27,9 @@ extension QsSwift.Decoder {
         options: DecodeOptions,
         currentListLength: Int
     ) throws -> Any? {
+        if options.throwOnLimitExceeded, options.listLimit == 0 {
+            throw DecodeError.listLimitExceeded(limit: options.listLimit)
+        }
         if let stringVal = value as? String, !stringVal.isEmpty, options.comma, stringVal.contains(",") {
             let splitVal = stringVal.split(separator: ",", omittingEmptySubsequences: false).map(
                 String.init)
