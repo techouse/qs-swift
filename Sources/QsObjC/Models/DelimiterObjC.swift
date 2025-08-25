@@ -88,9 +88,9 @@
         public func split(_ input: String) -> [String] {
             switch backing {
             case .string(let sd):
-                return sd.split(input: input).map { String($0) }
+                return sd.split(input: input)
             case .regex(let rd):
-                return rd.split(input: input).map { String($0) }
+                return rd.split(input: input)
             }
         }
     }
