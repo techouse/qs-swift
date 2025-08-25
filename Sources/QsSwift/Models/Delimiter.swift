@@ -105,7 +105,7 @@ extension RegexDelimiter {
         do {
             return try RegexDelimiter(pattern)
         } catch {
-            preconditionFailure("Invalid built-in delimiter regex: \(pattern). Error: \(error)")
+            preconditionFailure("Invalid built-in delimiter regex: \(pattern) — \(type(of: error)): \(error)")
         }
     }
 
