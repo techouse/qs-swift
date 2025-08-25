@@ -251,7 +251,7 @@ jobs:
 
   ensure-compatibility:
     name: Ensure compatibility with qs.js
-    needs: analyze
+    needs: [ analyze, tests ]
     runs-on: macos-15
     timeout-minutes: 15
     steps:
@@ -270,7 +270,7 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Install Node.js 20
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -279,8 +279,12 @@ jobs:
         working-directory: Tools/QsSwiftComparison/js
         run: npm install
 
+      - name: Show qs.js version
+        working-directory: Tools/QsSwiftComparison/js
+        run: |
+          echo "qs version: $(node -p "require('qs/package.json').version")"
+
       - name: Compare Swift vs qs.js outputs (deterministic)
-        if: ${{ always() }}
         continue-on-error: true
         working-directory: Tools/QsSwiftComparison
         env:
