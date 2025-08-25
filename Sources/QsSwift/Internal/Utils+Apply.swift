@@ -7,7 +7,8 @@ extension Utils {
     /// - Parameters:
     ///   - value: The value or Array to apply the function to.
     ///   - fn: The function to apply.
-    /// - Returns: The result of applying the function, or nil if the input is nil.
+    /// - Returns: The transformed value if `value` is a `T` or `[T]`; otherwise `nil`. Also returns `nil` when `value` is `nil`.
+    @usableFromInline
     static func apply<T>(_ value: Any?, _ fn: (T) -> T) -> Any? {
         if let array = value as? [T] {
             return array.map(fn)
