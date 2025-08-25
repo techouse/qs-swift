@@ -44,7 +44,7 @@
             // guarded cast to satisfy SwiftLint (no force_cast) while preserving the
             // original invariant: if this is ever not the expected shape, fail fast.
             guard let dict = value as? [String: Any] else {
-                preconditionFailure("QsDecodedMap.value must be a [String: Any] produced by the core")
+                preconditionFailure("QsDecodedMap.value expected [String: Any], got \(type(of: value))")
             }
             return QsSwift.DecodedMap(dict)
         }
