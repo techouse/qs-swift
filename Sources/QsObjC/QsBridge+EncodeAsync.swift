@@ -35,8 +35,8 @@
 
             DispatchQueue.global(qos: .userInitiated).async {
                 var err: NSError?
-                let s = self.encode(objBox.value, options: optBox.value, error: &err)
-                DispatchQueue.main.async { completion(s, err) }
+                let encoded = self.encode(objBox.value, options: optBox.value, error: &err)
+                DispatchQueue.main.async { completion(encoded, err) }
             }
         }
 
@@ -59,9 +59,9 @@
 
             DispatchQueue.global(qos: .userInitiated).async {
                 var err: NSError?
-                let s = self.encode(objBox.value, options: optBox.value, error: &err)
-                completion(s, err)
+                let encoded = self.encode(objBox.value, options: optBox.value, error: &err)
+                completion(encoded, err)
             }
         }
     }
-#endif  // canImport(ObjectiveC) && QS_OBJC_BRIDGE
+#endif

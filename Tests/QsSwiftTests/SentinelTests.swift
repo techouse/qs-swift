@@ -61,4 +61,21 @@ struct SentinelTests {
         // Non-matching noise
         #expect(Sentinel.match(encodedPart: "foo=utf8=%E2%9C%93", caseInsensitive: true) == nil)
     }
+    @Test("Sentinel ASCII-folding semantics")
+    func test_ascii_folding_semantics() {
+        #if DEBUG
+            // Non-letters should not be folded: '[' (0x5B) vs '{' (0x7B)
+            #expect(Sentinel.__test_asciiEquals("[", "{") == false)
+            #expect(Sentinel.__test_asciiEquals("{", "[") == false)
+
+            // ASCII letters should compare case-insensitively across the whole string.
+            #expect(Sentinel.__test_asciiEquals("UTF8=%E2%9C%93", "utf8=%e2%9c%93") == true)
+
+            // Letters fold; digits/punctuation remain exact.
+            #expect(Sentinel.__test_asciiEquals("A0Zz", "a0zz") == true)
+        #else
+            // Fallback assertion through the public API when debug-only hook isn't available.
+            #expect(Sentinel.match(encodedPart: "UTF8=%E2%9C%93", caseInsensitive: true) == .charset)
+        #endif
+    }
 }

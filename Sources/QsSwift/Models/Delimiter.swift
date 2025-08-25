@@ -50,28 +50,27 @@ public struct RegexDelimiter: Delimiter, Equatable, @unchecked Sendable {
     ///   can break on extended grapheme clusters (emoji, diacritics).
     public func split(input: String) -> [String] {
         let full = NSRange(input.startIndex..<input.endIndex, in: input)
-        let matches = regex.matches(in: input, options: [], range: full)
-
-        // Fast path: no matches → return the whole string
-        guard !matches.isEmpty else { return [input] }
-
         var out: [String] = []
-        out.reserveCapacity(matches.count + 1)
-
+        var hasMatch = false
         var lastUTF16 = 0
-        for m in matches {
-            let r = m.range
-            // Append slice from last end → start of this match (if any)
-            if r.location > lastUTF16 {
+        regex.enumerateMatches(in: input, options: [], range: full) { match, _, _ in
+            guard let match else { return }
+            hasMatch = true
+            let range = match.range
+            // Ignore zero-width matches (e.g., ^, $). Delimiters must consume at least 1 UTF-16 unit.
+            if range.length == 0 { return }
+            if range.location >= lastUTF16 {
                 let start = String.Index(utf16Offset: lastUTF16, in: input)
-                let end = String.Index(utf16Offset: r.location, in: input)
+                let end = String.Index(utf16Offset: range.location, in: input)
                 out.append(String(input[start..<end]))
             }
-            lastUTF16 = r.location + r.length
+            lastUTF16 = range.location + range.length
         }
+        if !hasMatch { return [input] }
 
-        // Trailing remainder, if any
-        if lastUTF16 < input.utf16.count {
+        // Trailing remainder, allow empty when delimiter is at the end to match components(separatedBy:)
+        let utf16Count = input.utf16.count
+        if lastUTF16 <= utf16Count {
             let start = String.Index(utf16Offset: lastUTF16, in: input)
             out.append(String(input[start...]))
         }
@@ -97,9 +96,20 @@ extension StringDelimiter {
 }
 
 extension RegexDelimiter {
+    /// Compile a built-in regex pattern for a preset. These patterns are hard-coded
+    /// and expected to be valid; if not, we fail fast with a clear message.
+    @inline(__always)
+    private static func _compileOrCrash(_ pattern: String) -> RegexDelimiter {
+        do {
+            return try RegexDelimiter(pattern)
+        } catch {
+            preconditionFailure("Invalid built-in delimiter regex: \(pattern) — \(type(of: error)): \(error)")
+        }
+    }
+
     /// Splits on `;` with optional surrounding whitespace.
-    public static let semicolonWithWhitespace = try! RegexDelimiter(#"\s*;\s*"#)
+    public static let semicolonWithWhitespace: RegexDelimiter = _compileOrCrash(#"\s*;\s*"#)
 
     /// Splits on `,` **or** `;`, each with optional surrounding whitespace.
-    public static let commaOrSemicolon = try! RegexDelimiter(#"\s*[,;]\s*"#)
+    public static let commaOrSemicolon: RegexDelimiter = _compileOrCrash(#"\s*[,;]\s*"#)
 }

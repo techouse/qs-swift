@@ -680,6 +680,49 @@ struct UtilsTests {
         #expect(resultDict2.keys.contains("foo"))
     }
 
+    @Test("Utils.merge - array overlay with Undefined preserves/replaces by index (default options)")
+    func testMergeArrayOverlayWithUndefined_Default() async throws {
+        let target: [Any?] = ["x", Undefined(), "z"]
+        let source: [Any?] = [Undefined(), "Y", Undefined()]
+        let merged = Utils.merge(target: target, source: source) as! [Any?]
+        #expect(merged.count == 3)
+        #expect(merged[0] as? String == "x") // undefined in source leaves target
+        #expect(merged[1] as? String == "Y") // replaced
+        #expect(merged[2] as? String == "z") // undefined in source leaves target
+    }
+
+    @Test("Utils.merge - array overlay with parseLists=false prunes remaining Undefined")
+    func testMergeArrayOverlayWithUndefined_ParseListsFalsePrunes() async throws {
+        let target: [Any?] = [Undefined(), "b", Undefined()]
+        let source: [Any?] = [Undefined(), Undefined()]
+        let opts = DecodeOptions(parseLists: false)
+        let merged = Utils.merge(target: target, source: source, options: opts) as! [Any?]
+        // remaining Undefined entries are pruned under parseLists=false
+        #expect(merged.count == 1)
+        #expect(merged[0] as? String == "b")
+    }
+
+    @Test("Utils.merge - non-sequence source appends to array")
+    func testMergeArrayWithNonSequenceSourceAppends() async throws {
+        let target: [Any] = ["a", "b"]
+        let merged = Utils.merge(target: target, source: 42) as! [Any]
+        #expect(merged.count == 3)
+        #expect(merged[0] as? String == "a")
+        #expect(merged[1] as? String == "b")
+        #expect(merged[2] as? Int == 42)
+    }
+
+    @Test("Utils.merge - set target stays Set<AnyHashable> and ignores Undefined in source")
+    func testMergeSetTargetPreservesTypeAndIgnoresUndefined() async throws {
+        let undefined = Undefined()
+        let target = Set<AnyHashable>(["a"])
+        let source: [Any?] = [undefined, "c", "a"]
+        let merged = Utils.merge(target: target, source: source) as! Set<AnyHashable>
+        #expect(merged.contains("a"))
+        #expect(merged.contains("c"))
+        #expect(merged.count == 2)
+    }
+
     // MARK: - Utils.combine tests
 
     @Test("Utils.combine - combines both lists")
@@ -779,8 +822,6 @@ struct UtilsTests {
         #expect(Utils.interpretNumericEntities("&#;") == "&#;")
         // Missing terminating semicolon
         #expect(Utils.interpretNumericEntities("&#12") == "&#12")
-        // Hex form not supported by this decoder
-        #expect(Utils.interpretNumericEntities("&#x41;") == "&#x41;")
         // Space inside
         #expect(Utils.interpretNumericEntities("&# 12;") == "&# 12;")
         // Negative / non-digit after '#'
@@ -793,6 +834,58 @@ struct UtilsTests {
     func testInterpretNumericEntitiesOutOfRangeUnchanged() async throws {
         // Max valid is 0x10FFFF (1114111). One above should be left as literal.
         #expect(Utils.interpretNumericEntities("&#1114112;") == "&#1114112;")
+    }
+
+    @Test("Utils.interpretNumericEntities - hex form basic cases (lower/upper X and hex digits)")
+    func testInterpretNumericEntitiesHexBasicCases() async throws {
+        // lower/upper X supported
+        #expect(Utils.interpretNumericEntities("&#x41;") == "A")
+        #expect(Utils.interpretNumericEntities("&#X41;") == "A")
+        // sequence of hex entities
+        #expect(Utils.interpretNumericEntities("&#x41;&#x42;&#x43;") == "ABC")
+        // lowercase hex digits
+        #expect(Utils.interpretNumericEntities("&#x4a;") == "J") // 0x4A = 'J'
+    }
+
+    @Test("Utils.interpretNumericEntities - hex form handles supplementary planes and surrogate halves")
+    func testInterpretNumericEntitiesHexSupplementary() async throws {
+        // Single hex entity in supplementary plane
+        #expect(Utils.interpretNumericEntities("&#x1F4A9;") == "💩")
+        #expect(Utils.interpretNumericEntities("&#x1F600;") == "😀")
+        // Surrogate halves expressed in hex pair up
+        #expect(Utils.interpretNumericEntities("&#xD83D;&#xDCA9;") == "💩")
+        #expect(Utils.interpretNumericEntities("&#xD83D;&#xDE00;") == "😀")
+    }
+
+    @Test("Utils.interpretNumericEntities - hex boundaries and invalid remain literal")
+    func testInterpretNumericEntitiesHexBoundariesAndInvalid() async throws {
+        // Highest valid scalar decodes
+        let maxScalar = String(UnicodeScalar(0x10FFFF)!)
+        #expect(Utils.interpretNumericEntities("&#x10FFFF;") == maxScalar)
+        // One past max remains literal
+        #expect(Utils.interpretNumericEntities("&#x110000;") == "&#x110000;")
+        // Missing digits and bad hex stay literal
+        #expect(Utils.interpretNumericEntities("&#x;") == "&#x;")
+        #expect(Utils.interpretNumericEntities("&#xZZ;") == "&#xZZ;")
+    }
+
+    @Test("Utils.interpretNumericEntities - hex entities in context")
+    func testInterpretNumericEntitiesHexInContext() async throws {
+        // '=' is 0x3D
+        #expect(Utils.interpretNumericEntities("x&#x3D;y") == "x=y")
+        // mixed case and multiple
+        #expect(Utils.interpretNumericEntities("&#x65;&#88;&#x63;") == "eXc")
+        // boundaries
+        #expect(Utils.interpretNumericEntities("&#x41;BC") == "ABC")
+        #expect(Utils.interpretNumericEntities("ABC&#x21;") == "ABC!")
+    }
+
+    @Test("Utils.interpretNumericEntities - mixed base surrogate halves")
+    func testInterpretNumericEntitiesMixedSurrogates() async throws {
+        // High surrogate decimal, low surrogate hex
+        #expect(Utils.interpretNumericEntities("&#55357;&#xDCA9;") == "💩")
+        // High surrogate hex, low surrogate decimal
+        #expect(Utils.interpretNumericEntities("&#xD83D;&#56489;") == "💩")
     }
 
     // MARK: - Utils.apply tests

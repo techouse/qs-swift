@@ -1,0 +1,61 @@
+included:
+  - Sources
+
+excluded:
+  - .build
+  - .swiftpm
+  - .history
+  - DerivedData
+  - Bench
+  - ObjCE2ETests
+  - Tests
+
+disabled_rules:
+  - trailing_whitespace
+  - opening_brace
+  - cyclomatic_complexity
+  - function_body_length
+  - type_body_length
+
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - closure_end_indentation
+
+analyzer_rules:
+  - unused_declaration
+  - unused_import
+
+trailing_comma:
+  mandatory_comma: true
+
+line_length:
+  warning: 120
+  error: 120
+  ignores_comments: true
+  ignores_urls: true
+  ignores_interpolated_strings: true
+  ignores_multiline_strings: true
+
+identifier_name:
+  min_length: 2
+  allowed_symbols: "_"
+  validates_start_with_lowercase: off
+  excluded:
+    - a
+    - b
+    - i
+    - j
+    - k
+    - l
+    - r
+    - x
+    - y
+    - id
+
+type_name:
+  excluded:
+    - Qs
+    - _AnySendableBox
+    - _BlockBox
+    - _UnsafeSendable

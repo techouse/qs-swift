@@ -128,7 +128,7 @@ public struct EncodeOptions: @unchecked Sendable {
     /// `.indices`/`.repeatKey`; finally defaults to `.indices`.
     public var getListFormat: ListFormat {
         if let listFormat { return listFormat }
-        if let v = _indices { return v ? .indices : .repeatKey }
+        if let indicesValue = _indices { return indicesValue ? .indices : .repeatKey }
         return .indices
     }
 

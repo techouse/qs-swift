@@ -39,7 +39,7 @@
             QsSwift.FunctionFilter { key, value in
                 let out = self.block(key as NSString, value)
                 // Map Obj-C sentinel → Swift sentinel to DROP the key entirely.
-                if let u = out as? UndefinedObjC { return u.swift }
+                if let undefinedObjC = out as? UndefinedObjC { return undefinedObjC.swift }
                 return out
             }
         }
@@ -86,18 +86,18 @@
         }
 
         private let backing: Backing
-        private init(_ b: Backing) { self.backing = b }
+        private init(_ backing: Backing) { self.backing = backing }
 
         // MARK: Factories
 
         /// Wrap a function-style filter.
-        public static func function(_ f: FunctionFilterObjC) -> FilterObjC {
-            FilterObjC(.function(f.swift))
+        public static func function(_ functionFilter: FunctionFilterObjC) -> FilterObjC {
+            FilterObjC(.function(functionFilter.swift))
         }
 
         /// Wrap an iterable-style filter.
-        public static func iterable(_ f: IterableFilterObjC) -> FilterObjC {
-            FilterObjC(.iterable(f.swift))
+        public static func iterable(_ iterableFilter: IterableFilterObjC) -> FilterObjC {
+            FilterObjC(.iterable(iterableFilter.swift))
         }
 
         // MARK: - Convenience builders
@@ -105,19 +105,19 @@
         /// Build a function filter that **excludes** keys for which `shouldExclude` returns true.
         /// Implementation uses the `Undefined` sentinel to omit excluded keys.
         public static func excluding(_ shouldExclude: @escaping (String) -> Bool) -> FilterObjC {
-            let f = QsSwift.FunctionFilter { key, value in
+            let functionFilter = QsSwift.FunctionFilter { key, value in
                 shouldExclude(key) ? QsSwift.Undefined() : value
             }
-            return FilterObjC(.function(f))
+            return FilterObjC(.function(functionFilter))
         }
 
         /// Build a function filter that **includes only** keys for which `shouldInclude` returns true.
         /// All other keys are omitted via the `Undefined` sentinel.
         public static func including(_ shouldInclude: @escaping (String) -> Bool) -> FilterObjC {
-            let f = QsSwift.FunctionFilter { key, value in
+            let functionFilter = QsSwift.FunctionFilter { key, value in
                 shouldInclude(key) ? value : QsSwift.Undefined()
             }
-            return FilterObjC(.function(f))
+            return FilterObjC(.function(functionFilter))
         }
 
         /// Convenience: allow only these keys (iterable filter).
@@ -140,8 +140,8 @@
         /// Expose the underlying Swift `Filter` for the encoder.
         var swift: QsSwift.Filter {
             switch backing {
-            case .function(let f): return f
-            case .iterable(let i): return i
+            case .function(let functionFilter): return functionFilter
+            case .iterable(let iterableFilter): return iterableFilter
             }
         }
     }
