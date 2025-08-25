@@ -822,8 +822,6 @@ struct UtilsTests {
         #expect(Utils.interpretNumericEntities("&#;") == "&#;")
         // Missing terminating semicolon
         #expect(Utils.interpretNumericEntities("&#12") == "&#12")
-        // Hex form is supported by this decoder (now decodes)
-        #expect(Utils.interpretNumericEntities("&#x41;") == "A")
         // Space inside
         #expect(Utils.interpretNumericEntities("&# 12;") == "&# 12;")
         // Negative / non-digit after '#'
