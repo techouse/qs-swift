@@ -175,10 +175,26 @@ extension Qs {
                 )
 
             case let mapAnyHashable as [AnyHashable: Any]:
-                // Kotlin’s `mapKeys { it.key.toString() }`
-                return OrderedDictionary(
-                    uniqueKeysWithValues: mapAnyHashable.map { (String(describing: $0.key), $0.value) }
-                )
+                // Deterministic collision policy:
+                // If distinct AnyHashable keys stringify to the same String,
+                // prefer values coming from String keys over non-String keys.
+                var od: OrderedDictionary<String, Any> = [:]
+                var rank: [String: Int] = [:]  // higher rank wins: String=2, non-String=1
+
+                for (key, value) in mapAnyHashable {
+                    let stringKey = String(describing: key)
+                    let keyTypeRank = (key is String) ? 2 : 1
+                    if let old = rank[stringKey] {
+                        if keyTypeRank >= old {  // String beats non-String; ties keep later value
+                            od[stringKey] = value
+                            rank[stringKey] = keyTypeRank
+                        }
+                    } else {
+                        od[stringKey] = value
+                        rank[stringKey] = keyTypeRank
+                    }
+                }
+                return od
 
             default:
                 return [:]
