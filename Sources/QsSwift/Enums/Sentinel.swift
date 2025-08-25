@@ -85,20 +85,13 @@ public enum Sentinel: CustomStringConvertible, Sendable {
 
     @inlinable
     internal static func asciiCaseInsensitiveEquals(_ left: String, _ right: String) -> Bool {
-        // Fast path: lengths must match.
         let leftUTF8 = left.utf8
         let rightUTF8 = right.utf8
-        guard leftUTF8.count == rightUTF8.count else { return false }
-
-        var leftIterator = leftUTF8.makeIterator()
-        var rightIterator = rightUTF8.makeIterator()
-        while let leftByte = leftIterator.next(), let rightByte = rightIterator.next() {
-            // Fold ASCII uppercase letters to lowercase by OR-ing 0x20; non-letters are unchanged.
-            let foldedLeft: UInt8 = (leftByte >= 0x41 && leftByte <= 0x5A) ? (leftByte | 0x20) : leftByte
-            let foldedRight: UInt8 = (rightByte >= 0x41 && rightByte <= 0x5A) ? (rightByte | 0x20) : rightByte
-            if foldedLeft != foldedRight { return false }
+        return leftUTF8.elementsEqual(rightUTF8) { leftByte, rightByte in
+            let fl: UInt8 = (leftByte >= 0x41 && leftByte <= 0x5A) ? (leftByte | 0x20) : leftByte
+            let fr: UInt8 = (rightByte >= 0x41 && rightByte <= 0x5A) ? (rightByte | 0x20) : rightByte
+            return fl == fr
         }
-        return true
     }
 
     #if DEBUG
