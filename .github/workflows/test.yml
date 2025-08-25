@@ -276,7 +276,7 @@ jobs:
           node-version: '20'
 
       - name: Install qs.js
-        working-directory: Tools/QsSwiftComparison
+        working-directory: Tools/QsSwiftComparison/js
         run: npm install
 
       - name: Compare Swift vs qs.js outputs (deterministic)
