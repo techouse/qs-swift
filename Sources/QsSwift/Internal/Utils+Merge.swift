@@ -97,10 +97,6 @@ extension QsSwift.Utils {
                         return pruned
                     }
 
-                    if target is Set<AnyHashable> {
-                        return Set(mutableTarget.values.compactMap { $0 as? AnyHashable })
-                    }
-
                     return mutableTarget.sorted { $0.key < $1.key }.map(\.value)
                 } else {
                     if let seq = asSequence(source) {
