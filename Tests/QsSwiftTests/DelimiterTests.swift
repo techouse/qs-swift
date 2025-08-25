@@ -11,7 +11,7 @@ struct DelimiterTests {
         (";", ["", ""]),
         ("a;;b", ["a", "", "b"]),
         (";a;", ["", "a", ""]),
-        (";a;", ["", "a", ""]),
+        ("a;", ["a", ""]),
         (";;", ["", "", ""]),
         ("a;;", ["a", "", ""]),
         (";;a", ["", "", "a"]),
@@ -28,9 +28,6 @@ struct DelimiterTests {
 
     @Test("Regex delimiter ';' includes empty segments like components(separatedBy:)")
     func regexDelimiterIncludesEmptySegments() throws {
-        #expect(throws: Never.self) {
-            _ = try RegexDelimiter(";")
-        }
         let delim = try RegexDelimiter(";")
         for (s, expected) in Self.cases {
             let got = delim.split(input: s)
@@ -56,5 +53,8 @@ struct DelimiterTests {
         // Literal delimiter with graphemes
         let s = StringDelimiter(";")
         #expect(s.split(input: "\(family);\(family)") == [family, family])
+
+        // Literal comma with regional indicator flags
+        #expect(StringDelimiter(",").split(input: flags) == ["🇺🇸", "🇨🇦"])
     }
 }
