@@ -61,8 +61,9 @@ public struct RegexDelimiter: Delimiter, Equatable, @unchecked Sendable {
         var lastUTF16 = 0
         for match in matches {
             let range = match.range
-            // Append slice from last end → start of this match (if any)
-            if range.location > lastUTF16 {
+            // Append slice from last end → start of this match, **including empty** when adjacent
+            // so behavior mirrors String.components(separatedBy:).
+            if range.location >= lastUTF16 {
                 let start = String.Index(utf16Offset: lastUTF16, in: input)
                 let end = String.Index(utf16Offset: range.location, in: input)
                 out.append(String(input[start..<end]))
@@ -70,8 +71,8 @@ public struct RegexDelimiter: Delimiter, Equatable, @unchecked Sendable {
             lastUTF16 = range.location + range.length
         }
 
-        // Trailing remainder, if any
-        if lastUTF16 < input.utf16.count {
+        // Trailing remainder, allow empty when delimiter is at the end to match components(separatedBy:)
+        if lastUTF16 <= input.utf16.count {
             let start = String.Index(utf16Offset: lastUTF16, in: input)
             out.append(String(input[start...]))
         }
