@@ -27,5 +27,5 @@ public struct DecodedMap: @unchecked Sendable {
     public let value: [String: Any]
 
     @inlinable
-    public init(_ v: [String: Any]) { self.value = v }
+    public init(_ dict: [String: Any]) { self.value = dict }
 }

@@ -1,0 +1,43 @@
+included:
+  - Sources
+
+disabled_rules:
+  - trailing_whitespace
+  - opening_brace
+
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - closure_end_indentation
+
+trailing_comma:
+  mandatory_comma: true
+
+line_length:
+  warning: 120
+  ignores_comments: true
+  ignores_urls: true
+
+identifier_name:
+  min_length: 2
+  allowed_symbols: "_"
+  validates_start_with_lowercase: false
+
+function_body_length:
+  warning: 300
+  error: 500
+
+cyclomatic_complexity:
+  warning: 65
+  error: 80
+
+type_name:
+  excluded:
+    - Qs
+    - _AnySendableBox
+    - _BlockBox
+    - _UnsafeSendable
+
+type_body_length:
+  warning: 350
+  error: 600

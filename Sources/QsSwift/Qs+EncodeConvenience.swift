@@ -1,5 +1,5 @@
 extension Qs {
-    /// MARK: - Convenience
+    // MARK: - Convenience
 
     /// Non-throwing convenience: returns `nil` if encoding fails (e.g., cyclic references).
     ///

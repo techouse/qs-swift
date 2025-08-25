@@ -779,8 +779,8 @@ struct UtilsTests {
         #expect(Utils.interpretNumericEntities("&#;") == "&#;")
         // Missing terminating semicolon
         #expect(Utils.interpretNumericEntities("&#12") == "&#12")
-        // Hex form not supported by this decoder
-        #expect(Utils.interpretNumericEntities("&#x41;") == "&#x41;")
+        // Hex form is supported by this decoder (now decodes)
+        #expect(Utils.interpretNumericEntities("&#x41;") == "A")
         // Space inside
         #expect(Utils.interpretNumericEntities("&# 12;") == "&# 12;")
         // Negative / non-digit after '#'
@@ -793,6 +793,50 @@ struct UtilsTests {
     func testInterpretNumericEntitiesOutOfRangeUnchanged() async throws {
         // Max valid is 0x10FFFF (1114111). One above should be left as literal.
         #expect(Utils.interpretNumericEntities("&#1114112;") == "&#1114112;")
+    }
+
+    @Test("Utils.interpretNumericEntities - hex form basic cases (lower/upper X and hex digits)")
+    func testInterpretNumericEntitiesHexBasicCases() async throws {
+        // lower/upper X supported
+        #expect(Utils.interpretNumericEntities("&#x41;") == "A")
+        #expect(Utils.interpretNumericEntities("&#X41;") == "A")
+        // sequence of hex entities
+        #expect(Utils.interpretNumericEntities("&#x41;&#x42;&#x43;") == "ABC")
+        // lowercase hex digits
+        #expect(Utils.interpretNumericEntities("&#x4a;") == "J") // 0x4A = 'J'
+    }
+
+    @Test("Utils.interpretNumericEntities - hex form handles supplementary planes and surrogate halves")
+    func testInterpretNumericEntitiesHexSupplementary() async throws {
+        // Single hex entity in supplementary plane
+        #expect(Utils.interpretNumericEntities("&#x1F4A9;") == "💩")
+        #expect(Utils.interpretNumericEntities("&#x1F600;") == "😀")
+        // Surrogate halves expressed in hex pair up
+        #expect(Utils.interpretNumericEntities("&#xD83D;&#xDCA9;") == "💩")
+        #expect(Utils.interpretNumericEntities("&#xD83D;&#xDE00;") == "😀")
+    }
+
+    @Test("Utils.interpretNumericEntities - hex boundaries and invalid remain literal")
+    func testInterpretNumericEntitiesHexBoundariesAndInvalid() async throws {
+        // Highest valid scalar decodes
+        let maxScalar = String(UnicodeScalar(0x10FFFF)!)
+        #expect(Utils.interpretNumericEntities("&#x10FFFF;") == maxScalar)
+        // One past max remains literal
+        #expect(Utils.interpretNumericEntities("&#x110000;") == "&#x110000;")
+        // Missing digits and bad hex stay literal
+        #expect(Utils.interpretNumericEntities("&#x;") == "&#x;")
+        #expect(Utils.interpretNumericEntities("&#xZZ;") == "&#xZZ;")
+    }
+
+    @Test("Utils.interpretNumericEntities - hex entities in context")
+    func testInterpretNumericEntitiesHexInContext() async throws {
+        // '=' is 0x3D
+        #expect(Utils.interpretNumericEntities("x&#x3D;y") == "x=y")
+        // mixed case and multiple
+        #expect(Utils.interpretNumericEntities("&#x65;&#88;&#x63;") == "eXc")
+        // boundaries
+        #expect(Utils.interpretNumericEntities("&#x41;BC") == "ABC")
+        #expect(Utils.interpretNumericEntities("ABC&#x21;") == "ABC!")
     }
 
     // MARK: - Utils.apply tests

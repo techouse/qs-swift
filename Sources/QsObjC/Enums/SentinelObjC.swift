@@ -67,8 +67,8 @@
         /// }
         /// ```
         public static func matchEncodedPart(_ part: NSString) -> NSNumber? {
-            guard let s = QsSwift.Sentinel.match(encodedPart: part as String) else { return nil }
-            return _box(s)
+            guard let _sentinel = QsSwift.Sentinel.match(encodedPart: part as String) else { return nil }
+            return _box(_sentinel)
         }
 
         /// Returns an `NSNumber` wrapping `SentinelObjC.rawValue` for a given
@@ -77,18 +77,18 @@
         ///
         /// - Parameter rawEncoding: A `NSStringEncoding`/`String.Encoding.rawValue`.
         public static func forCharset(_ rawEncoding: UInt) -> NSNumber? {
-            guard let s = QsSwift.Sentinel.forCharset(String.Encoding(rawValue: rawEncoding)) else {
+            guard let _sentinel = QsSwift.Sentinel.forCharset(String.Encoding(rawValue: rawEncoding)) else {
                 return nil
             }
-            return _box(s)
+            return _box(_sentinel)
         }
 
         // MARK: - Private
 
         /// Small helper: map Swift sentinel → boxed Obj-C enum.
-        private static func _box(_ s: QsSwift.Sentinel) -> NSNumber {
-            let e: SentinelObjC = (s == .iso) ? .iso : .charset
-            return NSNumber(value: e.rawValue)
+        private static func _box(_ sentinel: QsSwift.Sentinel) -> NSNumber {
+            let _enum: SentinelObjC = (sentinel == .iso) ? .iso : .charset
+            return NSNumber(value: _enum.rawValue)
         }
     }
 #endif  // canImport(ObjectiveC) && QS_OBJC_BRIDGE

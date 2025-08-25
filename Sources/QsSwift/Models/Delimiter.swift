@@ -59,15 +59,15 @@ public struct RegexDelimiter: Delimiter, Equatable, @unchecked Sendable {
         out.reserveCapacity(matches.count + 1)
 
         var lastUTF16 = 0
-        for m in matches {
-            let r = m.range
+        for match in matches {
+            let range = match.range
             // Append slice from last end → start of this match (if any)
-            if r.location > lastUTF16 {
+            if range.location > lastUTF16 {
                 let start = String.Index(utf16Offset: lastUTF16, in: input)
-                let end = String.Index(utf16Offset: r.location, in: input)
+                let end = String.Index(utf16Offset: range.location, in: input)
                 out.append(String(input[start..<end]))
             }
-            lastUTF16 = r.location + r.length
+            lastUTF16 = range.location + range.length
         }
 
         // Trailing remainder, if any
@@ -97,9 +97,20 @@ extension StringDelimiter {
 }
 
 extension RegexDelimiter {
+    /// Compile a built-in regex pattern for a preset. These patterns are hard-coded
+    /// and expected to be valid; if not, we fail fast with a clear message.
+    @inline(__always)
+    private static func _compileOrCrash(_ pattern: String) -> RegexDelimiter {
+        do {
+            return try RegexDelimiter(pattern)
+        } catch {
+            preconditionFailure("Invalid built-in delimiter regex: \(pattern). Error: \(error)")
+        }
+    }
+
     /// Splits on `;` with optional surrounding whitespace.
-    public static let semicolonWithWhitespace = try! RegexDelimiter(#"\s*;\s*"#)
+    public static let semicolonWithWhitespace: RegexDelimiter = _compileOrCrash(#"\s*;\s*"#)
 
     /// Splits on `,` **or** `;`, each with optional surrounding whitespace.
-    public static let commaOrSemicolon = try! RegexDelimiter(#"\s*[,;]\s*"#)
+    public static let commaOrSemicolon: RegexDelimiter = _compileOrCrash(#"\s*[,;]\s*"#)
 }

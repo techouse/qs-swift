@@ -24,7 +24,6 @@ let package = Package(
             dependencies: [
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 .product(name: "OrderedCollections", package: "swift-collections"),
-                .product(name: "DequeModule", package: "swift-collections"),
             ],
             path: "Sources/QsSwift",
             swiftSettings: [

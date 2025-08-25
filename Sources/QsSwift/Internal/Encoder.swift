@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import OrderedCollections
 
@@ -30,6 +31,7 @@ internal enum Encoder {
     ///   - addQueryPrefix: If true, adds a '?' prefix to the output.
     ///   - depth: The current depth in the encoding process (used for recursion).
     /// - Returns: The encoded result as Any (typically a String or [String]).
+    @usableFromInline
     static func encode(
         data: Any?,
         undefined: Bool,
@@ -112,11 +114,11 @@ internal enum Encoder {
         if let date = obj as? Date {
             obj = serializeDate?(date) ?? Self.iso8601().string(from: date)
         } else if isComma, let iterable = obj as? [Any] {
-            obj = iterable.map { v -> Any in
-                if let d = v as? Date {
-                    return serializeDate?(d) ?? Self.iso8601().string(from: d)
+            obj = iterable.map { element -> Any in
+                if let date = element as? Date {
+                    return serializeDate?(date) ?? Self.iso8601().string(from: date)
                 }
-                return v
+                return element
             }
         }
 
@@ -208,36 +210,36 @@ internal enum Encoder {
                 let keys: [Any] = {
                     switch obj {
                     case let od as OrderedDictionary<String, Any>:
-                        var k = [String]()
-                        k.reserveCapacity(od.count)
-                        for (kk, _) in od { k.append(kk) }  // preserves insertion order
+                        var _keys = [String]()
+                        _keys.reserveCapacity(od.count)
+                        for (_key, _) in od { _keys.append(_key) }  // preserves insertion order
                         if let sort = sort {
-                            k = k.sorted { sort($0, $1) < 0 }
+                            _keys = _keys.sorted { sort($0, $1) < 0 }
                         } else if depth > 0 {
-                            let split = k.stablePartition { key in isContainer(od[key]) }
+                            let split = _keys.stablePartition { key in isContainer(od[key]) }
                             if encoder != nil {
-                                k[..<split].sort()
-                                k[split...].sort()
+                                _keys[..<split].sort()
+                                _keys[split...].sort()
                             }
                         }
-                        return k
+                        return _keys
 
                     case let dict as [String: Any]:
                         // enumerate to preserve insertion order
-                        var k = [String]()
-                        k.reserveCapacity(dict.count)
-                        for (kk, _) in dict { k.append(kk) }
+                        var _keys = [String]()
+                        _keys.reserveCapacity(dict.count)
+                        for (_key, _) in dict { _keys.append(_key) }
                         if let sort = sort {
-                            k = k.sorted { sort($0, $1) < 0 }
-                            return k
+                            _keys = _keys.sorted { sort($0, $1) < 0 }
+                            return _keys
                         }
                         // At nested depths, partition: primitives first, containers later (stable)
                         if depth > 0, encoder != nil {
-                            let split = k.stablePartition { key in isContainer(dict[key]) }  // containers last
-                            k[..<split].sort()  // primitives A..Z
-                            k[split...].sort()  // containers A..Z
+                            let split = _keys.stablePartition { key in isContainer(dict[key]) }  // containers last
+                            _keys[..<split].sort()  // primitives A..Z
+                            _keys[split...].sort()  // containers A..Z
                         }
-                        return k
+                        return _keys
 
                     case let nd as NSDictionary:
                         var ks: [Any] = []
@@ -253,12 +255,12 @@ internal enum Encoder {
                                 var cont: [Any] = []
                                 prim.reserveCapacity(ks.count)
                                 cont.reserveCapacity(ks.count)
-                                for k in ks {
-                                    let v = nd[k]
-                                    if isContainer(v) {
-                                        cont.append(k)
+                                for key in ks {
+                                    let value = nd[key]
+                                    if isContainer(value) {
+                                        cont.append(key)
                                     } else {
-                                        prim.append(k)
+                                        prim.append(key)
                                     }
                                 }
                                 prim.sort { String(describing: $0) < String(describing: $1) }
@@ -273,8 +275,10 @@ internal enum Encoder {
                         return ks
 
                     case _ where arrayView != nil:
-                        let count = arrayView!.count
-                        return Array(0..<count)
+                        if let arr = arrayView {
+                            return Array(0..<arr.count)
+                        }
+                        return []
 
                     default:
                         return []
@@ -303,34 +307,34 @@ internal enum Encoder {
         }
 
         // Process each key
-        for i in 0..<objKeys.count {
-            let key = objKeys[i]
+        for index in 0..<objKeys.count {
+            let key = objKeys[index]
 
             let (value, valueUndefined): (Any?, Bool) = {
-                if let keyDict = key as? [String: Any], let v = keyDict["value"] {
-                    return (v is Undefined ? nil : v, v is Undefined)
+                if let keyDict = key as? [String: Any], let _value = keyDict["value"] {
+                    return (_value is Undefined ? nil : _value, _value is Undefined)
                 } else {
                     switch obj {
 
                     case let od as OrderedDictionary<String, Any>:
-                        if let k = key as? String {
-                            let v = od[k]
-                            let contains = od.index(forKey: k) != nil
-                            return (v, v == nil && !contains)
+                        if let keyString = key as? String {
+                            let value = od[keyString]
+                            let contains = od.index(forKey: keyString) != nil
+                            return (value, value == nil && !contains)
                         }
                         return (nil, true)
 
                     case let dict as [String: Any]:
-                        if let k = key as? String {
-                            let v = dict[k].flatMap { unwrapOptional($0) } ?? dict[k]
-                            return (v, v == nil && !dict.keys.contains(k))
+                        if let keyString = key as? String {
+                            let value = dict[keyString].flatMap { unwrapOptional($0) } ?? dict[keyString]
+                            return (value, value == nil && !dict.keys.contains(keyString))
                         }
                         return (nil, true)
 
                     case let nd as NSDictionary:
-                        let v = nd[key]
+                        let value = nd[key]
                         // NSDictionary can’t store nil; nil here means “absent”
-                        return (v, v == nil)
+                        return (value, value == nil)
 
                     default:
                         if let arr = arrayView, let idx = key as? Int, idx >= 0, idx < arr.count {
@@ -407,7 +411,9 @@ internal enum Encoder {
 
         return values
     }
+}
 
+extension QsSwift.Encoder {
     // MARK: - Helpers
 
     /// Use a dedicated class marked @unchecked Sendable to satisfy concurrency checks.
@@ -419,9 +425,9 @@ internal enum Encoder {
     /// Unwraps an optional value, returning nil if the value is nil or an empty optional.
     @inline(__always)
     private static func unwrapOptional(_ any: Any) -> Any? {
-        let m = Mirror(reflecting: any)
-        if m.displayStyle != .optional { return any }
-        return m.children.first?.value
+        let mirror = Mirror(reflecting: any)
+        if mirror.displayStyle != .optional { return any }
+        return mirror.children.first?.value
     }
 
     /// Describes the value for encoding, handling nil and optional values.
@@ -436,9 +442,9 @@ internal enum Encoder {
 
     /// Converts a value to an array if it is an array-like type.
     @inline(__always)
-    private static func arrayize(_ v: Any?) -> [Any]? {
-        if let a = v as? [Any] { return a }
-        if let ns = v as? NSArray { return ns.map { $0 } }  // handles [String], [Int], etc.
+    private static func arrayize(_ value: Any?) -> [Any]? {
+        if let array = value as? [Any] { return array }
+        if let nsArray = value as? NSArray { return nsArray.map { $0 } }
         return nil
     }
 
@@ -456,10 +462,10 @@ internal enum Encoder {
 
     /// Checks if the value is a container (array, dictionary, etc.).
     @inline(__always)
-    private static func isContainer(_ v: Any?) -> Bool {
-        if v is [Any] || v is NSArray { return true }
-        if v is [String: Any] || v is NSDictionary { return true }
-        if v is OrderedDictionary<String, Any> { return true }
+    private static func isContainer(_ value: Any?) -> Bool {
+        if value is [Any] || value is NSArray { return true }
+        if value is [String: Any] || value is NSDictionary { return true }
+        if value is OrderedDictionary<String, Any> { return true }
         return false
     }
 
@@ -467,10 +473,10 @@ internal enum Encoder {
     private static func iso8601() -> ISO8601DateFormatter {
         let key = "QsSwift.Encoder.iso8601"
         let dict = Thread.current.threadDictionary
-        if let f = dict[key] as? ISO8601DateFormatter { return f }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        dict[key] = f
-        return f
+        if let formatter = dict[key] as? ISO8601DateFormatter { return formatter }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        dict[key] = formatter
+        return formatter
     }
 }

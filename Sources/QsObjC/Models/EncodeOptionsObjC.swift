@@ -75,12 +75,13 @@
 
         /// Deprecated (mirrors Swift). Used only when `listFormat == nil`.
         /// `NSNumber(bool)`: `nil` = “unspecified”, `0` = false, `1` = true.
-        public var indices: NSNumber? = nil
+        public var indices: NSNumber?
 
         /// List/array style (e.g. `.brackets`, `.indices`, `.comma`). If `nil`, the legacy
         /// `indices` setting above is consulted.
-        // Swift-facing storage (optional enum). Not visible to Obj-C.
-        @nonobjc public var listFormat: ListFormatObjC? = nil
+        ///
+        /// Swift-facing storage (optional enum). Not visible to Obj-C.
+        @nonobjc public var listFormat: ListFormatObjC?
 
         // Obj-C-facing boxed accessor under the same Obj-C name.
         // Obj-C will see: @property (nullable, nonatomic, strong) NSNumber *listFormat;
@@ -105,7 +106,7 @@
         public var sortKeysCaseInsensitively: Bool = false
 
         /// Bridges Swift’s filter options. To omit keys from Obj-C, return `UndefinedObjC`.
-        public var filter: FilterObjC? = nil
+        public var filter: FilterObjC?
 
         // MARK: - Bridge to Swift core
 
@@ -134,12 +135,12 @@
             let swiftSorter: QsSwift.Sorter? = {
                 if let blk = sortComparatorBlock {
                     let box = _BlockBox(blk)
-                    return { a, b in box.block(a, b) }  // expects -1/0/+1
+                    return { firstValue, secondValue in box.block(firstValue, secondValue) }  // expects -1/0/+1
                 }
                 if sortKeysCaseInsensitively {
-                    return { a, b in
-                        let sa = a.map { String(describing: $0) } ?? ""
-                        let sb = b.map { String(describing: $0) } ?? ""
+                    return { firstValue, secondValue in
+                        let sa = firstValue.map { String(describing: $0) } ?? ""
+                        let sb = secondValue.map { String(describing: $0) } ?? ""
                         let primary = sa.caseInsensitiveCompare(sb)
                         if primary != .orderedSame { return primary.rawValue }
                         // Tie-breaker to make ordering deterministic: binary, case-sensitive

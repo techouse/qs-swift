@@ -153,31 +153,31 @@ extension Qs {
 
         // Early outs for empty
         if input == nil { return [:] }
-        if let s = input as? String, s.isEmpty { return [:] }
-        if let m = input as? [AnyHashable: Any], m.isEmpty { return [:] }
-        if let m = input as? [String: Any], m.isEmpty { return [:] }
-        if let m = input as? [String: Any?], m.isEmpty { return [:] }
+        if let string = input as? String, string.isEmpty { return [:] }
+        if let mapAnyHashable = input as? [AnyHashable: Any], mapAnyHashable.isEmpty { return [:] }
+        if let mapStringAny = input as? [String: Any], mapStringAny.isEmpty { return [:] }
+        if let mapStringOptionalAny = input as? [String: Any?], mapStringOptionalAny.isEmpty { return [:] }
 
         // Build an ordered key/value view of the input
         let tmp: OrderedDictionary<String, Any> = try {
             switch input {
-            case let s as String:
-                return try Decoder.parseQueryStringValues(s, options: options)
+            case let string as String:
+                return try QsSwift.Decoder.parseQueryStringValues(string, options: options)
 
-            case let m as [String: Any?]:
+            case let mapStringOptionalAny as [String: Any?]:
                 return OrderedDictionary(
-                    uniqueKeysWithValues: m.map { ($0.key, $0.value ?? NSNull()) }
+                    uniqueKeysWithValues: mapStringOptionalAny.map { ($0.key, $0.value ?? NSNull()) }
                 )
 
-            case let m as [String: Any]:
+            case let mapStringAny as [String: Any]:
                 return OrderedDictionary(
-                    uniqueKeysWithValues: m.map { ($0.key, $0.value) }
+                    uniqueKeysWithValues: mapStringAny.map { ($0.key, $0.value) }
                 )
 
-            case let m as [AnyHashable: Any]:
+            case let mapAnyHashable as [AnyHashable: Any]:
                 // Kotlin’s `mapKeys { it.key.toString() }`
                 return OrderedDictionary(
-                    uniqueKeysWithValues: m.map { (String(describing: $0.key), $0.value) }
+                    uniqueKeysWithValues: mapAnyHashable.map { (String(describing: $0.key), $0.value) }
                 )
 
             default:
@@ -195,7 +195,7 @@ extension Qs {
         var obj: [String: Any] = [:]
         if !tmp.isEmpty {
             for (key, value) in tmp {
-                let parsed = try Decoder.parseKeys(
+                let parsed = try QsSwift.Decoder.parseKeys(
                     givenKey: key,
                     value: value,
                     options: finalOptions,
@@ -211,12 +211,11 @@ extension Qs {
                 // (b) If the first parsed thing is a *list* (e.g. top-level "[]"),
                 //     objectify it as "0","1",... so tests like "[]=&a=b" pass.
                 if obj.isEmpty, let firstList = parsed as? [Any] {
-                    var m: [String: Any] = [:]
-                    m.reserveCapacity(firstList.count)
-                    for (i, v) in firstList.enumerated() {
-                        m[String(i)] = v
+                    var indexedMap: [String: Any] = [:]
+                    for (index, element) in firstList.enumerated() {
+                        indexedMap[String(index)] = element
                     }
-                    obj = m
+                    obj = indexedMap
                     continue
                 }
 
@@ -227,12 +226,11 @@ extension Qs {
                 if let list = parsed as? [Any] {
                     // Top-level array fragment → convert to string-indexed map,
                     // dropping Undefined placeholders so we only add real values.
-                    var m: [String: Any] = [:]
-                    m.reserveCapacity(list.count)
-                    for (i, v) in list.enumerated() {
-                        if !(v is Undefined) { m[String(i)] = v }
+                    var indexed: [String: Any] = [:]
+                    for (index, element) in list.enumerated() where !(element is Undefined) {
+                        indexed[String(index)] = element
                     }
-                    if let merged = Utils.merge(target: obj, source: m, options: finalOptions)
+                    if let merged = Utils.merge(target: obj, source: indexed, options: finalOptions)
                         as? [String: Any]
                     {
                         obj = merged

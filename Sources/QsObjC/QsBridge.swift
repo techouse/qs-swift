@@ -99,15 +99,15 @@
             guard let input else { return nil }
 
             // NSString → String
-            if let s = input as? NSString { return s as String }
+            if let stringValue = input as? NSString { return stringValue as String }
 
             // NSDictionary → [AnyHashable: Any] (fall back to re-materialization if needed)
-            if let d = input as? NSDictionary {
-                if !forceReduce, let cast = d as? [AnyHashable: Any] {
+            if let dictionary = input as? NSDictionary {
+                if !forceReduce, let cast = dictionary as? [AnyHashable: Any] {
                     return cast
                 }
                 var out: [AnyHashable: Any] = [:]
-                d.forEach { key, value in
+                dictionary.forEach { key, value in
                     if let hk = key as? AnyHashable {
                         out[hk] = value
                     } else {
@@ -118,7 +118,7 @@
             }
 
             // NSArray → [Any]
-            if let a = input as? NSArray { return a as? [Any] ?? a.map { $0 } }
+            if let arrayValue = input as? NSArray { return arrayValue as? [Any] ?? arrayValue.map { $0 } }
 
             // Numbers, NSNull, etc. can pass through
             return input
@@ -151,60 +151,60 @@
         {
             switch input {
             // Strings
-            case let s as NSString:
-                return s as String
+            case let stringValue as NSString:
+                return stringValue as String
 
             // Already ordered Swift dict (String keys)
             case let od as OrderedDictionary<String, Any>:
                 var out = OrderedDictionary<String, Any>()
                 out.reserveCapacity(od.count)
-                for (k, v) in od { out[k] = _bridgeInputForEncode(v, seen: &seen) }
+                for (key, value) in od { out[key] = _bridgeInputForEncode(value, seen: &seen) }
                 return out
 
             // Already ordered Swift dict (NSString keys)
             case let od as OrderedDictionary<NSString, Any>:
                 var out = OrderedDictionary<String, Any>()
                 out.reserveCapacity(od.count)
-                for (k, v) in od {
-                    out[k as String] = _bridgeInputForEncode(v, seen: &seen)
+                for (nsKey, value) in od {
+                    out[nsKey as String] = _bridgeInputForEncode(value, seen: &seen)
                 }
                 return out
 
             // NSDictionary → OrderedDictionary<String, Any> (stringify keys)
-            case let d as NSDictionary:
-                let obj = d as AnyObject
+            case let dict as NSDictionary:
+                let obj = dict as AnyObject
                 let id = ObjectIdentifier(obj)
-                if seen.contains(id) { return d }  // true cycle
+                if seen.contains(id) { return dict }  // true cycle
                 let inserted = seen.insert(id).inserted
 
                 var out = OrderedDictionary<String, Any>()
-                out.reserveCapacity(d.count)
-                d.forEach { (k, v) in
-                    out[stringifyKey(k)] = _bridgeInputForEncode(v, seen: &seen)
+                out.reserveCapacity(dict.count)
+                dict.forEach { (key, value) in
+                    out[stringifyKey(key)] = _bridgeInputForEncode(value, seen: &seen)
                 }
                 if inserted { seen.remove(id) }
                 return out
 
             // NSArray → [Any]
-            case let a as NSArray:
-                let obj = a as AnyObject
+            case let array as NSArray:
+                let obj = array as AnyObject
                 let id = ObjectIdentifier(obj)
-                if seen.contains(id) { return a }
+                if seen.contains(id) { return array }
                 let inserted = seen.insert(id).inserted
-                let mapped = a.map { _bridgeInputForEncode($0, seen: &seen) }
+                let mapped = array.map { _bridgeInputForEncode($0, seen: &seen) }
                 if inserted { seen.remove(id) }
                 return mapped
 
             // Plain Swift dict → OrderedDictionary<String, Any>
-            case let d as [String: Any]:
+            case let dict as [String: Any]:
                 var out = OrderedDictionary<String, Any>()
-                out.reserveCapacity(d.count)
-                for (k, v) in d { out[k] = _bridgeInputForEncode(v, seen: &seen) }
+                out.reserveCapacity(dict.count)
+                for (key, value) in dict { out[key] = _bridgeInputForEncode(value, seen: &seen) }
                 return out
 
             // Plain Swift array
-            case let a as [Any]:
-                return a.map { _bridgeInputForEncode($0, seen: &seen) }
+            case let array as [Any]:
+                return array.map { _bridgeInputForEncode($0, seen: &seen) }
 
             // Scalars / everything else
             default:
@@ -220,16 +220,16 @@
         /// - **Key stringification** (`String(describing:)`)
         /// - **Identity cycles** (returns the original Foundation object when revisiting it)
         @inline(__always)
-        internal static func bridgeUndefinedPreservingOrder(_ v: Any?) -> Any? {
+        internal static func bridgeUndefinedPreservingOrder(_ value: Any?) -> Any? {
             var seen = Set<ObjectIdentifier>()
-            return _bridgeUndefinedPreservingOrder(v, seen: &seen)
+            return _bridgeUndefinedPreservingOrder(value, seen: &seen)
         }
 
         @inline(__always)
         internal static func _bridgeUndefinedPreservingOrder(
-            _ v: Any?, seen: inout Set<ObjectIdentifier>
+            _ value: Any?, seen: inout Set<ObjectIdentifier>
         ) -> Any? {
-            switch v {
+            switch value {
             // ObjC sentinel → Swift sentinel
             case is UndefinedObjC:
                 return QsSwift.Undefined.instance
@@ -238,8 +238,8 @@
             case let od as OrderedDictionary<String, Any>:
                 var out = OrderedDictionary<String, Any>()
                 out.reserveCapacity(od.count)
-                for (k, val) in od {
-                    out[k] = _bridgeUndefinedPreservingOrder(val, seen: &seen) ?? val
+                for (key, val) in od {
+                    out[key] = _bridgeUndefinedPreservingOrder(val, seen: &seen) ?? val
                 }
                 return out
 
@@ -247,51 +247,51 @@
             case let od as OrderedDictionary<NSString, Any>:
                 var out = OrderedDictionary<String, Any>()
                 out.reserveCapacity(od.count)
-                for (k, val) in od {
-                    out[k as String] = _bridgeUndefinedPreservingOrder(val, seen: &seen) ?? val
+                for (nsKey, val) in od {
+                    out[nsKey as String] = _bridgeUndefinedPreservingOrder(val, seen: &seen) ?? val
                 }
                 return out
 
             // NSDictionary → OrderedDictionary<String, Any>
-            case let d as NSDictionary:
-                let obj = d as AnyObject
+            case let dict as NSDictionary:
+                let obj = dict as AnyObject
                 let id = ObjectIdentifier(obj)
-                if seen.contains(id) { return d }  // keep cycles
+                if seen.contains(id) { return dict }  // keep cycles
                 let inserted = seen.insert(id).inserted
                 var out = OrderedDictionary<String, Any>()
-                out.reserveCapacity(d.count)
-                d.forEach { (k, val) in
-                    out[stringifyKey(k)] = _bridgeUndefinedPreservingOrder(val, seen: &seen) ?? val
+                out.reserveCapacity(dict.count)
+                dict.forEach { (key, val) in
+                    out[stringifyKey(key)] = _bridgeUndefinedPreservingOrder(val, seen: &seen) ?? val
                 }
                 if inserted { seen.remove(id) }
                 return out
 
             // NSArray → [Any]
-            case let a as NSArray:
-                let obj = a as AnyObject
+            case let array as NSArray:
+                let obj = array as AnyObject
                 let id = ObjectIdentifier(obj)
-                if seen.contains(id) { return a }
+                if seen.contains(id) { return array }
                 let inserted = seen.insert(id).inserted
-                let mapped = a.map { _bridgeUndefinedPreservingOrder($0, seen: &seen) ?? $0 }
+                let mapped = array.map { _bridgeUndefinedPreservingOrder($0, seen: &seen) ?? $0 }
                 if inserted { seen.remove(id) }
                 return mapped
 
             // Plain Swift dict → OrderedDictionary<String, Any>
-            case let d as [String: Any]:
+            case let dict as [String: Any]:
                 var out = OrderedDictionary<String, Any>()
-                out.reserveCapacity(d.count)
-                for (k, val) in d {
-                    out[k] = _bridgeUndefinedPreservingOrder(val, seen: &seen) ?? val
+                out.reserveCapacity(dict.count)
+                for (key, val) in dict {
+                    out[key] = _bridgeUndefinedPreservingOrder(val, seen: &seen) ?? val
                 }
                 return out
 
             // Plain Swift array
-            case let a as [Any]:
-                return a.map { _bridgeUndefinedPreservingOrder($0, seen: &seen) ?? $0 }
+            case let array as [Any]:
+                return array.map { _bridgeUndefinedPreservingOrder($0, seen: &seen) ?? $0 }
 
             // Scalars / everything else
             default:
-                return v
+                return value
             }
         }
 

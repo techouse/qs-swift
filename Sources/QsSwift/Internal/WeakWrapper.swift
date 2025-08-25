@@ -52,17 +52,17 @@ final class WeakWrapper: NSObject {
     override func isEqual(_ object: Any?) -> Bool {
         if self === (object as AnyObject?) { return true }
         guard let rhs = object as? WeakWrapper,
-            let a = weakRef, let b = rhs.weakRef
+            let leftRef = weakRef, let rightRef = rhs.weakRef
         else { return false }
-        return a === b
+        return leftRef === rightRef
     }
 
     // MARK: - Debugging
 
     /// Human-friendly description showing the referent’s type and identity hash when alive.
     override var description: String {
-        if let v = weakRef {
-            return "WeakWrapper(\(type(of: v))@\(ObjectIdentifier(v).hashValue))"
+        if let referent = weakRef {
+            return "WeakWrapper(\(type(of: referent))@\(ObjectIdentifier(referent).hashValue))"
         } else {
             return "WeakWrapper(<deallocated>)"
         }
