@@ -50,19 +50,14 @@ public struct RegexDelimiter: Delimiter, Equatable, @unchecked Sendable {
     ///   can break on extended grapheme clusters (emoji, diacritics).
     public func split(input: String) -> [String] {
         let full = NSRange(input.startIndex..<input.endIndex, in: input)
-        let matches = regex.matches(in: input, options: [], range: full)
-
-        // Fast path: no matches → return the whole string
-        guard !matches.isEmpty else { return [input] }
-
         var out: [String] = []
-        out.reserveCapacity(matches.count + 1)
-
+        var hasMatch = false
         var lastUTF16 = 0
-        for match in matches {
+        regex.enumerateMatches(in: input, options: [], range: full) { match, _, _ in
+            guard let match else { return }
+            hasMatch = true
             let range = match.range
-            // Append slice from last end → start of this match, **including empty** when adjacent
-            // so behavior mirrors String.components(separatedBy:).
+            if range.length == 0 { return }  // keep the zero-width guard if adopted
             if range.location >= lastUTF16 {
                 let start = String.Index(utf16Offset: lastUTF16, in: input)
                 let end = String.Index(utf16Offset: range.location, in: input)
@@ -70,9 +65,11 @@ public struct RegexDelimiter: Delimiter, Equatable, @unchecked Sendable {
             }
             lastUTF16 = range.location + range.length
         }
+        if !hasMatch { return [input] }
 
         // Trailing remainder, allow empty when delimiter is at the end to match components(separatedBy:)
-        if lastUTF16 <= input.utf16.count {
+        let utf16Count = input.utf16.count
+        if lastUTF16 <= utf16Count {
             let start = String.Index(utf16Offset: lastUTF16, in: input)
             out.append(String(input[start...]))
         }
