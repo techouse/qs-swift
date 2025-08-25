@@ -5,8 +5,8 @@ extension Utils {
     /// If either object is a primitive, it is added as a single element.
     ///
     /// - Parameters:
-    ///   - a: The first object to combine.
-    ///   - b: The second object to combine.
+    ///   - first: The first object to combine.
+    ///   - second: The second object to combine.
     /// - Returns: An array containing the combined elements.
     @usableFromInline
     static func combine<T>(_ first: Any?, _ second: Any?) -> [T] {
