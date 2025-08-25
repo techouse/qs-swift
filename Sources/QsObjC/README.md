@@ -84,12 +84,12 @@ NSDictionary *map = [Qs decode:@"a=b&c=d" options:nil error:&err];
 ### Convenience helpers
 
 ```objc
-NSString *s1 = [Qs encodeOrEmpty:@{ @"a": @1 }];           // never nil, returns @"a=1"
+NSString *s1 = [Qs encodeOrEmpty:@{ @"a": @1 }];           // never nil → @"a=1"
 NSString *s2 = [Qs encodeOrNil:nil];                       // nil input → nil (not an error)
 
-NSDictionary *m1 = [Qs decodeOrEmpty:@"a=1"];              // never nil, returns @{}
-NSDictionary *m2 = [Qs decodeOr:nil options:nil];          // same as decodeOrEmpty
-NSDictionary *m3 = [Qs decodeOr:@"oops" options:nil default:@{ @"a": @"b" }];
+NSDictionary *m1 = [Qs decodeOrEmpty:@"a=1"];              // never nil → @{ @"a": @"1" }
+NSDictionary *m2 = [Qs decodeOrNil:@"oops" options:nil];   // nil on error (no throw)
+NSDictionary *m3 = [Qs decodeOr:@"oops" options:nil default:@{ @"a": @"b" }]; // default fallback
 ```
 
 > ⚠️ **Encoding order**: `NSDictionary` has no stable order. If you need deterministic order, set a sorter (see below)
@@ -112,8 +112,8 @@ o.encode = YES;                         // default YES; NO passes tokens as-is
 o.encodeValuesOnly = NO;                // YES => leave keys untouched, only encode values
 
 // Dots in keys (e.g. "user.name")
-o.allowDots = NO;                       // treat dots literally (or segment when decode allows it)
-o.encodeDotInKeys = NO;                 // force-encode '.' if true
+o.allowDots = NO;                       // enable dotted key‑path form when encoding
+o.encodeDotInKeys = NO;                 // if YES, '.' in keys is percent‑encoded; requires allowDots = YES
 
 // Arrays/lists
 // Prefer listFormat; `indices` is kept for parity
@@ -171,10 +171,9 @@ QsDecodeOptions *d = [QsDecodeOptions new];
 
 d.ignoreQueryPrefix = YES;             // ignore leading '?'
 
-d.allowDots = YES;                     // together with decodeDotInKeys
-// When *decoding*, dots can be treated as key‑path separators if you want
-// nesting from "a.b=c" → { a: { b: "c" } } depending on your Swift config
-// (the bridge forwards both `allowDots` and `decodeDotInKeys` to the core.)
+d.allowDots = YES;                     // treat "a.b" like "a[b]" when enabled
+// Tip: setting `decodeDotInKeys` also implies `allowDots` for safety.
+// The bridge forwards both flags to the Swift core.
 
 d.parseLists = YES;                     // parse a[0]=x&a[1]=y → arrays
 
@@ -182,11 +181,11 @@ d.duplicates = QsDuplicatesCombine;    // combine | first | last
 
 // Limits and strictness
 
-d.parameterLimit = 1000;                // stop parsing after N pairs (0/negative → unlimited)
-d.listLimit      = 20;                  // cap list length during parse (0/negative → unlimited)
-d.depth          = 5;                   // nesting depth
+d.parameterLimit = 1000;                // must be > 0 (defensive cap on number of pairs)
+d.listLimit      = 20;                  // max *index* to materialize as array; 0 ⇒ use a map for all indices
+d.depth          = 5;                   // maximum bracket nesting (≥ 0)
 
-d.strictDepth          = NO;            // if YES, over‑depth throws instead of truncating
+d.strictDepth          = NO;            // YES: throw when over depth; NO (default): collapse the remainder into a literal key
 
 d.strictNullHandling   = NO;            // if YES, keys with no value → NSNull instead of ""
 
@@ -196,6 +195,15 @@ d.throwOnLimitExceeded = NO;            // if YES, parameter/list/depth violatio
 d.valueDecoderBlock = ^id(NSString * token, NSNumber * charset) {
   return token; // return the decoded token as an object, or nil to keep the default
 };
+// Prefer the KEY/VALUE‑aware variant when you need context:
+d.decoderBlock = ^id(NSString * token, NSNumber * charset, NSNumber * kind) {
+  // kind: 0 = key, 1 = value
+  if (kind.integerValue == 0) { return [NSString stringWithFormat:@"K:%@", token ?: @""]; }
+  return token;
+};
+
+// Legacy two‑argument is still available (deprecated):
+// d.legacyDecoderBlock = ^id(NSString * token, NSNumber * charset) { /* ... */ };
 
 // Alternate delimiters
 // String delimiters
@@ -203,6 +211,8 @@ d.valueDecoderBlock = ^id(NSString * token, NSNumber * charset) {
 //   d.delimiter = [QsDelimiter semicolon];
 // Regex delimiters
 //   d.delimiter = [QsDelimiter commaOrSemicolon];
+
+> **Note (ISO‑8859‑1 + `interpretNumericEntities` + `comma`)**: When you explicitly use `a[]=` with `comma:YES`, a token like `a[]=1,&#9786;` decodes as a **single element** array `[@"1,☺"]` — the scalar is kept together and numeric entities are interpreted. This matches the Swift port’s semantics and avoids surprising splits when brackets specify the array.
 ```
 
 ### Error handling
