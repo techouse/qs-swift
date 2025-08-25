@@ -1,5 +1,9 @@
-included:
-  - Sources
+excluded:
+  - .build
+  - .swiftpm
+  - Bench
+  - ObjCE2ETests
+  - Tests
 
 disabled_rules:
   - trailing_whitespace
