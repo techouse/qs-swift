@@ -45,15 +45,15 @@ extension Qs {
         guard let data = data else { return "" }
 
         var obj: [String: Any] = [:]
-        var objKeys: [Any]? = nil
-        var arrayIndexKeys: [Any]? = nil
+        var objKeys: [Any]?
+        var arrayIndexKeys: [Any]?
         var keysLockedByFilter = false  // set when IterableFilter provides explicit order
 
         // Normalize the top-level container to [String: Any] and capture a stable key order.
-        if let m = data as? [String: Any] {
+        if let map = data as? [String: Any] {
             // Preserve caller traversal order by building an ordered view.
-            let od = OrderedDictionary(uniqueKeysWithValues: m.map { ($0.key, $0.value) })
-            obj = m
+            let od = OrderedDictionary(uniqueKeysWithValues: map.map { ($0.key, $0.value) })
+            obj = map
             objKeys = Array(od.keys)
 
         } else if let od = data as? OrderedDictionary<String, Any> {
@@ -64,7 +64,7 @@ extension Qs {
             // Preserve insertion order, normalize keys to Swift String
             var od = OrderedDictionary<String, Any>()
             od.reserveCapacity(odNS.count)
-            for (k, v) in odNS { od[String(k)] = v }
+            for (key, value) in odNS { od[String(key)] = value }
             obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
             objKeys = Array(od.keys)
 
@@ -72,7 +72,7 @@ extension Qs {
             // Preserve insertion order, normalize heterogeneous keys
             var od = OrderedDictionary<String, Any>()
             od.reserveCapacity(odAH.count)
-            for (k, v) in odAH { od[String(describing: k)] = v }
+            for (key, value) in odAH { od[String(describing: key)] = value }
             obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
             objKeys = Array(od.keys)
 
@@ -80,7 +80,7 @@ extension Qs {
             // Plain dictionary with non-String keys → stringified keys; order = hash map traversal
             var od = OrderedDictionary<String, Any>()
             od.reserveCapacity(dictAH.count)
-            for (k, v) in dictAH { od[String(describing: k)] = v }
+            for (key, value) in dictAH { od[String(describing: key)] = value }
             obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
             objKeys = Array(od.keys)
 
@@ -95,7 +95,7 @@ extension Qs {
         } else if let arr = data as? [Any] {
             // Promote array → object with string indices.
             var od = OrderedDictionary<String, Any>()
-            for (i, v) in arr.enumerated() { od[String(i)] = v }
+            for (index, element) in arr.enumerated() { od[String(index)] = element }
             obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
             arrayIndexKeys = Array(od.keys)
 
@@ -109,32 +109,32 @@ extension Qs {
         // Root-level filters:
         // - IterableFilter provides an explicit key order (authoritative).
         // - FunctionFilter allows transforming the root object, but only adopt it if the result is container-shaped (map or array).
-        if let f = options.filter as? FunctionFilter {
-            let filtered = f.function("", obj)
+        if let functionFilter = options.filter as? FunctionFilter {
+            let filtered = functionFilter.function("", obj)
 
             // Adopt container results only; primitives are ignored at the root.
-            if let m = filtered as? [String: Any] {
-                obj = m
+            if let map = filtered as? [String: Any] {
+                obj = map
                 objKeys = Array(
-                    OrderedDictionary(uniqueKeysWithValues: m.map { ($0.key, $0.value) }).keys)
-            } else if let m = filtered as? [AnyHashable: Any] {
+                    OrderedDictionary(uniqueKeysWithValues: map.map { ($0.key, $0.value) }).keys)
+            } else if let mapAnyHashable = filtered as? [AnyHashable: Any] {
                 var out: [String: Any] = [:]
-                out.reserveCapacity(m.count)
-                for (k, v) in m { out[String(describing: k)] = v }
+                out.reserveCapacity(mapAnyHashable.count)
+                for (key, value) in mapAnyHashable { out[String(describing: key)] = value }
                 obj = out
                 objKeys = Array(
                     OrderedDictionary(uniqueKeysWithValues: out.map { ($0.key, $0.value) }).keys)
-            } else if let od = filtered as? OrderedDictionary<String, Any> {
-                obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
-                objKeys = Array(od.keys)
+            } else if let ordered = filtered as? OrderedDictionary<String, Any> {
+                obj = Dictionary(uniqueKeysWithValues: ordered.map { ($0.key, $0.value) })
+                objKeys = Array(ordered.keys)
             } else if let nd = filtered as? NSDictionary {
                 var out: [String: Any] = [:]
                 nd.forEach { key, value in out[String(describing: key)] = value }
                 obj = out
                 objKeys = Array(out.keys)
-            } else if let arr = filtered as? [Any] {
+            } else if let array = filtered as? [Any] {
                 var od = OrderedDictionary<String, Any>()
-                for (i, v) in arr.enumerated() { od[String(i)] = v }
+                for (index, element) in array.enumerated() { od[String(index)] = element }
                 obj = Dictionary(uniqueKeysWithValues: od.map { ($0.key, $0.value) })
                 objKeys = Array(od.keys)
             }
@@ -151,11 +151,11 @@ extension Qs {
         }
 
         // --------- Ordering policy (see doc above) ---------
-        if let sorter = options.sort {
-            objKeys = objKeys!.sorted { sorter($0, $1) < 0 }
-        } else if arrayIndexKeys == nil && options.encode && !keysLockedByFilter {
+        if let sorter = options.sort, let keys = objKeys {
+            objKeys = keys.sorted { sorter($0, $1) < 0 }
+        } else if arrayIndexKeys == nil && options.encode && !keysLockedByFilter, let keys = objKeys {
             // Deterministic default only when percent-encoding is on and filter did not lock keys.
-            var ks = objKeys!.compactMap { $0 as? String }  // top-level keys are Strings
+            var ks = keys.compactMap { $0 as? String }  // top-level keys are Strings
             let split = ks.stablePartition { $0.isEmpty }  // empties → back, **stable**
             ks[..<split].sort()  // sort non-empty keys lexically
             objKeys = ks
@@ -170,8 +170,8 @@ extension Qs {
         parts.reserveCapacity(objKeys?.count ?? 0)
 
         if let keys = objKeys {
-            for k in keys {
-                guard let key = k as? String else { continue }
+            for anyKey in keys {
+                guard let key = anyKey as? String else { continue }
 
                 let containsKey = obj.keys.contains(key)
                 let value = obj[key]  // may be nil if absent
@@ -184,11 +184,8 @@ extension Qs {
                 }
 
                 // Bridge the encoder/date-serializer configs; avoid capturing `options` repeatedly.
-                let valueEncoder: ValueEncoder? =
-                    options.encode
-                    ? {
-                        @Sendable (value: Any?, charset: String.Encoding?, format: Format?)
-                            -> String in
+                let valueEncoder: ValueEncoder? = options.encode
+                    ? { @Sendable (value: Any?, charset: String.Encoding?, format: Format?) -> String in
                         options.getEncoder(value, charset: charset, format: format)
                     }
                     : nil
@@ -198,7 +195,7 @@ extension Qs {
                 }
 
                 // Delegate to the lower-level encoder for nested traversal & formatting.
-                let encoded = try Encoder.encode(
+                let encoded = try QsSwift.Encoder.encode(
                     data: value,
                     undefined: !containsKey,
                     sideChannel: sideChannel,
@@ -224,8 +221,8 @@ extension Qs {
                     depth: 1
                 )
 
-                if let arr = encoded as? [Any] {
-                    parts.append(contentsOf: arr)
+                if let array = encoded as? [Any] {
+                    parts.append(contentsOf: array)
                 } else {
                     parts.append(encoded)
                 }
