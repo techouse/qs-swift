@@ -87,7 +87,14 @@ extension QsSwift.Utils {
                     if !options.parseLists
                         && mutableTarget.values.contains(where: { $0 is Undefined })
                     {
-                        return mutableTarget.values.compactMap { $0 is Undefined ? nil : $0 }
+                        // Preserve original element order by iterating indices in ascending order.
+                        // Drop both `nil` and `Undefined` entries to match prior semantics.
+                        let orderedIndices = mutableTarget.keys.sorted()
+                        let pruned: [Any] = orderedIndices.compactMap { idx in
+                            guard let value = mutableTarget[idx] else { return nil }
+                            return (value is Undefined) ? nil : value
+                        }
+                        return pruned
                     }
 
                     if target is Set<AnyHashable> {
