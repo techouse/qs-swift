@@ -57,7 +57,8 @@ public struct RegexDelimiter: Delimiter, Equatable, @unchecked Sendable {
             guard let match else { return }
             hasMatch = true
             let range = match.range
-            if range.length == 0 { return }  // keep the zero-width guard if adopted
+            // Ignore zero-width matches (e.g., ^, $). Delimiters must consume at least 1 UTF-16 unit.
+            if range.length == 0 { return }
             if range.location >= lastUTF16 {
                 let start = String.Index(utf16Offset: lastUTF16, in: input)
                 let end = String.Index(utf16Offset: range.location, in: input)
