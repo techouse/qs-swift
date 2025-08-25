@@ -64,4 +64,4 @@
             }
         }
     }
-#endif  // canImport(ObjectiveC) && QS_OBJC_BRIDGE
+#endif
