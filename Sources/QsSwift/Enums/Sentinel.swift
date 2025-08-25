@@ -88,9 +88,9 @@ public enum Sentinel: CustomStringConvertible, Sendable {
         let leftUTF8 = left.utf8
         let rightUTF8 = right.utf8
         return leftUTF8.elementsEqual(rightUTF8) { leftByte, rightByte in
-            let fl: UInt8 = (leftByte >= 0x41 && leftByte <= 0x5A) ? (leftByte | 0x20) : leftByte
-            let fr: UInt8 = (rightByte >= 0x41 && rightByte <= 0x5A) ? (rightByte | 0x20) : rightByte
-            return fl == fr
+            let foldedLeft: UInt8 = (leftByte >= 0x41 && leftByte <= 0x5A) ? (leftByte | 0x20) : leftByte
+            let foldedRight: UInt8 = (rightByte >= 0x41 && rightByte <= 0x5A) ? (rightByte | 0x20) : rightByte
+            return foldedLeft == foldedRight
         }
     }
 
