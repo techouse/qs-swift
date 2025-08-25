@@ -15,6 +15,7 @@ trailing_comma:
 
 line_length:
   warning: 120
+  error: 120
   ignores_comments: true
   ignores_urls: true
 
