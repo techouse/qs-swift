@@ -232,5 +232,4 @@ extension QsSwift.Utils {
         if let setValues = value as? Set<AnyHashable> { return Array(setValues) }
         return nil
     }
-
 }
