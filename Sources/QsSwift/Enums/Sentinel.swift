@@ -83,8 +83,8 @@ public enum Sentinel: CustomStringConvertible, Sendable {
         }
     }
 
-    @inline(__always)
-    private static func asciiCaseInsensitiveEquals(_ left: String, _ right: String) -> Bool {
+    @inlinable
+    internal static func asciiCaseInsensitiveEquals(_ left: String, _ right: String) -> Bool {
         // Fast path: lengths must match.
         let leftUTF8 = left.utf8
         let rightUTF8 = right.utf8
