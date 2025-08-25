@@ -70,7 +70,7 @@
             let bridged = ordered.flatMap { QsBridge.bridgeUndefinedPreservingOrder($0) } ?? ordered
             // 3) Encode (nil input is treated as empty → "")
             let encoded = Qs.encodeOrEmpty(bridged, options: options?.swift ?? .init())
-            return NSString(string: encoded)
+            return encoded as NSString
         }
     }
 #endif  // canImport(ObjectiveC) && QS_OBJC_BRIDGE
