@@ -40,8 +40,8 @@
             // 2) Bridge Undefined while preserving ordered shape and cycles.
             let bridged = ordered.flatMap { QsBridge.bridgeUndefinedPreservingOrder($0) } ?? ordered
             // 3) Encode (nil input is treated as empty → "")
-            let s = Qs.encodeOrNil(bridged, options: options?.swift ?? .init())
-            return s.map(NSString.init)
+            let encoded = Qs.encodeOrNil(bridged, options: options?.swift ?? .init())
+            return encoded.map(NSString.init)
         }
 
         /// Encode to a query string, returning `""` instead of failing.
@@ -69,8 +69,8 @@
             // 2) Bridge Undefined while preserving ordered shape and cycles.
             let bridged = ordered.flatMap { QsBridge.bridgeUndefinedPreservingOrder($0) } ?? ordered
             // 3) Encode (nil input is treated as empty → "")
-            let s = Qs.encodeOrEmpty(bridged, options: options?.swift ?? .init())
-            return NSString(string: s)
+            let encoded = Qs.encodeOrEmpty(bridged, options: options?.swift ?? .init())
+            return NSString(string: encoded)
         }
     }
 #endif  // canImport(ObjectiveC) && QS_OBJC_BRIDGE
