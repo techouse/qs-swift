@@ -1,5 +1,4 @@
 import Foundation
-import OrderedCollections
 
 /// A helper for decoding query strings into structured data.
 ///
@@ -14,4 +13,5 @@ import OrderedCollections
 ///    unterminated bracket group is encountered, the raw remainder is wrapped
 ///    the same way. With `strictDepth == true`, only *well‑formed* overflow throws.
 /// 3. The caller merges fragments into the final object.
+@usableFromInline
 internal enum Decoder {}
