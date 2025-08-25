@@ -34,6 +34,6 @@
 ///
 /// Prefer safer alternatives whenever possible; use this as a last resort.
 @frozen public struct _UnsafeSendable<T>: @unchecked Sendable {
-    let value: T
-    init(_ inputValue: T) { value = inputValue }
+    public let value: T
+    public init(_ inputValue: T) { value = inputValue }
 }
