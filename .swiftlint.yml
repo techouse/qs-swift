@@ -22,6 +22,10 @@ opt_in_rules:
   - force_unwrapping
   - closure_end_indentation
 
+analyzer_rules:
+  - unused_declaration
+  - unused_import
+
 trailing_comma:
   mandatory_comma: true
 
@@ -30,11 +34,24 @@ line_length:
   error: 120
   ignores_comments: true
   ignores_urls: true
+  ignores_interpolated_strings: true
+  ignores_multiline_strings: true
 
 identifier_name:
   min_length: 2
   allowed_symbols: "_"
   validates_start_with_lowercase: off
+  excluded:
+    - a
+    - b
+    - i
+    - j
+    - k
+    - l
+    - r
+    - x
+    - y
+    - id
 
 type_name:
   excluded:
