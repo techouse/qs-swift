@@ -129,17 +129,7 @@ extension QsSwift.Utils {
                             return targetArray + filtered
                         }
                     } else {
-                        if var targetOSet = target as? OrderedSet<AnyHashable>,
-                            let hashable = source as? AnyHashable
-                        {
-                            _ = targetOSet.updateOrAppend(hashable)
-                            return targetOSet
-                        }
-                        if let targetSet = target as? Set<AnyHashable>,
-                            let hashable = source as? AnyHashable
-                        {
-                            return targetSet.union([hashable])
-                        }
+                        // source is not a sequence and we are in the Array-target branch; target cannot be any Set/OrderedSet here.
                         return targetArray + [source]
                     }
                 }
