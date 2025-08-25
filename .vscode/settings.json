@@ -19,8 +19,7 @@
     "**/obj/**"
   ],
   "[swift]": {
-    "editor.defaultFormatter": "swiftlang.swift-vscode",
-    "editor.formatOnSave": true
+    "editor.defaultFormatter": "swiftlang.swift-vscode"
   },
   "makefile.configureOnOpen": false,
   "swift.testEnvironmentVariables": {
