@@ -97,6 +97,7 @@ extension QsSwift.Utils {
                         return pruned
                     }
 
+                    // We’re in the Array-target branch. `target` cannot be a Set/OrderedSet here.
                     return mutableTarget.sorted { $0.key < $1.key }.map(\.value)
                 } else {
                     if let seq = asSequence(source) {
