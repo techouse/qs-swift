@@ -1,6 +1,8 @@
 excluded:
   - .build
   - .swiftpm
+  - .history
+  - DerivedData
   - Bench
   - ObjCE2ETests
   - Tests
