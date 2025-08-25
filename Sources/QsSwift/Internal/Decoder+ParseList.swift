@@ -27,12 +27,6 @@ extension QsSwift.Decoder {
         options: DecodeOptions,
         currentListLength: Int
     ) throws -> Any? {
-        if options.throwOnLimitExceeded, options.listLimit <= 0 {
-            // Defer to existing global validation or treat as exceeded uniformly.
-            if currentListLength >= options.listLimit {
-                throw DecodeError.listLimitExceeded(limit: options.listLimit)
-            }
-        }
         if let stringVal = value as? String, !stringVal.isEmpty, options.comma, stringVal.contains(",") {
             let splitVal = stringVal.split(separator: ",", omittingEmptySubsequences: false).map(
                 String.init)
