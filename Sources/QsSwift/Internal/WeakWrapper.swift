@@ -50,10 +50,9 @@ final class WeakWrapper: NSObject {
     /// - `false` if either referent has deallocated (we never “revive” equality post-deallocation).
     /// - Fast path: if two wrappers are literally the same instance, they’re equal.
     override func isEqual(_ object: Any?) -> Bool {
-        if self === (object as AnyObject?) { return true }
-        guard let rhs = object as? WeakWrapper,
-            let leftRef = weakRef, let rightRef = rhs.weakRef
-        else { return false }
+        guard let rhs = object as? WeakWrapper else { return false }
+        if self === rhs { return true }
+        guard let leftRef = weakRef, let rightRef = rhs.weakRef else { return false }
         return leftRef === rightRef
     }
 
@@ -62,9 +61,9 @@ final class WeakWrapper: NSObject {
     /// Human-friendly description showing the referent’s type and identity hash when alive.
     override var description: String {
         if let referent = weakRef {
-            return "WeakWrapper(\(type(of: referent))@\(ObjectIdentifier(referent).hashValue))"
+            return "WeakWrapper(\(type(of: referent))@\(identityHash))"
         } else {
-            return "WeakWrapper(<deallocated>)"
+            return "WeakWrapper(<deallocated>@\(identityHash))"
         }
     }
 
