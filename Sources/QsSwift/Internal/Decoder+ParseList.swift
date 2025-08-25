@@ -1,5 +1,4 @@
 import Foundation
-import OrderedCollections
 
 extension QsSwift.Decoder {
     /// Interprets a would‑be list element and enforces list limits (used by both
