@@ -882,6 +882,14 @@ struct UtilsTests {
         #expect(Utils.interpretNumericEntities("ABC&#x21;") == "ABC!")
     }
 
+    @Test("Utils.interpretNumericEntities - mixed base surrogate halves")
+    func testInterpretNumericEntitiesMixedSurrogates() async throws {
+        // High surrogate decimal, low surrogate hex
+        #expect(Utils.interpretNumericEntities("&#55357;&#xDCA9;") == "💩")
+        // High surrogate hex, low surrogate decimal
+        #expect(Utils.interpretNumericEntities("&#xD83D;&#56489;") == "💩")
+    }
+
     // MARK: - Utils.apply tests
 
     @Test("Utils.apply - apply on scalar and list")
