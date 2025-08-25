@@ -1082,6 +1082,21 @@ struct DecodeTests {
         #expect(isNSNullValue(user?["email"]))
     }
 
+    @Test("decode - AnyHashable key collisions are deterministic (String wins)")
+    func testDecode_AnyHashableKeyCollision_StringWins() throws {
+        // Different literal orders, same outcome.
+        do {
+            let input1: [AnyHashable: Any] = [1: "int-one", "1": "string-one"]
+            let r1 = try Qs.decode(input1)
+            #expect(r1["1"] as? String == "string-one")
+        }
+        do {
+            let input2: [AnyHashable: Any] = ["1": "string-one", 1: "int-one"]
+            let r2 = try Qs.decode(input2)
+            #expect(r2["1"] as? String == "string-one")
+        }
+    }
+
     // MARK: - Comma parsing
 
     @Test("decode - comma=true basic cases")
