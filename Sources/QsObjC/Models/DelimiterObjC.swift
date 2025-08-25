@@ -56,11 +56,15 @@
         public static let comma = DelimiterObjC(string: ",")
         public static let semicolon = DelimiterObjC(string: ";")
 
-        // Regex presets (patterns are known-valid → force-unwrap so tests/APIs can use them directly)
-        public static let semicolonWithWhitespace: DelimiterObjC =
-            DelimiterObjC(regexPattern: #"\s*;\s*"#)!
-        public static let commaOrSemicolon: DelimiterObjC =
-            DelimiterObjC(regexPattern: #"\s*[,;]\s*"#)!
+        // Regex presets (patterns are known-valid). Avoid force unwrap to satisfy SwiftLint;
+        // if construction ever fails on a future toolchain, fall back to a string delimiter.
+        public static let semicolonWithWhitespace: DelimiterObjC = {
+            DelimiterObjC(regexPattern: #"\s*;\s*"#) ?? DelimiterObjC(string: ";")
+        }()
+
+        public static let commaOrSemicolon: DelimiterObjC = {
+            DelimiterObjC(regexPattern: #"\s*[,;]\s*"#) ?? DelimiterObjC(string: ",")
+        }()
 
         // MARK: - Bridging to Swift
 
@@ -70,8 +74,8 @@
         /// `QsSwift` APIs; you typically won’t need it from Obj-C.
         public var swift: QsSwift.Delimiter {
             switch backing {
-            case .string(let s): return s
-            case .regex(let r): return r
+            case .string(let sd): return sd
+            case .regex(let rd): return rd
             }
         }
 
@@ -83,10 +87,10 @@
         /// - Returns: An array of components. Intended for tests and debugging.
         public func split(_ input: String) -> [String] {
             switch backing {
-            case .string(let s):
-                return s.split(input: input).map { String($0) }
-            case .regex(let r):
-                return r.split(input: input).map { String($0) }
+            case .string(let sd):
+                return sd.split(input: input).map { String($0) }
+            case .regex(let rd):
+                return rd.split(input: input).map { String($0) }
             }
         }
     }

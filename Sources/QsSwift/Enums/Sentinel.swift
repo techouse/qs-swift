@@ -84,19 +84,19 @@ public enum Sentinel: CustomStringConvertible, Sendable {
     }
 
     @inline(__always)
-    private static func asciiCaseInsensitiveEquals(_ a: String, _ b: String) -> Bool {
-        // Fast path: length must match.
-        let au = a.utf8
-        let bu = b.utf8
-        guard au.count == bu.count else { return false }
+    private static func asciiCaseInsensitiveEquals(_ left: String, _ right: String) -> Bool {
+        // Fast path: lengths must match.
+        let leftUTF8 = left.utf8
+        let rightUTF8 = right.utf8
+        guard leftUTF8.count == rightUTF8.count else { return false }
 
-        var ia = au.makeIterator()
-        var ib = bu.makeIterator()
-        while let x = ia.next(), let y = ib.next() {
-            // Fold ASCII letters to lowercase by OR-ing 0x20; other bytes unchanged.
-            let fx = x | 0x20
-            let fy = y | 0x20
-            if fx != fy { return false }
+        var leftIterator = leftUTF8.makeIterator()
+        var rightIterator = rightUTF8.makeIterator()
+        while let leftByte = leftIterator.next(), let rightByte = rightIterator.next() {
+            // Fold ASCII letters to lowercase by OR-ing 0x20; non-letters are unchanged.
+            let foldedLeft = leftByte | 0x20
+            let foldedRight = rightByte | 0x20
+            if foldedLeft != foldedRight { return false }
         }
         return true
     }

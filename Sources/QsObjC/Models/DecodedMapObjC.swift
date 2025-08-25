@@ -40,7 +40,13 @@
         /// Safe because every `DecodedMap` coming from the core is constructed from
         /// a `[String: Any]`. The force-cast reflects that invariant.
         var swift: QsSwift.DecodedMap {
-            QsSwift.DecodedMap(value as! [String: Any])
+            // Every `DecodedMap` created by the core holds a `[String: Any]`. Use a
+            // guarded cast to satisfy SwiftLint (no force_cast) while preserving the
+            // original invariant: if this is ever not the expected shape, fail fast.
+            guard let dict = value as? [String: Any] else {
+                preconditionFailure("QsDecodedMap.value must be a [String: Any] produced by the core")
+            }
+            return QsSwift.DecodedMap(dict)
         }
     }
 #endif  // canImport(ObjectiveC) && QS_OBJC_BRIDGE
