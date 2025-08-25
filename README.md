@@ -7,7 +7,7 @@ Ported from [qs](https://www.npmjs.com/package/qs) for JavaScript.
 [![SwiftPM compatible](https://img.shields.io/badge/SwiftPM-compatible-orange.svg)](#installation)
 [![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Ftechouse%2Fqs-swift%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/techouse/qs-swift)
 [![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Ftechouse%2Fqs-swift%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/techouse/qs-swift)
-[![Docs](https://img.shields.io/badge/Docs-QsSwift-blue)](https://techouse.github.io/qs-swift/qsswift/documentation/qsswift/)
+[![Docs (Swift)](https://img.shields.io/badge/Docs-QsSwift-blue)](https://techouse.github.io/qs-swift/qsswift/documentation/qsswift/) [![Docs (ObjC)](https://img.shields.io/badge/Docs-QsObjC-blue)](https://techouse.github.io/qs-swift/qsobjc/documentation/qsobjc/)
 [![License](https://img.shields.io/github/license/techouse/qs-swift)](LICENSE)
 [![Test](https://github.com/techouse/qs-swift/actions/workflows/test.yml/badge.svg)](https://github.com/techouse/qs-swift/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/techouse/qs-swift/graph/badge.svg?token=hk2eROAKOo)](https://codecov.io/gh/techouse/qs-swift)
@@ -20,7 +20,7 @@ Ported from [qs](https://www.npmjs.com/package/qs) for JavaScript.
 
 - Nested maps & lists: `foo[bar][baz]=qux` ⇄ `["foo": ["bar": ["baz": "qux"]]]`
 - Multiple list formats (indices, brackets, repeat, comma)
-- Dot-notation (`a.b=c`) and optional dot-encoding
+- Dot-notation (`a.b=c`) and optional dot-encoding (setting `decodeDotInKeys` automatically enables dot notation)
 - UTF‑8 and ISO‑8859‑1 charsets; optional charset sentinel (`utf8=✓`)
 - Custom encoders/decoders, sorting, filtering, strict/null handling
 - Deterministic ordering with `OrderedDictionary` (swift-collections)
@@ -117,6 +117,8 @@ let r = try Qs.decode("a[b][c][d][e][f][g][h][i]=j")
 // r["a"]?["b"]?["c"]?["d"]?["e"]?["f"]?["[g][h][i]"] == "j"
 ```
 
+Set `strictDepth: true` to **throw** instead of collapsing the remainder when the limit is exceeded.
+
 Override depth:
 
 ```swift
@@ -157,6 +159,8 @@ let r = try Qs.decode(
 )
 // ["name.obj": ["first": "John", "last": "Doe"]]
 ```
+
+_Note:_ `decodeDotInKeys` implies `allowDots`; you don’t need to set both.
 
 ### Empty lists & duplicates
 
@@ -202,6 +206,8 @@ try Qs.decode(
 )
 // ["a": "☺"]
 ```
+
+_Heads-up:_ If you also enable `comma: true`, entity interpretation happens **after** comma processing. When you use list syntax like `a[]=...`, a comma-joined scalar stays a **single** element (e.g. `["1,☺"]`) inside the list, matching the library’s tests and cross-port behavior.
 
 ### Lists
 
@@ -546,7 +552,7 @@ make profile
 ## Objective-C
 
 An Objective‑C bridge is included as [`QsObjC`](Sources/QsObjC) (facade + delegate-style hooks).
-See the [QsObjC README](Sources/QsObjC/README.md) for installation, options, and examples.
+See the [QsObjC README](Sources/QsObjC/README.md) for installation, options, and examples. → [Docs](https://techouse.github.io/qs-swift/qsobjc/documentation/qsobjc/)
 
 ---
 
