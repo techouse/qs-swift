@@ -93,9 +93,9 @@ public enum Sentinel: CustomStringConvertible, Sendable {
         var leftIterator = leftUTF8.makeIterator()
         var rightIterator = rightUTF8.makeIterator()
         while let leftByte = leftIterator.next(), let rightByte = rightIterator.next() {
-            // Fold ASCII letters to lowercase by OR-ing 0x20; non-letters are unchanged.
-            let foldedLeft = leftByte | 0x20
-            let foldedRight = rightByte | 0x20
+            // Fold ASCII uppercase letters to lowercase by OR-ing 0x20; non-letters are unchanged.
+            let foldedLeft: UInt8 = (leftByte >= 0x41 && leftByte <= 0x5A) ? (leftByte | 0x20) : leftByte
+            let foldedRight: UInt8 = (rightByte >= 0x41 && rightByte <= 0x5A) ? (rightByte | 0x20) : rightByte
             if foldedLeft != foldedRight { return false }
         }
         return true
