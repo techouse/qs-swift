@@ -2,6 +2,7 @@
 
 set -euo pipefail
 export SWIFT_DETERMINISTIC_HASHING=1
+export LC_ALL=C
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 
