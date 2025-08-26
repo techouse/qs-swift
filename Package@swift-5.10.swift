@@ -64,7 +64,10 @@ let package = Package(
         .executableTarget(
             name: "QsSwiftComparison",
             dependencies: ["QsSwift"],
-            path: "Tools/QsSwiftComparison"
+            path: "Tools/QsSwiftComparison",
+            resources: [
+                .copy("js/test_cases.json")
+            ]
         ),
     ]
 )
