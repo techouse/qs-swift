@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: codacy-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   codacy-security-scan:
     permissions:
