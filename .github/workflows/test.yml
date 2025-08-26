@@ -109,8 +109,8 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: coverage/info.lcov
-          flags: swift,macos-15,swift-${{ env.SWIFT_VERSION }}
-          name: QsSwift-macos-15-swift-${{ env.SWIFT_VERSION }}
+          flags: swift,macos-15,xcode-${{ env.XCODE_VERSION }},swift-${{ env.SWIFT_VERSION }}
+          name: QsSwift-macos-15-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -138,6 +138,14 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Warn if Swift toolchain doesn’t match env.SWIFT_VERSION
+        run: |
+          set -euo pipefail
+          swift --version | tee swift-version.txt
+          if ! swift --version | grep -q "${{ env.SWIFT_VERSION }}"; then
+            echo "::warning::Swift toolchain version differs from SWIFT_VERSION=${{ env.SWIFT_VERSION }}."
+          fi
+
       - name: Work around stale local SwiftPM path (symlink)
         run: |
           set -euxo pipefail
@@ -146,7 +154,10 @@ jobs:
           ACTUAL="${GITHUB_WORKSPACE}"
           PARENT="$(dirname "$ACTUAL")"
           EXPECTED="${PARENT}/QsSwift"
-          test -w "$PARENT"
+          if ! test -w "$PARENT"; then
+            echo "Parent $PARENT not writable; skipping symlink workaround."
+            exit 0
+          fi
           mkdir -p "$PARENT"
           # Idempotent: force-create/refresh the symlink
           if [ -e "$EXPECTED" ] && [ ! -L "$EXPECTED" ]; then
@@ -170,9 +181,9 @@ jobs:
             ~/.swiftpm
             ~/Library/Developer/Xcode/DerivedData/SourcePackages
             .derivedData-objc/SourcePackages
-          key: spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
-            spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-
+            spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}-
 
       - name: Resolve SPM dependencies (ObjC test project)
         run: |
@@ -289,7 +300,6 @@ jobs:
           echo "qs version: $(node -p "require('qs/package.json').version")"
 
       - name: Compare Swift vs qs.js outputs (deterministic)
-        continue-on-error: true
         working-directory: Tools/QsSwiftComparison
         env:
           SWIFT_DETERMINISTIC_HASHING: 1
