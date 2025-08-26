@@ -65,6 +65,13 @@ let package = Package(
             name: "QsSwiftComparison",
             dependencies: ["QsSwift"],
             path: "Tools/QsSwiftComparison",
+            exclude: [
+                "js/node_modules",
+                "js/package.json",
+                "js/package-lock.json",
+                "js/qs.js",
+                "compare_outputs.sh",
+            ],
             resources: [
                 .copy("js/test_cases.json")
             ]
