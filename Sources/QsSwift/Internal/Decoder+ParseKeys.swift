@@ -1,5 +1,4 @@
 import Foundation
-import OrderedCollections
 
 extension QsSwift.Decoder {
     /// Splits a single key into segments (respecting dot-notation and depth rules),

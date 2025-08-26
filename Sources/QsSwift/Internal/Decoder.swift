@@ -1,5 +1,3 @@
-import Foundation
-
 /// A helper for decoding query strings into structured data.
 ///
 /// Pipeline overview:

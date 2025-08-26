@@ -1,5 +1,4 @@
 import Foundation
-import OrderedCollections
 
 extension QsSwift.Decoder {
     /// Builds a nested structure from a chain of key segments, inserting `value` at the leaf.
