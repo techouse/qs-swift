@@ -292,11 +292,13 @@ jobs:
 
       - name: Install qs.js
         working-directory: Tools/QsSwiftComparison/js
-        run: npm ci
+        run:  npm ci --no-audit --no-fund
 
       - name: Show qs.js version
         working-directory: Tools/QsSwiftComparison/js
         run: |
+          node --version
+          npm --version
           echo "qs version: $(node -p "require('qs/package.json').version")"
 
       - name: Compare Swift vs qs.js outputs (deterministic)
