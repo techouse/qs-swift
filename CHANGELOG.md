@@ -1,3 +1,9 @@
+## 1.1.4
+
+- [FIX] remove redundant imports
+- [CHORE] add exclusion of unnecessary files in QsSwiftComparison target
+- [CHORE] update build action entries and test action configurations for `QsSwiftComparison` scheme
+
 ## 1.1.3
 
 - [CHORE] refactor code and improve variable naming for clarity and consistency
