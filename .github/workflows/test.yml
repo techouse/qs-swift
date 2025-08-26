@@ -14,6 +14,10 @@ concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  XCODE_VERSION: '16.3'
+  SWIFT_VERSION: '6.1'
+
 jobs:
   analyze:
     permissions:
@@ -27,10 +31,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Select Xcode 16.3
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.3'
+          xcode-version: ${{ env.XCODE_VERSION }}
 
       - name: Show Xcode & Swift versions
         run: |
@@ -52,27 +56,20 @@ jobs:
   tests:
     permissions:
       contents: read
-    name: Swift tests + coverage (${{ matrix.os }}, Swift ${{ matrix.swift }})
+    name: Swift tests + coverage
     timeout-minutes: 45
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-15
     needs: analyze
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-15
-            swift: '6.1'
-            xcode: '16.3'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Select Xcode ${{ matrix.xcode }}
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: ${{ matrix.xcode }}
+          xcode-version: ${{ env.XCODE_VERSION }}
 
       - name: Show Xcode & Swift versions
         run: |
@@ -86,9 +83,9 @@ jobs:
             ~/.swiftpm
             .build
             ~/Library/Caches/org.swift.swiftpm
-          key: spm-${{ runner.os }}-swift-${{ matrix.swift }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-${{ runner.os }}-swift-${{ env.SWIFT_VERSION }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
-            spm-${{ runner.os }}-swift-${{ matrix.swift }}-
+            spm-${{ runner.os }}-swift-${{ env.SWIFT_VERSION }}-
 
       - name: Run tests with coverage
         env:
@@ -104,7 +101,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: macOS-crashlogs-xcode-${{ matrix.xcode }}-swift-${{ matrix.swift }}
+          name: macOS-crashlogs-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}
           path: crashlogs
           if-no-files-found: ignore
 
@@ -112,8 +109,8 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: coverage/info.lcov
-          flags: swift,${{ matrix.os }},swift-${{ matrix.swift }}
-          name: QsSwift-${{ matrix.os }}-swift-${{ matrix.swift }}
+          flags: swift,macos-15,xcode-${{ env.XCODE_VERSION }},swift-${{ env.SWIFT_VERSION }}
+          name: QsSwift-macos-15-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -123,30 +120,31 @@ jobs:
       contents: read
     name: Objective-C E2E tests (Xcode)
     timeout-minutes: 45
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-15
     needs: [ analyze, tests ]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-15
-            xcode: '16.3'
-
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Select Xcode ${{ matrix.xcode }}
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: ${{ matrix.xcode }}
+          xcode-version: ${{ env.XCODE_VERSION }}
 
       - name: Show Xcode & Swift versions
         run: |
           xcodebuild -version
           swift --version
+
+      - name: Warn if Swift toolchain doesn’t match env.SWIFT_VERSION
+        run: |
+          set -euo pipefail
+          swift --version | tee swift-version.txt
+          if ! swift --version | grep -q "${{ env.SWIFT_VERSION }}"; then
+            echo "::warning::Swift toolchain version differs from SWIFT_VERSION=${{ env.SWIFT_VERSION }}."
+          fi
 
       - name: Work around stale local SwiftPM path (symlink)
         run: |
@@ -156,7 +154,10 @@ jobs:
           ACTUAL="${GITHUB_WORKSPACE}"
           PARENT="$(dirname "$ACTUAL")"
           EXPECTED="${PARENT}/QsSwift"
-          test -w "$PARENT"
+          if ! test -w "$PARENT"; then
+            echo "Parent $PARENT not writable; skipping symlink workaround."
+            exit 0
+          fi
           mkdir -p "$PARENT"
           # Idempotent: force-create/refresh the symlink
           if [ -e "$EXPECTED" ] && [ ! -L "$EXPECTED" ]; then
@@ -180,9 +181,9 @@ jobs:
             ~/.swiftpm
             ~/Library/Developer/Xcode/DerivedData/SourcePackages
             .derivedData-objc/SourcePackages
-          key: spm-${{ runner.os }}-xcode-${{ matrix.xcode }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
-            spm-${{ runner.os }}-xcode-${{ matrix.xcode }}-
+            spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}-
 
       - name: Resolve SPM dependencies (ObjC test project)
         run: |
@@ -223,8 +224,8 @@ jobs:
           files: |
             ${{ github.workspace }}/ObjC-Tests.xcresult.zip
             ${{ github.workspace }}/objc-coverage.json
-          flags: objc,${{ matrix.os }},xcode-${{ matrix.xcode }}
-          name: QsSwift-ObjC-${{ matrix.os }}-xcode-${{ matrix.xcode }}
+          flags: objc,macos-15,xcode-${{ env.XCODE_VERSION }}
+          name: QsSwift-ObjC-macos-15-xcode-${{ env.XCODE_VERSION }}
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -233,7 +234,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ObjC-Tests-xcode-${{ matrix.xcode }}
+          name: ObjC-Tests-xcode-${{ env.XCODE_VERSION }}
           path: ObjC-Tests.xcresult
           if-no-files-found: warn
 
@@ -245,6 +246,64 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: macOS-crashlogs-objc-xcode-${{ matrix.xcode }}-${{ matrix.os }}
+          name: macOS-crashlogs-objc-xcode-${{ env.XCODE_VERSION }}-macos-15
           path: crashlogs-objc
           if-no-files-found: ignore
+
+  ensure-compatibility:
+    name: Ensure compatibility with qs.js
+    needs: [ analyze, tests ]
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Show Xcode & Swift versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Cache SwiftPM artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.swiftpm
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+            Tools/QsSwiftComparison/.build
+          key: spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-
+
+      - name: Install Node.js (with npm cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: Tools/QsSwiftComparison/js/package-lock.json
+
+      - name: Install qs.js
+        working-directory: Tools/QsSwiftComparison/js
+        run:  npm ci --no-audit --no-fund
+
+      - name: Show qs.js version
+        working-directory: Tools/QsSwiftComparison/js
+        run: |
+          node --version
+          npm --version
+          echo "qs version: $(node -p "require('qs/package.json').version")"
+
+      - name: Compare Swift vs qs.js outputs (deterministic)
+        working-directory: Tools/QsSwiftComparison
+        env:
+          SWIFT_DETERMINISTIC_HASHING: 1
+          LC_ALL: C
+        run: bash compare_outputs.sh
