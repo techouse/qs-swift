@@ -35,19 +35,34 @@
                ReferencedContainer = "container:">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "NO"
+            buildForRunning = "YES"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "QsSwiftComparison"
+               BuildableName = "QsSwiftComparison"
+               BlueprintName = "QsSwiftComparison"
+               ReferencedContainer = "container:">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES"
-      shouldAutocreateTestPlan = "YES">
-       <TestPlans>
+      shouldUseLaunchSchemeArgsEnv = "YES">
+      <TestPlans>
          <TestPlanReference
             reference = "container:.swiftpm/QsSwift-Package.xctestplan"
             default = "YES">
          </TestPlanReference>
+         <AutocreatedTestPlanReference>
+         </AutocreatedTestPlanReference>
       </TestPlans>
       <Testables>
          <TestableReference
@@ -82,7 +97,17 @@
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
       allowLocationSimulation = "YES">
-       <EnvironmentVariables>
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "QsSwiftComparison"
+            BuildableName = "QsSwiftComparison"
+            BlueprintName = "QsSwiftComparison"
+            ReferencedContainer = "container:">
+         </BuildableReference>
+      </BuildableProductRunnable>
+      <EnvironmentVariables>
          <EnvironmentVariable
             key = "SWIFT_DETERMINISTIC_HASHING"
             value = "1"
