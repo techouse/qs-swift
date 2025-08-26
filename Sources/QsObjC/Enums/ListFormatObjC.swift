@@ -1,5 +1,4 @@
 #if canImport(ObjectiveC) && QS_OBJC_BRIDGE
-    import Foundation
     import QsSwift
 
     /// Objective-C mirror of Swift `QsSwift.ListFormat`.

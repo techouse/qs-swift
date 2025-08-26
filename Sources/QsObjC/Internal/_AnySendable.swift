@@ -1,6 +1,4 @@
 #if canImport(ObjectiveC) && QS_OBJC_BRIDGE
-    import Foundation
-
     /// A tiny generic box that lets you smuggle a **non-Sendable** value through an
     /// `@Sendable` closure boundary without compiler warnings.
     ///

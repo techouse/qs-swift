@@ -1,6 +1,4 @@
 #if canImport(ObjectiveC) && QS_OBJC_BRIDGE
-    import Foundation
-
     /// Tiny wrapper to carry an Objective-C block through places that require `@Sendable`.
     ///
     /// Why this exists:
