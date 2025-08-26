@@ -1,3 +1,8 @@
+## 1.1.3
+
+- [CHORE] refactor code and improve variable naming for clarity and consistency
+- [CHORE] add QsSwift <-> qs.js comparison tests
+
 ## 1.1.2
 
 - [FEAT] Introduce `DecodeKind` to distinguish **key** vs **value** decoding; add Objective‑C mirror `QsDecodeKind`.
