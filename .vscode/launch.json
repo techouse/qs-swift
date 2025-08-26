@@ -1,4 +1,23 @@
 {
     "version": "0.2.0",
-    "configurations": []
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:QsSwift}",
+            "name": "Debug QsSwiftComparison",
+            "program": "${workspaceFolder:QsSwift}/.build/debug/QsSwiftComparison",
+            "preLaunchTask": "swift: Build Debug QsSwiftComparison"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:QsSwift}",
+            "name": "Release QsSwiftComparison",
+            "program": "${workspaceFolder:QsSwift}/.build/release/QsSwiftComparison",
+            "preLaunchTask": "swift: Build Release QsSwiftComparison"
+        }
+    ]
 }
