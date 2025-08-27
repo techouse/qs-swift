@@ -1,5 +1,6 @@
 # QsObjC — Objective‑C bridge for QsSwift
 
+[![SwiftPM version](https://img.shields.io/github/v/release/techouse/qs-swift?logo=swift&label=SwiftPM)](https://github.com/techouse/qs-swift/releases/latest)
 [![Docs](https://img.shields.io/badge/Docs-QsObjC-blue)](https://techouse.github.io/qs-swift/qsobjc/documentation/qsobjc/)
 [![License](https://img.shields.io/github/license/techouse/qs-swift)](LICENSE)
 [![Test](https://github.com/techouse/qs-swift/actions/workflows/test.yml/badge.svg)](https://github.com/techouse/qs-swift/actions/workflows/test.yml)
