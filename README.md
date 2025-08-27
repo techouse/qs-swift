@@ -1,5 +1,9 @@
 # QsSwift
 
+<p align="center">
+    <img src="logo.png?raw=true" width="256" alt="RxDart" />
+</p>
+
 A fast, flexible query string **encoding/decoding** library for Swift and [Objective-C](#objective-c).
 
 Ported from [qs](https://www.npmjs.com/package/qs) for JavaScript.
