@@ -1,5 +1,9 @@
+
 import Foundation
 import OrderedCollections
+#if canImport(Darwin)
+import CoreFoundation
+#endif
 
 @testable import QsSwift
 
@@ -167,9 +171,21 @@ struct EncodeTests {
             if let v = value as? UInt {
                 return "\(v)n"
             }
-            if let v = value as? NSNumber, CFNumberIsFloatType(v) == false {
-                // Treat non-floating NSNumbers as integers
-                return "\(v.int64Value)n"
+            if let v = value as? NSNumber {
+                #if canImport(Darwin)
+                if CFNumberIsFloatType(v) == false {
+                    // Treat non-floating NSNumbers as integers (Apple platforms)
+                    return "\(v.int64Value)n"
+                }
+                #else
+                // On Linux (swift-corelibs-foundation), CoreFoundation helpers are unavailable.
+                // Consider the value "integer-like" if its Double form equals its Int64 form.
+                let d = v.doubleValue
+                let i = v.int64Value
+                if d.isFinite && d == Double(i) {
+                    return "\(i)n"
+                }
+                #endif
             }
             // Everything else: use default encoding without the "n" suffix
             return Utils.encode(value, charset: .utf8, format: .rfc3986)
