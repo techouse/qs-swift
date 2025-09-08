@@ -15,6 +15,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.2.1"),
+        .package(url: "https://github.com/reers/ReerKit.git", from: "1.1.9"),
         .package(url: "https://github.com/apple/swift-testing.git", from: "0.9.0"),
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.1.0"),
     ],
@@ -24,6 +25,7 @@ let package = Package(
             dependencies: [
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 .product(name: "OrderedCollections", package: "swift-collections"),
+                .product(name: "ReerKit", package: "ReerKit", condition: .when(platforms: [.linux])),
             ],
             path: "Sources/QsSwift",
             swiftSettings: [
