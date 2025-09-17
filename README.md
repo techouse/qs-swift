@@ -1,7 +1,7 @@
 # QsSwift
 
 <p align="center">
-    <img src="https://github.com/techouse/qs-swift/raw/main/logo.png?raw=true?raw=true" width="256" alt="QsSwift" />
+    <img src="https://github.com/techouse/qs-swift/raw/main/logo.png?raw=true" width="256" alt="QsSwift" />
 </p>
 
 A fast, flexible query string **encoding/decoding** library for Swift and [Objective-C](#objective-c).
