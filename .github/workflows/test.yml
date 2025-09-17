@@ -254,7 +254,7 @@ jobs:
     permissions:
       contents: read
     name: Swift tests (Linux)
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 40
     continue-on-error: true
     needs: analyze
