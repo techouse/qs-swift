@@ -563,7 +563,7 @@ See the [QsObjC README](Sources/QsObjC/README.md) for installation, options, and
 
 ## Linux support
 
-**Experimental** (Swift 6.1+)
+**Experimental** (Swift 6.0+)
 
 On non‑Apple platforms, QsSwift uses ReerKit’s `WeakMap` to emulate `NSMapTable.weakToWeakObjects()` (weak keys **and**
 weak values) for the encoder’s cycle‑detection side‑channel. This works around CoreFoundation APIs that aren’t available
