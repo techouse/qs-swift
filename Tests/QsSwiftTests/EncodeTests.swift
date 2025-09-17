@@ -1478,10 +1478,28 @@ struct EncodeTests {
             return ""
         }
 
-        #expect(
-            try Qs.encode(["県": "大阪府", "": ""], options: EncodeOptions(encoder: custom))
-                == "%8c%a7=%91%e5%8d%e3%95%7b&="
-        )
+        #if os(Linux)
+            let supportsShiftJIS = "大阪府".data(using: .shiftJIS) != nil
+            if supportsShiftJIS {
+                #expect(
+                    try Qs.encode(["県": "大阪府", "": ""], options: EncodeOptions(encoder: custom))
+                        == "%8c%a7=%91%e5%8d%e3%95%7b&="
+                )
+            } else {
+                try withKnownIssue {
+                    let produced =
+                        (try? Qs.encode(
+                            ["県": "大阪府", "": ""],
+                            options: EncodeOptions(encoder: custom))) ?? ""
+                    #expect(produced == "%8c%a7=%91%e5%8d%e3%95%7b&=")
+                }
+            }
+        #else
+            #expect(
+                try Qs.encode(["県": "大阪府", "": ""], options: EncodeOptions(encoder: custom))
+                    == "%8c%a7=%91%e5%8d%e3%95%7b&="
+            )
+        #endif
     }
 
     @Test("encode - receives the default encoder as a second argument")
