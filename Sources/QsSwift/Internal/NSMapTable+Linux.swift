@@ -1,4 +1,4 @@
-#if !canImport(Darwin)
+#if os(Linux)
     import Foundation
     #if canImport(ReerKit)
         import ReerKit
@@ -37,6 +37,6 @@
             }
         }
     #else
-        #error("ReerKit is required on Linux: add the ReerKit package or provide a compatible implementation")
+        #error("ReerKit is required on Linux. Add it as a conditional dependency for Linux in Package.swift.")
     #endif
 #endif
