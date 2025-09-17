@@ -1,3 +1,7 @@
+## 1.1.5
+
+- [FEAT] add experimental Linux support
+
 ## 1.1.4
 
 - [FIX] remove redundant imports
