@@ -37,6 +37,6 @@
             }
         }
     #else
-        #error("ReerKit is required on non-Apple platforms. Add it as a conditional dependency for Linux.")
+        #error("ReerKit is required on Linux: add the ReerKit package or provide a compatible implementation")
     #endif
 #endif
