@@ -19,7 +19,7 @@ struct ConvenienceTests {
     }
 
     @Test("encodeOrNil → nil on cyclic graph")
-    func encodeOrNil_cycle() {
+    func encodeOrNil_cycle() throws {
         #if os(Linux)
             try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
                 #expect(Bool(false), Comment("Skipped: cannot safely build a cyclic container on Linux"))
