@@ -254,7 +254,7 @@ jobs:
     permissions:
       contents: read
     name: Swift tests (Linux)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 40
     continue-on-error: true
     needs: analyze
@@ -291,7 +291,7 @@ jobs:
           SWIFT_DETERMINISTIC_HASHING: 1
         run: |
           set -euxo pipefail
-          swift test --parallel --enable-test-discovery
+          swift test -q --parallel --enable-test-discovery
 
       - name: Kernel logs on failure
         if: ${{ failure() }}
