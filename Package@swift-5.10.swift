@@ -3,6 +3,21 @@
 
 import PackageDescription
 
+var deps: [Package.Dependency] = [
+    .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
+    .package(url: "https://github.com/apple/swift-collections.git", from: "1.2.1"),
+    .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.1.0"),
+    .package(url: "https://github.com/apple/swift-testing.git", from: "0.9.0"),
+]
+var targetDeps: [Target.Dependency] = [
+    .product(name: "Algorithms", package: "swift-algorithms"),
+    .product(name: "OrderedCollections", package: "swift-collections"),
+]
+#if os(Linux)
+    deps.append(.package(url: "https://github.com/reers/ReerKit.git", from: "1.1.9"))
+    targetDeps.append(.product(name: "ReerKit", package: "ReerKit"))
+#endif
+
 let package = Package(
     name: "QsSwift",
     platforms: [
@@ -12,19 +27,11 @@ let package = Package(
         .library(name: "QsSwift", targets: ["QsSwift"]),
         .library(name: "QsObjC", targets: ["QsObjC"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
-        .package(url: "https://github.com/apple/swift-collections.git", from: "1.2.1"),
-        .package(url: "https://github.com/apple/swift-testing.git", from: "0.9.0"),
-        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.1.0"),
-    ],
+    dependencies: deps,
     targets: [
         .target(
             name: "QsSwift",
-            dependencies: [
-                .product(name: "Algorithms", package: "swift-algorithms"),
-                .product(name: "OrderedCollections", package: "swift-collections"),
-            ],
+            dependencies: targetDeps,
             path: "Sources/QsSwift",
             swiftSettings: [
                 .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),

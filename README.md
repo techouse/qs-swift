@@ -1,7 +1,7 @@
 # QsSwift
 
 <p align="center">
-    <img src="https://github.com/techouse/qs-swift/raw/main/logo.png?raw=true?raw=true" width="256" alt="QsSwift" />
+    <img src="https://github.com/techouse/qs-swift/raw/main/logo.png?raw=true" width="256" alt="QsSwift" />
 </p>
 
 A fast, flexible query string **encoding/decoding** library for Swift and [Objective-C](#objective-c).
@@ -561,11 +561,17 @@ See the [QsObjC README](Sources/QsObjC/README.md) for installation, options, and
 
 ---
 
-## Linux support status
+## Linux support
 
-Linux support is currently **not available**. The package relies on Objective-C-only Foundation types (e.g., `NSMapTable` / `NSHashTable`) and behavior used by the encoder’s cycle-detection side channel and the Objective-C bridge. These APIs are unavailable on Swift Foundation for Linux, and a safe, pure-Swift replacement is still being evaluated.
+**Experimental** (Swift 6.0+)
 
-See **[LinuxSupport.md](LinuxSupport.md)** for background, limitations, and the migration plan (including ideas for a pure-Swift side-channel and conditional compilation guards).
+On non‑Apple platforms, QsSwift uses ReerKit’s `WeakMap` to emulate `NSMapTable.weakToWeakObjects()` (weak keys **and**
+weak values) for the encoder’s cycle‑detection side‑channel. This works around CoreFoundation APIs that aren’t available
+in swift‑corelibs‑foundation on Linux.
+
+**Caveats**
+- Some tests that construct *self‑referential* `NSArray`/`NSDictionary` graphs are wrapped in `withKnownIssue` because swift‑corelibs‑foundation can crash when creating those graphs. (Apple platforms are unaffected.)
+- CI includes an **experimental Ubuntu** job and is marked `continue-on-error` while Linux behavior stabilizes.
 
 ---
 

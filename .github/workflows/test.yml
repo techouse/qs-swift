@@ -56,7 +56,7 @@ jobs:
   tests:
     permissions:
       contents: read
-    name: Swift tests + coverage
+    name: Swift tests + coverage (macOS, Xcode)
     timeout-minutes: 45
     runs-on: macos-15
     needs: analyze
@@ -118,7 +118,7 @@ jobs:
   objc-tests:
     permissions:
       contents: read
-    name: Objective-C E2E tests (Xcode)
+    name: Objective-C E2E tests (macOS, Xcode)
     timeout-minutes: 45
     runs-on: macos-15
     needs: [ analyze, tests ]
@@ -250,6 +250,53 @@ jobs:
           path: crashlogs-objc
           if-no-files-found: ignore
 
+  linux-tests:
+    permissions:
+      contents: read
+    name: Swift tests (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    continue-on-error: true
+    needs: analyze
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Swift ${{ env.SWIFT_VERSION }}
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
+
+      - name: Show Swift & OS versions
+        run: |
+          swift --version
+          uname -a
+
+      - name: Cache SwiftPM artifacts (Linux)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.swiftpm
+            .build
+            ~/.cache/org.swift.swiftpm
+          key: spm-${{ runner.os }}-swift-${{ env.SWIFT_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-swift-${{ env.SWIFT_VERSION }}-
+
+      - name: Run tests (Linux)
+        env:
+          SKIP_EXPENSIVE_TESTS: 1
+          SWIFT_DETERMINISTIC_HASHING: 1
+        run: bash scripts/coverage.sh
+
+      - name: Kernel logs on failure
+        if: ${{ failure() }}
+        run: |
+          set -euxo pipefail
+          dmesg | tail -n 200 || true
+
   ensure-compatibility:
     name: Ensure compatibility with qs.js
     needs: [ analyze, tests ]
@@ -292,7 +339,7 @@ jobs:
 
       - name: Install qs.js
         working-directory: Tools/QsSwiftComparison/js
-        run:  npm ci --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Show qs.js version
         working-directory: Tools/QsSwiftComparison/js

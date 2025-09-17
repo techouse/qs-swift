@@ -445,8 +445,11 @@ struct UtilsTests {
     @Test("Utils.merge - merges Map with List")
     func testMergeMapWithList() async throws {
         let result = Utils.merge(target: [0: "a"], source: [Undefined(), "b"])
-        let expected: [AnyHashable: Any] = [0: "a", 1: "b"]
-        #expect(NSDictionary(dictionary: result as! [AnyHashable: Any]).isEqual(to: expected))
+        let out: [AnyHashable : Any] = result as! [AnyHashable: Any]
+        // Compare contents directly to avoid NSNumber/Int key-bridging differences on Linux
+        #expect(out.count == 2)
+        #expect(out[AnyHashable(0)] as? String == "a")
+        #expect(out[AnyHashable(1)] as? String == "b")
     }
 
     @Test("Utils.merge - merges two objects with the same key and different values")
@@ -686,9 +689,9 @@ struct UtilsTests {
         let source: [Any?] = [Undefined(), "Y", Undefined()]
         let merged = Utils.merge(target: target, source: source) as! [Any?]
         #expect(merged.count == 3)
-        #expect(merged[0] as? String == "x") // undefined in source leaves target
-        #expect(merged[1] as? String == "Y") // replaced
-        #expect(merged[2] as? String == "z") // undefined in source leaves target
+        #expect(merged[0] as? String == "x")  // undefined in source leaves target
+        #expect(merged[1] as? String == "Y")  // replaced
+        #expect(merged[2] as? String == "z")  // undefined in source leaves target
     }
 
     @Test("Utils.merge - array overlay with parseLists=false prunes remaining Undefined")
@@ -844,7 +847,7 @@ struct UtilsTests {
         // sequence of hex entities
         #expect(Utils.interpretNumericEntities("&#x41;&#x42;&#x43;") == "ABC")
         // lowercase hex digits
-        #expect(Utils.interpretNumericEntities("&#x4a;") == "J") // 0x4A = 'J'
+        #expect(Utils.interpretNumericEntities("&#x4a;") == "J")  // 0x4A = 'J'
     }
 
     @Test("Utils.interpretNumericEntities - hex form handles supplementary planes and surrogate halves")
