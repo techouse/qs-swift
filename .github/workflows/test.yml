@@ -289,9 +289,7 @@ jobs:
         env:
           SKIP_EXPENSIVE_TESTS: 1
           SWIFT_DETERMINISTIC_HASHING: 1
-        run: |
-          set -euxo pipefail
-          swift test -q --parallel --enable-test-discovery
+        run: bash scripts/coverage.sh
 
       - name: Kernel logs on failure
         if: ${{ failure() }}
