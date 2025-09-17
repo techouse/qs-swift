@@ -18,23 +18,27 @@ import Foundation
 @Suite("core-extras")
 struct CoreExtrasTests {
 
-    #if !os(Linux)
-        @Test("EncodeError.cyclicObject is thrown for NSDictionary self-cycle")
-        func encode_cycleNSDictionary() {
+    @Test("EncodeError.cyclicObject is thrown for NSDictionary self-cycle")
+    func encode_cycleNSDictionary() throws {
+        #if os(Linux)
+            // Known corelibs-foundation issue: constructing a self-referential NSDictionary can segfault
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault when constructing NSDictionary self-cycle"))
+            {
+                #expect(
+                    Bool(false),
+                    Comment(
+                        "Cannot safely construct NSDictionary self-cycle on Linux; tracked as known issue until corelibs is fixed."
+                    )
+                )
+            }
+        #else
             let m = NSMutableDictionary()
             m["self"] = m
             #expect(throws: EncodeError.cyclicObject) {
                 _ = try Qs.encode(m)
             }
-        }
-    #else
-        @Test("NSDictionary self-cycle skipped on Linux (corelibs-foundation segfault)")
-        func encode_cycleNSDictionary_linux_skip() {
-            Issue.record(
-                "Skipped on Linux: self-referential NSDictionary can segfault in swift-corelibs-foundation before the cycle guard triggers."
-            )
-        }
-    #endif
+        #endif
+    }
 
     @Test("DecodeError as NSError: parameterLimitExceeded populates domain/code/userInfo")
     func decode_errorAsNSError_parameterLimitExceeded() {

@@ -2211,90 +2211,80 @@ struct EncodeTests {
             }
         }
     #else
-        @Test("Encoder cycle detection – self-referential map throws (skipped on Linux)")
-        func testCycleInMapThrows_skip() async throws {
-            Issue.record(
-                "Note: This test runs only on Apple platforms. On Linux, corelibs-foundation may crash on self-referential NSDictionary; the Linux variant is disabled."
-            )
-        }
-    #endif
-
-    #if !os(Linux)
-        @Test("Encoder cycle detection – self-referential list throws")
-        func testCycleInListThrows() async throws {
-            let l = NSMutableArray()
-            l.add(l)  // true cycle
-
-            #expect(throws: EncodeError.cyclicObject) {
-                _ = try Qs.encode(["l": l], options: .init())
+        @Test("encode: cycle in map throws (skipped on Linux)")
+        func testCycleInMapThrows_skip() throws {
+            try withKnownIssue(Comment("Linux: map self-cycle may segfault under corelibs-foundation")) {
+                #expect(Bool(false), Comment("Cannot safely construct a dictionary that contains itself on Linux."))
             }
         }
-    #else
-        @Test("encode: cycle in list throws EncodeError.cyclicObject (skipped on Linux)")
-        func testCycleInListThrows_skip() {
-            _linuxCycleSkip("A list that contains itself can crash under swift-corelibs-foundation.")
-        }
     #endif
 
-    #if !os(Linux)
-        @Test("encodeOrNil returns nil on cycle (dict)")
-        func testEncodeOrNilCycleDict() async throws {
-            let a = NSMutableDictionary()
-            a["self"] = a
-            let obj: [String: Any] = ["a": a]
-            #expect(Qs.encodeOrNil(obj) == nil)
-        }
-    #else
-        @Test("encodeOrNil: cycle dict returns nil (skipped on Linux)")
-        func testEncodeOrNilCycleDict_skip() {
-            _linuxCycleSkip("Cyclic NSDictionary disabled due to corelibs segfault risk.")
-        }
-    #endif
+    @Test("encode: cycle in list throws EncodeError.cyclicObject")
+    func testCycleInListThrows() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: NSArray self-reference may segfault")) {
+                #expect(Bool(false), Comment("Cannot safely construct a list that contains itself on Linux."))
+            }
+        #else
+            let a = NSMutableArray()
+            a.add(a)
+            #expect(throws: EncodeError.cyclicObject) { _ = try Qs.encode(["a": a]) }
+        #endif
+    }
 
-    #if !os(Linux)
-        @Test("encodeOrNil returns nil on cycle (array)")
-        func testEncodeOrNilCycleArray() async throws {
-            let l = NSMutableArray()
-            l.add(l)
-            let obj: [String: Any] = ["l": l]
-            #expect(Qs.encodeOrNil(obj) == nil)
-        }
-    #else
-        @Test("encodeOrNil: cycle array returns nil (skipped on Linux)")
-        func testEncodeOrNilCycleArray_skip() {
-            _linuxCycleSkip("Cyclic NSArray disabled due to corelibs segfault risk.")
-        }
-    #endif
+    @Test("encodeOrNil: cycle dict returns nil")
+    func testEncodeOrNilCycleDict() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: NSDictionary self-reference may segfault")) {
+                #expect(Bool(false), Comment("Cannot safely evaluate encodeOrNil with cyclic dict on Linux."))
+            }
+        #else
+            let d = NSMutableDictionary()
+            d["self"] = d
+            #expect(Qs.encodeOrNil(d) == nil)
+        #endif
+    }
 
-    #if !os(Linux)
-        @Test("encodeOrNil returns nil on cycle (dict)")
-        func testEncodeOrEmptyCycleDict() async throws {
-            let a = NSMutableDictionary()
-            a["self"] = a
-            let obj: [String: Any] = ["a": a]
-            #expect(Qs.encodeOrEmpty(obj) == "")
-        }
-    #else
-        @Test("encodeOrEmpty: cycle dict returns empty (skipped on Linux)")
-        func testEncodeOrEmptyCycleDict_skip() {
-            _linuxCycleSkip("Cyclic NSDictionary disabled due to corelibs segfault risk.")
-        }
-    #endif
+    @Test("encodeOrNil: cycle array returns nil")
+    func testEncodeOrNilCycleArray() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: NSArray self-reference may segfault")) {
+                #expect(Bool(false), Comment("Cannot safely evaluate encodeOrNil with cyclic array on Linux."))
+            }
+        #else
+            let a = NSMutableArray()
+            a.add(a)
+            #expect(Qs.encodeOrNil(a) == nil)
+        #endif
+    }
 
-    #if !os(Linux)
-        @Test("encodeOrNil returns nil on cycle (array)")
-        func testEncodeOrEmptyCycleArray() async throws {
-            let l = NSMutableArray()
-            l.add(l)
-            let obj: [String: Any] = ["l": l]
-            #expect(Qs.encodeOrEmpty(obj) == "")
-        }
-    #else
-        @Test("encodeOrEmpty: cycle array returns empty (skipped on Linux)")
-        func testEncodeOrEmptyCycleArray_skip() {
-            _linuxCycleSkip("Cyclic NSArray disabled due to corelibs segfault risk.")
-        }
-    #endif
+    @Test("encodeOrEmpty: cycle dict returns empty")
+    func testEncodeOrEmptyCycleDict() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: NSDictionary self-reference may segfault")) {
+                #expect(Bool(false), Comment("Cannot safely evaluate encodeOrEmpty with cyclic dict on Linux."))
+            }
+        #else
+            let d = NSMutableDictionary()
+            d["self"] = d
+            let s = Qs.encodeOrEmpty(d)
+            #expect(s.isEmpty)
+        #endif
+    }
+
+    @Test("encodeOrEmpty: cycle array returns empty")
+    func testEncodeOrEmptyCycleArray() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: NSArray self-reference may segfault")) {
+                #expect(Bool(false), Comment("Cannot safely evaluate encodeOrEmpty with cyclic array on Linux."))
+            }
+        #else
+            let a = NSMutableArray()
+            a.add(a)
+            let s = Qs.encodeOrEmpty(["a": a])
+            #expect(s.isEmpty)
+        #endif
+    }
 
     // MARK: Encoder comma list tail paths
 
@@ -2701,21 +2691,20 @@ struct EncodeTests {
         #expect(i0 != nil && i1 != nil && i0! < i1!)
     }
 
-    #if !os(Linux)
-        @Test("encode: NSDictionary cycle throws")
-        func nsdictionary_cycle_throws() {
+    @Test("Encoder.encode: NSDictionary cycle throws EncodeError.cyclicObject")
+    func nsdictionary_cycle_throws() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: NSDictionary self-cycle may segfault under corelibs-foundation")) {
+                #expect(
+                    Bool(false),
+                    Comment("Cannot safely construct NSDictionary self-cycle on Linux; tracked as known issue."))
+            }
+        #else
             let m = NSMutableDictionary()
             m["self"] = m
-            #expect(throws: EncodeError.cyclicObject) {
-                _ = try Qs.encode(m)
-            }
-        }
-    #else
-        @Test("Encoder.encode: NSDictionary cycle throws EncodeError.cyclicObject (skipped on Linux)")
-        func nsdictionary_cycle_throws_skip() {
-            _linuxCycleSkip("Self-referential NSDictionary/NSArray segfaults are a known limitation.")
-        }
-    #endif
+            #expect(throws: EncodeError.cyclicObject) { _ = try Qs.encode(["outer": m]) }
+        #endif
+    }
 
     // MARK: - Edge cases
 
@@ -2832,96 +2821,89 @@ struct EncodeTests {
         #expect(out == "a.b%2Ec=v")
     }
 
-    #if !os(Linux)
-        @Test("encode: dictionary cycle throws EncodeError.cyclicObject")
-        func cycle_throws() {
-            let d = NSMutableDictionary()
-            d["self"] = d  // true identity cycle
-
-            #expect(throws: EncodeError.cyclicObject) {
-                _ = try Qs.encode(["root": d], options: .init())
+    @Test("encode: cycle throws EncodeError.cyclicObject")
+    func cycle_throws() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: self-referential Foundation containers can crash before encoder runs")) {
+                #expect(
+                    Bool(false), Comment("Cannot safely build a generic self-cycle on Linux; tracked as known issue.")
+                )
             }
-        }
-    #else
-        @Test("encode: cycle throws EncodeError.cyclicObject (skipped on Linux)")
-        func cycle_throws_skip() {
-            _linuxCycleSkip(
-                "Constructing a self-referential Foundation container can hit SIGSEGV under corelibs-foundation.")
-        }
-    #endif
+        #else
+            let a = NSMutableDictionary()
+            a["a"] = a
+            #expect(throws: EncodeError.cyclicObject) { _ = try Qs.encode(a) }
+        #endif
+    }
 
-    #if !os(Linux)
-        @Test("encode: array cycle throws EncodeError.cyclicObject")
-        func array_cycle_throws() {
+    @Test("encode: array cycle throws EncodeError.cyclicObject")
+    func array_cycle_throws() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault when constructing NSArray self-cycle")) {
+                #expect(
+                    Bool(false), Comment("Cannot safely construct NSArray self-cycle on Linux; tracked as known issue.")
+                )
+            }
+        #else
             let a = NSMutableArray()
-            a.add(a)  // true identity cycle
-
+            a.add(a)
             #expect(throws: EncodeError.cyclicObject) {
                 _ = try Qs.encode(["root": a], options: .init())
             }
-        }
-    #else
-        @Test("encode: array cycle throws EncodeError.cyclicObject (skipped on Linux)")
-        func array_cycle_throws_skip() {
-            Issue.record(
-                "Note: This test runs only on Apple platforms. On Linux, corelibs-foundation may crash on self-referential NSArray; the Linux variant is disabled."
-            )
-        }
-    #endif
+        #endif
+    }
 
-    #if !os(Linux)
-        @Test("encode: NSMutableDictionary self-cycle throws EncodeError.cyclicObject")
-        func cycle_dict_ref_throws() {
+    @Test("encode: NSDictionary/Dictionary cycle throws EncodeError.cyclicObject")
+    func cycle_dict_ref_throws() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault when constructing NSDictionary self-cycle"))
+            {
+                #expect(
+                    Bool(false),
+                    Comment("Cannot safely construct NSDictionary self-cycle on Linux; tracked as known issue."))
+            }
+        #else
             let d = NSMutableDictionary()
             d["self"] = d
-            #expect(throws: EncodeError.cyclicObject) {
-                _ = try Qs.encode(["root": d])
-            }
-        }
-    #else
-        @Test("encode: NSDictionary/Dictionary cycle throws EncodeError.cyclicObject (skipped on Linux)")
-        func cycle_dict_ref_throws_skip() {
-            _linuxCycleSkip("NSDictionary/Dictionary self-cycles can crash on Linux before the encoder runs.")
-        }
-    #endif
+            #expect(throws: EncodeError.cyclicObject) { _ = try Qs.encode(["root": d]) }
+        #endif
+    }
 
-    #if !os(Linux)
-        @Test("encode: NSMutableArray self-cycle throws EncodeError.cyclicObject")
-        func cycle_array_ref_throws() {
+    @Test("encode: NSMutableArray self-cycle throws EncodeError.cyclicObject")
+    func cycle_array_ref_throws() throws {
+        #if os(Linux)
+            try withKnownIssue(
+                Comment("Linux: corelibs-foundation segfault when constructing NSMutableArray self-cycle")
+            ) {
+                #expect(
+                    Bool(false),
+                    Comment("Cannot safely construct NSMutableArray self-cycle on Linux; tracked as known issue."))
+            }
+        #else
             let a = NSMutableArray()
             a.add(a)
             #expect(throws: EncodeError.cyclicObject) {
                 _ = try Qs.encode(["root": a])
             }
-        }
-    #else
-        @Test("encode: NSMutableArray self-cycle throws EncodeError.cyclicObject (skipped on Linux)")
-        func cycle_array_ref_throws_skip() {
-            Issue.record(
-                "Note: This test runs only on Apple platforms. On Linux, corelibs-foundation may crash on self-referential NSArray; the Linux variant is disabled."
-            )
-        }
-    #endif
+        #endif
+    }
 
-    #if !os(Linux)
-        @Test("encode: cross-cycle NSDictionary <-> NSArray throws EncodeError.cyclicObject")
-        func cycle_cross_ref_throws() {
-            let d = NSMutableDictionary()
-            let a = NSMutableArray()
-            d["a"] = a
-            a.add(d)
-            #expect(throws: EncodeError.cyclicObject) {
-                _ = try Qs.encode(["root": d])
+    @Test("encode: cross-referenced containers throw EncodeError.cyclicObject")
+    func cycle_cross_ref_throws() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: corelibs-foundation may segfault on cross-referential containers")) {
+                #expect(
+                    Bool(false),
+                    Comment("Cannot safely construct cross-referential NSDictionary/NSArray graph on Linux."))
             }
-        }
-    #else
-        @Test("encode: cross-referenced containers throw EncodeError.cyclicObject (skipped on Linux)")
-        func cycle_cross_ref_throws_skip() {
-            _linuxCycleSkip(
-                "self/cross-referential Foundation containers may segfault under swift-corelibs-foundation before cycle detection."
-            )
-        }
-    #endif
+        #else
+            let a = NSMutableArray()
+            let b = NSMutableArray()
+            a.add(b)
+            b.add(a)
+            #expect(throws: EncodeError.cyclicObject) { _ = try Qs.encode(["root": a]) }
+        #endif
+    }
 
     @Test("encode: default ISO8601 date serializer uses fractional seconds when present")
     func date_iso8601_fractional() throws {
@@ -3295,10 +3277,3 @@ private func multisetParts(_ qs: String) -> [String: Int] {
     }
     return bag
 }
-
-#if os(Linux)
-    @inline(__always)
-    func _linuxCycleSkip(_ reason: String) {
-        Issue.record("Skipped on Linux: \(reason)")
-    }
-#endif
