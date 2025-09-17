@@ -3249,14 +3249,14 @@ struct EncodeTests {
     func linuxShim_NSMapTable_weak_basic() throws {
         final class Foo: NSObject {}
         let side = NSMapTable<AnyObject, AnyObject>.weakToWeakObjects()
-        var k: Foo? = Foo()
-        var v: Foo? = Foo()
-        side.setObject(v!, forKey: k!)
-        #expect(side.object(forKey: k!) != nil)
-        // Drop strong refs; cannot force collection deterministically here.
-        k = nil
-        v = nil
-        // Just exercising API without crash is sufficient.
+        do {
+            let k = Foo()
+            let v = Foo()
+            side.setObject(v, forKey: k)
+            #expect(side.object(forKey: k) != nil)
+        }
+        // Post-scope, both key and value had only weak references in the table.
+        // We can’t force ARC to collect deterministically; existence checks here are best‑effort.
         #expect(true)
     }
 #endif

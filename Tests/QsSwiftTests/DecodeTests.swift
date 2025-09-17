@@ -3019,7 +3019,7 @@ extension DecodeTests {
             // It works on this Linux runtime — pass normally (do not use withKnownIssue).
             #expect(decoded == "大阪府")
         } else {
-            try withKnownIssue {
+            try withKnownIssue("Got: \(decoded.debugDescription)") {
                 // Expected failure on Linux today: Shift_JIS decoding often unavailable in corelibs-foundation.
                 // If/when this ever starts working, the branch above will exercise instead.
                 #expect(decoded == "大阪府")

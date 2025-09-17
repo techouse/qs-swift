@@ -445,7 +445,7 @@ struct UtilsTests {
     @Test("Utils.merge - merges Map with List")
     func testMergeMapWithList() async throws {
         let result = Utils.merge(target: [0: "a"], source: [Undefined(), "b"])
-        let out = result as! [AnyHashable: Any]
+        let out: [AnyHashable : Any] = result as! [AnyHashable: Any]
         // Compare contents directly to avoid NSNumber/Int key-bridging differences on Linux
         #expect(out.count == 2)
         #expect(out[AnyHashable(0)] as? String == "a")

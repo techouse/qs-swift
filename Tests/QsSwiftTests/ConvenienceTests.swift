@@ -21,11 +21,9 @@ struct ConvenienceTests {
     @Test("encodeOrNil → nil on cyclic graph")
     func encodeOrNil_cycle() {
         #if os(Linux)
-            // On Linux, a self-referential NSDictionary can crash due to corelibs-foundation differences.
-            // Using an unsupported top-level type should fail; corelibs may return "" instead of nil.
-            let input: Any = NSNumber(value: 1)
-            let got = Qs.encodeOrNil(input)
-            #expect(got == nil || got == "")
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
+                #expect(Bool(false), Comment("Skipped: cannot safely build a cyclic container on Linux"))
+            }
         #else
             let inner = NSMutableDictionary()
             inner["self"] = inner  // reference cycle
