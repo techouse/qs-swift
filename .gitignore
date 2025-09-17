@@ -5,11 +5,13 @@ xcuserdata/
 DerivedData/
 .swiftpm/configuration/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
-.swiftpm/cache
+.swiftpm/cache/
 .netrc
 .history
 .idea
-.cache
+.cache/
 coverage/
 docs/
 core
+core.*
+vgcore.*
