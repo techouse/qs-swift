@@ -565,12 +565,15 @@ See the [QsObjC README](Sources/QsObjC/README.md) for installation, options, and
 
 **Experimental** (Swift 6.0+)
 
-On non‑Apple platforms, QsSwift uses ReerKit’s `WeakMap` to emulate `NSMapTable.weakToWeakObjects()` (weak keys **and**
-weak values) for the encoder’s cycle‑detection side‑channel. This works around CoreFoundation APIs that aren’t available
-in swift‑corelibs‑foundation on Linux.
+On Linux, QsSwift uses [ReerKit](https://swiftpackageindex.com/reers/ReerKit)’s [`WeakMap`](https://github.com/reers/ReerKit/blob/main/Sources/ReerKit/Utility/Weak/WeakMap.swift)
+to emulate [`NSMapTable.weakToWeakObjects()`](Sources/QsSwift/Internal/NSMapTable%2BLinux.swift) (weak keys **and** weak
+values) for the encoder’s cycle‑detection side‑channel. This works around CoreFoundation APIs that aren’t available in
+swift‑corelibs‑foundation on Linux.
 
-**Caveats**
-- Some tests that construct *self‑referential* `NSArray`/`NSDictionary` graphs are wrapped in `withKnownIssue` because swift‑corelibs‑foundation can crash when creating those graphs. (Apple platforms are unaffected.)
+#### Caveats
+
+- Some tests that construct *self‑referential* `NSArray`/`NSDictionary` graphs are wrapped in `withKnownIssue` because
+  swift‑corelibs‑foundation can crash when creating those graphs. (Apple platforms are unaffected.)
 - CI includes an **experimental Ubuntu** job and is marked `continue-on-error` while Linux behavior stabilizes.
 
 ---
