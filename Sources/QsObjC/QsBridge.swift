@@ -161,6 +161,15 @@
                 for (key, value) in od { out[key] = _bridgeInputForEncode(value, seen: &seen) }
                 return out
 
+            // Ordered Swift dict with heterogeneous Hashable keys → stringify deterministically
+            case let od as OrderedDictionary<AnyHashable, Any>:
+                var out = OrderedDictionary<String, Any>()
+                out.reserveCapacity(od.count)
+                for (key, value) in od {
+                    out[stringifyKey(key)] = _bridgeInputForEncode(value, seen: &seen)
+                }
+                return out
+
             // Already ordered Swift dict (NSString keys)
             case let od as OrderedDictionary<NSString, Any>:
                 var out = OrderedDictionary<String, Any>()
