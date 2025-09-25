@@ -909,13 +909,21 @@ struct UtilsTests {
         "Utils.isNonNullishPrimitive - treats URL as primitive, honors skipNulls for empty string")
     func testIsNonNullishPrimitiveUrlAndEmptyString() async throws {
         #expect(Utils.isNonNullishPrimitive(URL(string: "https://example.com")!) == true)
+        #expect(Utils.isNonNullishPrimitive(URL(string: "https://example.com")!, skipNulls: true) == true)
         #expect(Utils.isNonNullishPrimitive("", skipNulls: true) == false)
     }
 
     @Test("Utils.isEmpty - empty collections and maps")
     func testIsEmptyCollectionsAndMaps() async throws {
         let emptyDict: [String: Any?] = [:]
+        let emptyOrderedStrings: OrderedDictionary<String, Any> = [:]
+        var emptyOrderedHashable: OrderedDictionary<AnyHashable, Any> = [:]
+        #expect(Utils.isEmpty(nil as Any?) == true)
         #expect(Utils.isEmpty(emptyDict) == true)
+        #expect(Utils.isEmpty(emptyOrderedStrings) == true)
+        #expect(Utils.isEmpty(emptyOrderedHashable) == true)
+        emptyOrderedHashable[AnyHashable("filled")] = 1
+        #expect(Utils.isEmpty(emptyOrderedHashable) == false)
     }
 
     // MARK: - Utils.deepBridgeToAnyIterative
@@ -1056,6 +1064,245 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.compactToAny normalizes nested optional arrays")
+    func utils_compactToAny_nestedOptionals() {
+        let input: [String: Any?] = [
+            "array": [Optional<Any>.none, [Optional<Any>.none, Optional<Any>.some("value")]]
+        ]
+
+        let out = Utils.compactToAny(input, allowSparseLists: true)
+        if let array = out["array"] as? [Any] {
+            #expect(array.first is NSNull)
+            if let nested = array.last as? [Any] {
+                #expect(nested.first is NSNull)
+                #expect(nested.last as? String == "value")
+            } else {
+                Issue.record("Expected nested array after normalization")
+            }
+        } else {
+            Issue.record("array missing after compactToAny nested normalization")
+        }
+    }
+
+    @Test("Utils.compact handles optional arrays when allowSparse=true")
+    func utils_compact_optionalArrays() async throws {
+        let undefined = Undefined.instance
+        let optionalArray: [Any?] = ["first", nil, undefined]
+        var root: [String: Any?] = ["opt": optionalArray]
+
+        let compacted = Utils.compact(&root, allowSparseLists: true)
+        if let arr = compacted["opt"] as? [Any] {
+            #expect(arr.count == 3)
+            #expect(arr[0] as? String == "first")
+            #expect(arr[1] is NSNull)
+            #expect(arr[2] is NSNull)
+        } else {
+            Issue.record("optional array branch missing")
+        }
+    }
+
+    @Test("Utils.compact normalizes nested optional arrays with allowSparse=true")
+    func utils_compact_nestedOptionalArrays() {
+        let undefined = Undefined.instance
+        let nested: [Any?] = ["inner", nil, undefined]
+        var root: [String: Any?] = ["opt": [nested, nil, undefined]]
+
+        let compacted = Utils.compact(&root, allowSparseLists: true)
+        if let arr = compacted["opt"] as? [Any] {
+            #expect(arr.count == 3)
+            let inner = arr.first as? [Any]
+            #expect(inner?.count == 3)
+            #expect(inner?[0] as? String == "inner")
+            #expect(inner?[1] is NSNull)
+            #expect(inner?[2] is NSNull)
+            #expect(arr[1] is NSNull)
+            #expect(arr[2] is NSNull)
+        } else {
+            Issue.record("nested optional array not bridged")
+        }
+    }
+
+    @Test("Utils.compact visits Swift [Any] arrays and preserves NSNull placeholders")
+    func utils_compact_swiftArrayBranch() {
+        let undefined = Undefined.instance
+        var root: [String: Any?] = [
+            "list": [Any](arrayLiteral: "value", undefined, ["drop": undefined])
+        ]
+
+        let compacted = Utils.compact(&root, allowSparseLists: true)
+        if let list = compacted["list"] as? [Any] {
+            #expect(list.count == 3)
+            #expect(list[0] as? String == "value")
+            #expect(list[1] is NSNull)
+            let dict = list[2] as? [String: Any]
+            #expect(dict?.isEmpty == true)
+        } else {
+            Issue.record("Swift [Any] branch not exercised")
+        }
+    }
+
+    @Test("Utils.compact prunes Undefined in Swift [Any] when allowSparse=false")
+    func utils_compact_swiftArrayDropsUndefined_noSparse() {
+        let undefined = Undefined.instance
+        var root: [String: Any?] = [
+            "list": [Any](arrayLiteral: "keep", undefined, ["inner": undefined])
+        ]
+
+        let compacted = Utils.compact(&root)
+        if let list = compacted["list"] as? [Any] {
+            #expect(list.count == 2)
+            #expect(list.first as? String == "keep")
+            let nested = list.last as? [String: Any]
+            #expect(nested?.isEmpty == true)
+        } else {
+            Issue.record("Swift [Any] allowSparse=false branch not exercised")
+        }
+    }
+
+    @Test("Utils.compact handles Swift [Any] containing nested [Any?]")
+    func utils_compact_swiftArrayNestedOptionals() {
+        let nested: [Any?] = ["inner", nil]
+        var root: [String: Any?] = ["list": [Any](arrayLiteral: nested)]
+
+        let compacted = Utils.compact(&root, allowSparseLists: true)
+        if let list = compacted["list"] as? [Any], let inner = list.first as? [Any] {
+            #expect(inner.count == 2)
+            #expect(inner[0] as? String == "inner")
+            #expect(inner[1] is NSNull)
+        } else {
+            Issue.record("Nested optional arrays not compacted as expected")
+        }
+    }
+
+    @Test("Utils.compact handles Foundation arrays and nested optionals across sparse modes")
+    func utils_compact_foundationAndNestedBranches() {
+        let undefined = Undefined.instance
+        let nestedOptional: [Any?] = [
+            undefined,
+            ["deep": undefined, "keep": "value"] as [String: Any?],
+            nil,
+            "leaf"
+        ]
+        let optionalList: [Any?] = [undefined, nestedOptional, undefined]
+        let foundationArray: NSArray = [undefined, ["inner": undefined], nestedOptional, "scalar"]
+        let plainArray: [Any] = [undefined, ["inner": undefined], "plain"]
+
+        var sparseRoot: [String: Any?] = [
+            "drop": undefined,
+            "foundation": foundationArray,
+            "optional": optionalList,
+            "plain": plainArray
+        ]
+
+        let sparse = Utils.compact(&sparseRoot, allowSparseLists: true)
+        #expect(sparse["drop"] == nil)
+
+        if let foundation = sparse["foundation"] as? [Any] {
+            #expect(foundation.first is NSNull)
+            let emptied = foundation.compactMap { $0 as? [String: Any] }.first
+            #expect(emptied?.isEmpty == true)
+            let nested = foundation.compactMap { $0 as? [Any] }.first
+            #expect(nested?.first is NSNull)
+        } else {
+            Issue.record("Foundation-backed array branch not exercised")
+        }
+
+        if let optional = sparse["optional"] as? [Any] {
+            #expect(optional.first is NSNull)
+            if let nested = optional.dropFirst().first as? [Any] {
+                #expect(nested.first is NSNull)
+                let nestedDict = nested.compactMap { $0 as? [String: Any] }.first
+                #expect(nestedDict?.keys.contains("keep") == true)
+                #expect(nested.last as? String == "leaf")
+            } else {
+                Issue.record("Nested optional array not normalized")
+            }
+            #expect(optional.last is NSNull)
+        } else {
+            Issue.record("Optional array branch not exercised")
+        }
+
+        if let plain = sparse["plain"] as? [Any] {
+            #expect(plain.first is NSNull)
+            #expect(plain.contains { ($0 as? String) == "plain" })
+        } else {
+            Issue.record("Swift [Any] branch not exercised")
+        }
+
+        var denseRoot: [String: Any?] = [
+            "foundation": foundationArray,
+            "optional": optionalList,
+            "plain": plainArray
+        ]
+
+        let dense = Utils.compact(&denseRoot)
+        if let foundationDense = dense["foundation"] as? [Any] {
+            #expect(!foundationDense.contains { $0 is NSNull })
+        } else {
+            Issue.record("Foundation array (no sparse) not exercised")
+        }
+
+        if let optionalDense = dense["optional"] as? [Any] {
+            #expect(optionalDense.contains { $0 is NSNull } == false)
+        } else {
+            Issue.record("Optional array (no sparse) not exercised")
+        }
+
+        if let plainDense = dense["plain"] as? [Any] {
+            #expect(plainDense.contains { $0 is NSNull } == false)
+        } else {
+            Issue.record("Swift [Any] (no sparse) not exercised")
+        }
+    }
+
+    @Test("Utils.compactToAny normalizes dictionary elements in arrays and explicit nil roots")
+    func utils_compactToAny_dictElementsAndNilRoots() {
+        let undefined = Undefined.instance
+        let nestedDict: [String: Any?] = [
+            "inner": undefined,
+            "value": 9
+        ]
+        let nestedOptional: [Any?] = [undefined, ["deep": undefined, "keep": "leaf"] as [String: Any?]]
+        let input: [String: Any?] = [
+            "list": [undefined, nestedDict, nestedOptional, nil],
+            "noneRoot": nil
+        ]
+
+        let sparse = Utils.compactToAny(input, allowSparseLists: true)
+        if let list = sparse["list"] as? [Any] {
+            #expect(list.count == 4)
+            #expect(list[0] is NSNull)
+
+            let dict = list[1] as? [String: Any]
+            #expect(dict?["inner"] == nil)
+            #expect(dict?["value"] as? Int == 9)
+
+            if let nested = list[2] as? [Any] {
+                #expect(nested.first is NSNull)
+                let tail = nested.last as? [String: Any]
+                #expect(tail?["keep"] as? String == "leaf")
+                #expect(tail?["deep"] == nil)
+            } else {
+                Issue.record("Expected nested optional array normalization")
+            }
+
+            #expect(list[3] is NSNull)
+        } else {
+            Issue.record("Sparse list normalization failed")
+        }
+
+        #expect(sparse["noneRoot"] is NSNull)
+
+        let dense = Utils.compactToAny(input, allowSparseLists: false)
+        if let denseList = dense["list"] as? [Any] {
+            #expect(!denseList.contains { $0 is Undefined })
+            #expect(denseList.contains { $0 is NSNull })
+        } else {
+            Issue.record("Dense list normalization failed")
+        }
+    }
+
+
     @Test("Utils.containsUndefined detects sentinel in nested structures")
     func utils_containsUndefined_detects() {
         let undefined = Undefined.instance
@@ -1069,6 +1316,32 @@ struct UtilsTests {
         var compacted = sample
         _ = Utils.compact(&compacted)
         #expect(!Utils.containsUndefined(compacted))
+    }
+
+    @Test("Utils.containsUndefined inspects Swift [Any] roots")
+    func utils_containsUndefined_swiftArrayRoot() {
+        let payload: [Any] = ["value", Undefined.instance]
+        #expect(Utils.containsUndefined(payload))
+    }
+
+    @Test("Utils.containsUndefined reports true for direct sentinel input")
+    func utils_containsUndefined_directSentinel() {
+        #expect(Utils.containsUndefined(Undefined.instance))
+    }
+
+    @Test("Utils.estimateSingleKeyChainDepth traverses AnyHashable optional chains")
+    func utils_estimateSingleKeyChainDepth_optionalChain() {
+        let level2: [AnyHashable: Any?] = [AnyHashable("c"): nil]
+        let level1: [AnyHashable: Any?] = [AnyHashable("b"): level2]
+        let root: [AnyHashable: Any?] = [AnyHashable("a"): level1]
+        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 3)
+    }
+
+    @Test("Utils.estimateSingleKeyChainDepth traverses AnyHashable non-optional chains")
+    func utils_estimateSingleKeyChainDepth_nonOptionalChain() {
+        let child: [AnyHashable: Any] = [AnyHashable(2): "end"]
+        let root: [AnyHashable: Any] = [AnyHashable(1): child]
+        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
     }
 
     @Test("Utils.merge handles heterogeneous containers")
@@ -1132,6 +1405,190 @@ struct UtilsTests {
         if let mergedFromNil = Utils.merge(target: nil, source: ["a", undefined], options: .init()) as? [Any?] {
             #expect(mergedFromNil.contains { ($0 as? String) == "a" })
         }
+    }
+
+    @Test("Utils.merge extends OrderedSet<AnyHashable> with sequences and skips Undefined")
+    func utils_merge_orderedSet_anyHashable_sequence() {
+        let undefined = Undefined.instance
+        let target = OrderedSet<AnyHashable>([AnyHashable("a")])
+        let merged = Utils.merge(target: target, source: [undefined, "b", "a"], options: .init())
+
+        if let ordered = merged as? OrderedSet<AnyHashable> {
+            #expect(ordered.contains("a"))
+            #expect(ordered.contains("b"))
+            #expect(ordered.count == 2)
+        } else {
+            Issue.record("OrderedSet branch did not return OrderedSet: \(String(describing: merged))")
+        }
+
+        if let unioned = Utils.merge(target: target, source: OrderedSet([AnyHashable("b")]), options: .init()) as? OrderedSet<AnyHashable> {
+            #expect(unioned.elementsEqual([AnyHashable("a"), AnyHashable("b")]))
+        } else {
+            Issue.record("OrderedSet union branch not exercised")
+        }
+
+        if let unchanged = Utils.merge(target: target, source: undefined, options: .init()) as? OrderedSet<AnyHashable> {
+            #expect(unchanged.elementsEqual(target))
+        } else {
+            Issue.record("OrderedSet Undefined branch not exercised")
+        }
+    }
+
+    @Test("Utils.merge unions Set<AnyHashable> with sequence input")
+    func utils_merge_set_anyHashable_sequence() {
+        let undefined = Undefined.instance
+        let target = Set<AnyHashable>(["seed"])
+        let merged = Utils.merge(target: target, source: [undefined, "extra"], options: .init())
+
+        if let setResult = merged as? Set<AnyHashable> {
+            #expect(setResult.contains("seed"))
+            #expect(setResult.contains("extra"))
+        } else {
+            Issue.record("Set branch did not return Set: \(String(describing: merged))")
+        }
+
+        if let unchanged = Utils.merge(target: target, source: undefined, options: .init()) as? Set<AnyHashable> {
+            #expect(unchanged == target)
+        } else {
+            Issue.record("Set Undefined branch not exercised")
+        }
+    }
+
+    @Test("Utils.merge overlays Swift [Any] with sequence indices")
+    func utils_merge_arraySequenceOverlay() {
+        let undefined = Undefined.instance
+        let target = [Any](arrayLiteral: undefined, "keep")
+        let source: [Any] = ["replaced", "new"]
+        if let merged = Utils.merge(target: target, source: source, options: .init(parseLists: true)) as? [Any?] {
+            #expect(merged[0] as? String == "replaced")
+            #expect(merged[1] as? String == "new")
+            #expect(merged.count == 2)
+        } else {
+            Issue.record("Sequence overlay branch not exercised")
+        }
+    }
+
+    @Test("Utils.merge promotes array target to dictionary when merging with map")
+    func utils_merge_arrayToDictionaryTarget() {
+        let undefined = Undefined.instance
+        let target: [Any] = ["a", undefined]
+        let sourceDict: [AnyHashable: Any] = ["b": 2]
+        let merged = Utils.merge(target: target, source: sourceDict, options: .init())
+        if let dict = merged as? [AnyHashable: Any] {
+            #expect(dict[0] as? String == "a")
+            #expect(dict["b"] as? Int == 2)
+        } else {
+            Issue.record("Array→dictionary promotion not exercised")
+        }
+    }
+
+    @Test("Utils.merge dictionary target consumes OrderedSet sequences")
+    func utils_merge_dictionaryOrderedSetSequence() {
+        let target: [AnyHashable: Any] = ["existing": "value"]
+        let ordered = OrderedSet<AnyHashable>([AnyHashable("first"), AnyHashable(2)])
+
+        if let merged = Utils.merge(target: target, source: ordered, options: .init()) as? [AnyHashable: Any] {
+            #expect(merged["existing"] as? String == "value")
+            #expect(merged[0] as? AnyHashable == AnyHashable("first"))
+            #expect(merged[1] as? AnyHashable == AnyHashable(2))
+        } else {
+            Issue.record("OrderedSet sequence branch not exercised")
+        }
+    }
+
+    @Test("Utils.merge merges nil targets with typed [Any] sources and filters Undefined")
+    func utils_merge_nilTarget_typedArraySource() {
+        let source: [Any] = [Undefined.instance, "ok", 42]
+        if let merged = Utils.merge(target: nil, source: source, options: .init()) as? [Any?] {
+            #expect(merged.count == 3)
+            let head = merged.first.flatMap { $0 }
+            #expect(head == nil)
+            #expect(merged.dropFirst().contains { $0 is Undefined } == false)
+            #expect(merged[1] as? String == "ok")
+            #expect(merged[2] as? Int == 42)
+        } else {
+            Issue.record("Nil-target array merge branch not exercised")
+        }
+    }
+
+    @Test("Utils.merge overlays arrays with scalars when no sequence is available")
+    func utils_merge_arrayAppendsScalarOnNonSequenceSource() {
+        let undefined = Undefined.instance
+        let target: [Any] = [undefined, "keep"]
+        let merged = Utils.merge(target: target, source: "tail", options: .init())
+
+        if let out = merged as? [Any?] {
+            #expect(out.count == 3)
+            #expect(out.first is Undefined)
+            #expect(out.last as? String == "tail")
+        } else if let out = merged as? [Any] {
+            #expect(out.count == 3)
+            #expect(out.first is Undefined)
+            #expect(out.last as? String == "tail")
+        } else {
+            Issue.record("Array scalar overlay branch not exercised")
+        }
+    }
+
+    @Test("Utils.deepBridgeToAnyIterative handles nil roots and AnyHashable dictionaries")
+    func utils_deepBridge_nilAndHashable() {
+        let bridgedNil = Utils.deepBridgeToAnyIterative(nil)
+        #expect(bridgedNil is NSNull)
+
+        let dict: [AnyHashable: Any] = [
+            1: ["nested": NSNull()],
+            "two": 2
+        ]
+        let bridged = Utils.deepBridgeToAnyIterative(dict)
+        if let map = bridged as? [String: Any] {
+            #expect(map["1"] is [String: Any])
+            #expect(map["two"] as? Int == 2)
+        } else {
+            Issue.record("Expected bridged dictionary, got: \(type(of: bridged))")
+        }
+
+        let optionalArray: [Any?] = [nil, "value"]
+        let bridgedArray = Utils.deepBridgeToAnyIterative(optionalArray)
+        if let arrOpt = bridgedArray as? [Any?] {
+            switch arrOpt.first {
+            case .some(.none):
+                #expect(true)
+            default:
+                Issue.record("Expected first element to be .none")
+            }
+
+            switch arrOpt.last {
+            case .some(.some(let value)):
+                #expect(value as? String == "value")
+            default:
+                Issue.record("Expected last element to unwrap to String")
+            }
+        } else if let arr = bridgedArray as? [Any] {
+            let first = arr.first
+            let firstMirror = first.map { Mirror(reflecting: $0) }
+            let firstValue = firstMirror?.displayStyle == .optional ? firstMirror?.children.first?.value : first
+            #expect(firstValue is NSNull)
+
+            let last = arr.last
+            let lastMirror = last.map { Mirror(reflecting: $0) }
+            let lastValue = lastMirror?.displayStyle == .optional ? lastMirror?.children.first?.value : last
+            #expect(lastValue as? String == "value")
+        } else {
+            Issue.record("Optional array branch not exercised")
+        }
+    }
+
+    @Test("Utils.needsMainDrop short-circuits when threshold is non-positive")
+    func utils_needsMainDrop_thresholdShortCircuit() {
+        let root: [String: Any?] = ["k": nil]
+        #expect(!Utils.needsMainDrop(root, threshold: 0))
+        #expect(!Utils.needsMainDrop(root, threshold: -3))
+    }
+
+    @Test("Utils.dropOnMainThread tolerates nil payloads")
+    func utils_dropOnMainThread_nilPayload() {
+        Utils.dropOnMainThread(nil as Any?)
+        Utils.dropOnMainThread(nil as AnyObject?)
     }
 
     #if DEBUG && os(macOS)
