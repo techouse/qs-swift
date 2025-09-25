@@ -808,6 +808,21 @@ struct DecodeTests {
         }
     }
 
+    @Test("DecodeOptions convenience decoders bridge legacy closures")
+    func decodeOptions_convenienceLegacy() {
+        let legacy: LegacyDecoder = { value, charset in
+            let label = charset == .utf8 ? "utf8" : "other"
+            return "\(label):\(value ?? "nil")"
+        }
+
+        let options = DecodeOptions(legacyDecoder: legacy)
+        let decoded = options.getDecoder("value", charset: String.Encoding.utf8) as? String
+        #expect(decoded == "utf8:value")
+
+        let fallback = options.decodeValue("other", charset: String.Encoding.isoLatin1) as? String
+        #expect(fallback == "other:other")
+    }
+
     @Test("decode - allows for empty strings in lists")
     func testDecode_EmptyStringsInLists() async throws {
         do {
@@ -3788,6 +3803,37 @@ private func isNSNull(_ v: Any??) -> Bool {
     default: return false
     }
 }
+
+    @Test("parseQueryStringValues throws when parameter limit exceeded")
+    func parseQuery_enforcesParameterLimit() {
+        let options = DecodeOptions(parameterLimit: 1, throwOnLimitExceeded: true)
+        #expect(throws: DecodeError.parameterLimitExceeded(limit: 1)) {
+            _ = try Decoder.parseQueryStringValues("a=1&b=2", options: options)
+        }
+    }
+
+    @Test("parseQueryStringValues honors charset sentinel")
+    func parseQuery_honorsCharsetSentinel() throws {
+        let options = DecodeOptions(charsetSentinel: true)
+        let out = try Decoder.parseQueryStringValues(
+            "utf8=%E2%9C%93&value=%E4%B8%AD",
+            options: options
+        )
+        #expect(out["value"] as? String == "中")
+    }
+
+    @Test("parseQueryStringValues uses custom scalar decoder")
+    func parseQuery_usesCustomDecoder() throws {
+        let options = DecodeOptions(decoder: { value, _, _ in value?.uppercased() })
+        _ = try Decoder.parseQueryStringValues("key=value", options: options)
+    }
+
+    @Test("parseQueryStringValues interprets numeric entities in latin1 mode")
+    func parseQuery_interpretsNumericEntities() throws {
+        let options = DecodeOptions(charset: .isoLatin1, interpretNumericEntities: true)
+        let out = try Decoder.parseQueryStringValues("value=%26%239786%3B", options: options)
+        #expect(out["value"] as? String == "☺")
+    }
 
 private func isNSNullValue(_ v: Any?) -> Bool { v is NSNull }
 
