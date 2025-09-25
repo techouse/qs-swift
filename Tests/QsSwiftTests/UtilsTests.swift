@@ -1,4 +1,5 @@
 import Foundation
+import OrderedCollections
 @_spi(Testing) @testable import QsSwift
 
 #if canImport(Testing)
@@ -955,6 +956,182 @@ struct UtilsTests {
 
         let r = try Qs.decode(s, options: .init(depth: depth))
         #expect(r.keys.contains("foo"))
+    }
+
+    @Test("Utils.compact removes Undefined entries and normalizes nested containers")
+    func utils_compact_removesUndefined() {
+        let undefined = Undefined.instance
+
+        // Dictionary branch: drop undefined keys, keep others intact
+        var dictRoot: [String: Any?] = [
+            "dict": ["keep": "value", "drop": undefined] as [String: Any?]
+        ]
+        let dictCompacted = Utils.compact(&dictRoot, allowSparseLists: false)
+        if let dict = dictCompacted["dict"] as? [String: Any?] {
+            #expect(dict["drop"] == nil)
+            #expect(dict["keep"] as? String == "value")
+        } else {
+            Issue.record("Expected dictionary branch result")
+        }
+
+        // Array branch: remove Undefined, recurse into dictionaries and arrays
+        var arrayRoot: [String: Any?] = [
+            "array": [
+                undefined,
+                ["nestedDrop": undefined, "nestedKeep": "ok"] as [String: Any?],
+                [undefined, "leaf"] as [Any],
+                "end"
+            ] as [Any]
+        ]
+        let arrayCompacted = Utils.compact(&arrayRoot, allowSparseLists: false)
+        if let array = arrayCompacted["array"] as? [Any] {
+            #expect(array.count == 3)
+            #expect(!array.contains { $0 is Undefined })
+            let nestedDict = array.first { $0 is [String: Any?] } as? [String: Any?]
+            #expect(nestedDict?["nestedDrop"] == nil)
+            #expect(nestedDict?["nestedKeep"] as? String == "ok")
+        } else {
+            Issue.record("Expected array branch result")
+        }
+
+        // Optional-array branch: nil → NSNull, Undefined removed
+        var optionalRoot: [String: Any?] = [
+            "optional": [Optional<Any>.none, Optional<Any>.some(undefined), Optional<Any>.some("tail")] as [Any?]
+        ]
+        let optionalCompacted = Utils.compact(&optionalRoot, allowSparseLists: false)
+        if let optional = optionalCompacted["optional"] {
+            #expect(!Utils.containsUndefined(optional))
+        } else {
+            Issue.record("Expected optional array branch result")
+        }
+    }
+
+    @Test("Utils.compact preserves sparse lists when requested")
+    func utils_compact_allowSparseKeepsPlaceholders() {
+        let undefined = Undefined.instance
+        var root: [String: Any?] = [
+            "list": [undefined, "x"],
+            "optionalList": [Optional<Any>.some(undefined), Optional<Any>.some("y")]
+        ]
+
+        let compacted = Utils.compact(&root, allowSparseLists: true)
+
+        if let list = compacted["list"] as? [Any] {
+            #expect(list.first is NSNull)
+            #expect(list.last as? String == "x")
+        }
+
+        if let optionalList = compacted["optionalList"] as? [Any] {
+            #expect(optionalList.first is NSNull)
+            #expect(optionalList.last as? String == "y")
+        }
+    }
+
+    @Test("Utils.compactToAny drops Undefined and normalizes optionals")
+    func utils_compactToAny_normalizes() {
+        let undefined = Undefined.instance
+        let input: [String: Any?] = [
+            "drop": undefined,
+            "dict": ["inner": undefined, "keep": "value"],
+            "array": [Optional<Any>.some(undefined), Optional<Any>.none, Optional<Any>.some("z")]
+        ]
+
+        let out = Utils.compactToAny(input, allowSparseLists: true)
+
+        #expect(out["drop"] == nil)
+
+        if let dict = out["dict"] as? [String: Any] {
+            #expect(dict["inner"] == nil)
+            #expect(dict["keep"] as? String == "value")
+        } else {
+            Issue.record("dict missing after compactToAny")
+        }
+
+        if let array = out["array"] as? [Any] {
+            #expect(array.first is NSNull)
+            #expect(array[1] is NSNull)
+            #expect(array.last as? String == "z")
+        } else {
+            Issue.record("array missing after compactToAny")
+        }
+    }
+
+    @Test("Utils.containsUndefined detects sentinel in nested structures")
+    func utils_containsUndefined_detects() {
+        let undefined = Undefined.instance
+        let sample: [String: Any?] = [
+            "array": [undefined, "x"],
+            "dict": ["inner": undefined]
+        ]
+
+        #expect(Utils.containsUndefined(sample))
+
+        var compacted = sample
+        _ = Utils.compact(&compacted)
+        #expect(!Utils.containsUndefined(compacted))
+    }
+
+    @Test("Utils.merge handles heterogeneous containers")
+    func utils_merge_coversBranches() {
+        let undefined = Undefined.instance
+
+        // [Any?] target merged with dictionary source
+        let targetArray: [Any?] = ["a", nil, undefined]
+        let sourceDict: [AnyHashable: Any] = ["extra": "value"]
+        let merged1 = Utils.merge(target: targetArray, source: sourceDict, options: .init())
+        #expect(merged1 is [AnyHashable: Any])
+        if let mergedDict1 = merged1 as? [AnyHashable: Any] {
+            #expect(mergedDict1["extra"] as? String == "value")
+            #expect(mergedDict1[0] as? String == "a")
+        }
+
+        // Dictionary target merged with array source
+        let merged2 = Utils.merge(target: merged1, source: [undefined, "tail"], options: .init())
+        #expect(merged2 is [AnyHashable: Any])
+
+        // OrderedSet union and sequence merging
+        let ordered = OrderedSet<AnyHashable>([1, 2])
+        let mergedOrdered = Utils.merge(target: ordered, source: OrderedSet([2, 3]), options: .init())
+        #expect(mergedOrdered is OrderedSet<AnyHashable>)
+        if let orderedResult = mergedOrdered as? OrderedSet<AnyHashable> {
+            #expect(!orderedResult.isEmpty)
+        }
+
+        let orderedWithSequence = Utils.merge(target: OrderedSet(["a"]), source: [undefined, "b"], options: .init())
+        if let orderedSequenceArray = orderedWithSequence as? [Any?] {
+            #expect(orderedSequenceArray.contains { ($0 as? String) == "b" })
+        }
+
+        // Set union and sequence merging
+        let mergedSet = Utils.merge(target: Set([1, 2]), source: [undefined, 3], options: .init())
+        if let setResult = mergedSet as? Set<AnyHashable> {
+            #expect(setResult.contains { ($0 as? Int) == 3 })
+        }
+
+        // Array target with Undefined elements and parseLists disabled
+        let options = DecodeOptions(parseLists: false)
+        let arrayWithUndefined: [Any] = [undefined, "a"]
+        let mergedArray = Utils.merge(target: arrayWithUndefined, source: ["b", undefined], options: options) as? [Any]
+        #expect(mergedArray?.compactMap { $0 as? String }.contains("b") == true)
+
+        // Array target + sequence of maps to trigger recursive merge
+        let targetMaps: [Any] = [["k": "v"], Undefined.instance]
+        let sourceMaps: [Any] = [["k": "override"], ["new": "value"]]
+        if let mergedMaps = Utils.merge(target: targetMaps, source: sourceMaps, options: .init()) as? [Any?] {
+            let first = mergedMaps[0] as? [AnyHashable: Any]
+            #expect(first?["k"] as? String == "override")
+        }
+
+        // Dictionary target with non-sequence source coerces key from description
+        let dictTarget: [AnyHashable: Any] = ["keep": 1]
+        if let mergedDict = Utils.merge(target: dictTarget, source: "flag", options: .init()) as? [AnyHashable: Any] {
+            #expect(mergedDict.keys.contains { ($0 as? String) == "flag" })
+        }
+
+        // Nil target with array source produces array with filtered Undefined
+        if let mergedFromNil = Utils.merge(target: nil, source: ["a", undefined], options: .init()) as? [Any?] {
+            #expect(mergedFromNil.contains { ($0 as? String) == "a" })
+        }
     }
 
     #if DEBUG && os(macOS)

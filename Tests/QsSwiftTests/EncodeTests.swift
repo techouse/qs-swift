@@ -19,6 +19,141 @@ struct EncodeTests {
         #expect(try Qs.encode(["a": "c"]) == "a=c")
     }
 
+    @Test("encode - normalizes heterogeneous root containers")
+    func encode_rootNormalizationVariants() async throws {
+        var odNSString = OrderedDictionary<NSString, Any>()
+        odNSString["one"] = 1
+        odNSString["two"] = 2
+        let orderedOutput = try Qs.encode(odNSString, options: EncodeOptions(encode: false))
+        #expect(orderedOutput == "one=1&two=2")
+
+        let dictAnyHashable: [AnyHashable: Any] = [1: "one", "two": 2]
+        let sortedOutput = try Qs.encode(
+            dictAnyHashable,
+            options: EncodeOptions(
+                encode: false,
+                sort: { lhs, rhs in
+                    let la = String(describing: lhs ?? "")
+                    let lb = String(describing: rhs ?? "")
+                    return la.compare(lb).rawValue
+                }
+            )
+        )
+        #expect(sortedOutput == "1=one&two=2")
+
+        let nsDict: NSDictionary = ["gamma": "g", 5: "five"]
+        let nsOutput = try Qs.encode(
+            nsDict,
+            options: EncodeOptions(
+                encode: false,
+                sort: { lhs, rhs in
+                    let la = String(describing: lhs ?? "")
+                    let lb = String(describing: rhs ?? "")
+                    return la.compare(lb).rawValue
+                }
+            )
+        )
+        #expect(nsOutput == "5=five&gamma=g")
+
+        let arrayOutput = try Qs.encode(["first", "second"], options: EncodeOptions(encode: false))
+        #expect(arrayOutput == "0=first&1=second")
+    }
+
+    @Test("encode - applies filters, ordering, and sentinel options")
+    func encode_filtersOrderingAndSentinel() async throws {
+        let data: [String: Any] = [
+            "beta.key": ["list": ["x"]],
+            "alpha": "A",
+            "drop": "ignored",
+            "nullish": NSNull()
+        ]
+
+        let functionFilter = FunctionFilter { key, value in
+            guard key.isEmpty, var dict = value as? [String: Any] else { return value }
+            dict.removeValue(forKey: "drop")
+            dict["gamma"] = "3"
+            return dict
+        }
+
+        let opts = EncodeOptions(
+            listFormat: .comma,
+            allowDots: true,
+            addQueryPrefix: true,
+            allowEmptyLists: true,
+            charset: .isoLatin1,
+            charsetSentinel: true,
+            delimiter: ";",
+            encode: true,
+            encodeDotInKeys: true,
+            format: .rfc1738,
+            filter: functionFilter,
+            skipNulls: true,
+            strictNullHandling: true,
+            commaRoundTrip: true,
+            sort: { lhs, rhs in
+                let la = String(describing: lhs ?? "")
+                let lb = String(describing: rhs ?? "")
+                return la.compare(lb).rawValue
+            }
+        )
+
+        let encoded = try Qs.encode(data, options: opts)
+        #expect(encoded.hasPrefix("?utf8=%26%2310003%3B"))
+        let printable = encoded.removingPercentEncoding ?? encoded
+        #expect(printable.contains("alpha=A"))
+        #expect(printable.contains("beta%2Ekey%2Elist[]=x"))
+        #expect(printable.contains("gamma=3"))
+
+        let iterableOutput = try Qs.encode(
+            ["alpha": 1, "beta": 2, "gamma": 3],
+            options: EncodeOptions(
+                encode: false,
+                filter: IterableFilter.mixed("gamma", "alpha"),
+                skipNulls: true
+            )
+        )
+        #expect(iterableOutput == "gamma=3&alpha=1")
+    }
+
+    @Test("encode - strict null handling, custom encoder, and comma round-trip")
+    func encode_strictNullsAndCommaRoundTrip() async throws {
+        let data: [String: Any?] = [
+            "nilValue": nil,
+            "null": NSNull(),
+            "list": ["single"],
+        ]
+
+        let result = try Qs.encode(
+            data,
+            options: EncodeOptions(
+                listFormat: .comma,
+                allowEmptyLists: true,
+                encode: false,
+                skipNulls: false,
+                strictNullHandling: true,
+                commaRoundTrip: true
+            )
+        )
+        #expect(result.contains("nilValue"))
+        #expect(result.contains("null"))
+        #expect(result.contains("list[]=single"))
+
+        let custom = try Qs.encode(
+            ["value": "v"],
+            options: EncodeOptions(
+                encoder: { value, _, _ in
+                    if let s = value as? String { return "ENC:\(s)" }
+                    return "ENC"
+                },
+                listFormat: nil,
+                encode: true,
+                encodeValuesOnly: true,
+                format: .rfc3986
+            )
+        )
+        #expect(custom == "value=ENC:v")
+    }
+
     @Test("encode - Default parameter initializations in _encode method")
     func testDefaultParameterInitializations() async throws {
         // This test targets default initializations
