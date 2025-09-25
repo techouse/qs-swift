@@ -66,6 +66,14 @@
             }
         }
 
+        @Test("DecodeErrorObjC returns nil for mismatched domain")
+        func decodeErrorNilCases() {
+            let error = NSError(domain: "other", code: 1, userInfo: [:])
+            #expect(DecodeErrorObjC.kind(from: error) == nil)
+            #expect(DecodeErrorObjC.limit(from: error) == nil)
+            #expect(DecodeErrorObjC.maxDepth(from: error) == nil)
+        }
+
         @Test("EncodeErrorObjC identifies cyclic graphs")
         func encodeErrorBridging() {
             let dict = NSMutableDictionary()
@@ -82,6 +90,43 @@
             #expect(error.domain == EncodeErrorInfoObjC.domain)
             #expect(EncodeErrorObjC.kind(from: error) == .cyclicObject)
             #expect(EncodeErrorObjC.isCyclicObject(error))
+        }
+
+        @Test("EncodeErrorObjC returns nil for unrelated errors")
+        func encodeErrorNilCases() {
+            let error = NSError(domain: "other", code: 99)
+            #expect(EncodeErrorObjC.kind(from: error) == nil)
+            #expect(EncodeErrorObjC.isCyclicObject(error) == false)
+        }
+
+        @Test("DecodeErrorObjC reads userInfo values")
+        func decodeErrorUserInfo() {
+            let userInfo: [String: Any] = [
+                DecodeErrorInfoObjC.limitKey: 5,
+                DecodeErrorInfoObjC.maxDepthKey: 2
+            ]
+            let mock = NSError(
+                domain: DecodeErrorInfoObjC.domain,
+                code: DecodeErrorCodeObjC.listLimitExceeded.rawValue,
+                userInfo: userInfo
+            )
+
+            #expect(DecodeErrorObjC.kind(from: mock) == .listLimitExceeded)
+            #expect(DecodeErrorObjC.limit(from: mock) == 5)
+            #expect(DecodeErrorObjC.maxDepth(from: mock) == 2)
+        }
+
+        @Test("DecodeErrorCodeObjC descriptions mirror Swift cases")
+        func decodeErrorCode_descriptions() {
+            #expect(DecodeErrorCodeObjC.parameterLimitNotPositive.description == "parameterLimitNotPositive")
+            #expect(DecodeErrorCodeObjC.parameterLimitExceeded.description == "parameterLimitExceeded")
+            #expect(DecodeErrorCodeObjC.listLimitExceeded.description == "listLimitExceeded")
+            #expect(DecodeErrorCodeObjC.depthExceeded.description == "depthExceeded")
+        }
+
+        @Test("EncodeErrorCodeObjC description mirrors Swift case")
+        func encodeErrorCode_description() {
+            #expect(EncodeErrorCodeObjC.cyclicObject.description == "cyclicObject")
         }
 
         @Test("DelimiterObjC wraps string and regex delimiters")
