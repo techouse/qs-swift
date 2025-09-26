@@ -27,7 +27,7 @@ struct ModelCoverageTests {
             "count": { value in (value as? Int).map { $0 * 2 } },
         ])
         #expect(transforming.function("name", "alex") as? String == "ALEX")
-        #expect(transforming.function("count", 3) as? Int == 6)
+        #expect((transforming.function("count", 3) as? Int?).flatMap { $0 } == 6)
         #expect(transforming.function("other", "stay") as? String == "stay")
     }
 
