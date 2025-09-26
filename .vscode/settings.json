@@ -20,7 +20,7 @@
     "**/obj/**"
   ],
   "[swift]": {
-    "editor.defaultFormatter": "swiftlang.swift-vscode"
+    "editor.defaultFormatter": "vknabel.vscode-apple-swift-format"
   },
   "makefile.configureOnOpen": false,
   "swift.testEnvironmentVariables": {
