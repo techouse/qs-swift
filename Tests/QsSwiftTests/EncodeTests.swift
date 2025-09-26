@@ -19,6 +19,220 @@ struct EncodeTests {
         #expect(try Qs.encode(["a": "c"]) == "a=c")
     }
 
+    @Test("encode - normalizes heterogeneous root containers")
+    func encode_rootNormalizationVariants() async throws {
+        var odNSString = OrderedDictionary<NSString, Any>()
+        odNSString["one"] = 1
+        odNSString["two"] = 2
+        let orderedOutput = try Qs.encode(odNSString, options: EncodeOptions(encode: false))
+        #expect(orderedOutput == "one=1&two=2")
+
+        let dictAnyHashable: [AnyHashable: Any] = [1: "one", "two": 2]
+        let sortedOutput = try Qs.encode(
+            dictAnyHashable,
+            options: EncodeOptions(
+                encode: false,
+                sort: { lhs, rhs in
+                    let la = String(describing: lhs ?? "")
+                    let lb = String(describing: rhs ?? "")
+                    return la.compare(lb).rawValue
+                }
+            )
+        )
+        #expect(sortedOutput == "1=one&two=2")
+
+        let nsDict: NSDictionary = ["gamma": "g", 5: "five"]
+        let nsOutput = try Qs.encode(
+            nsDict,
+            options: EncodeOptions(
+                encode: false,
+                sort: { lhs, rhs in
+                    let la = String(describing: lhs ?? "")
+                    let lb = String(describing: rhs ?? "")
+                    return la.compare(lb).rawValue
+                }
+            )
+        )
+        #expect(nsOutput == "5=five&gamma=g")
+
+        let arrayOutput = try Qs.encode(["first", "second"], options: EncodeOptions(encode: false))
+        #expect(arrayOutput == "0=first&1=second")
+    }
+
+    @Test("encode - function filter adopts OrderedDictionary root")
+    func encode_functionFilterOrdersDictionary() async throws {
+        let options = EncodeOptions(
+            encode: false,
+            filter: FunctionFilter { key, _ in
+                guard key.isEmpty else { return nil }
+                var ordered = OrderedDictionary<String, Any>()
+                ordered["z"] = 1
+                ordered["a"] = 2
+                return ordered
+            }
+        )
+
+        let result = try Qs.encode(["ignored": "value"], options: options)
+        // Root adoption keeps OrderedDictionary ordering; values remain blank because NSNumber-backed Ints
+        // stringify to "" when `encode` is disabled for this filter.
+        #expect(result == "z=&a=")
+    }
+
+    @Test("encode - function filter adopts NSDictionary root")
+    func encode_functionFilterNSDictionary() async throws {
+        let options = EncodeOptions(
+            encode: false,
+            filter: FunctionFilter { key, _ in
+                guard key.isEmpty else { return nil }
+                return NSDictionary(dictionary: ["foo": "bar", "baz": 3])
+            }
+        )
+
+        let result = try Qs.encode(["placeholder": 0], options: options)
+        let parts = Set(result.split(separator: "&"))
+        #expect(parts.contains { $0.hasPrefix("foo=") })
+        #expect(parts.contains { $0.hasPrefix("baz=") })
+    }
+
+    @Test("encode - function filter adopts root array")
+    func encode_functionFilterArrayReplacement() async throws {
+        let options = EncodeOptions(
+            encode: false,
+            filter: FunctionFilter { key, _ in
+                guard key.isEmpty else { return nil }
+                return ["first", "second"]
+            }
+        )
+
+        let result = try Qs.encode(["ignored": "x"], options: options)
+        let parts = Set(result.split(separator: "&"))
+        #expect(parts == Set(["0=", "1="]))
+    }
+
+    @Test("encode - iterable filter skips non-string keys safely")
+    func encode_iterableFilterDropsNonStringKeys() async throws {
+        let output = try Qs.encode(
+            ["items": ["a", "b", "c"]],
+            options: EncodeOptions(
+                encode: false,
+                filter: IterableFilter.indices(2, 0)
+            )
+        )
+
+        #expect(output.isEmpty)
+    }
+
+    @Test("encode - function filter stringifies AnyHashable keys")
+    func encode_functionFilterAnyHashableMap() async throws {
+        let options = EncodeOptions(
+            encode: false,
+            filter: FunctionFilter { key, _ in
+                guard key.isEmpty else { return nil }
+                return [AnyHashable(1): "one", AnyHashable("two"): 2]
+            }
+        )
+
+        let result = try Qs.encode(["placeholder": true], options: options)
+        let parts = Set(result.split(separator: "&"))
+        #expect(parts.contains { $0.hasPrefix("1=") })
+        #expect(parts.contains { $0.hasPrefix("two=") })
+    }
+
+    @Test("encode - applies filters, ordering, and sentinel options")
+    func encode_filtersOrderingAndSentinel() async throws {
+        let data: [String: Any] = [
+            "beta.key": ["list": ["x"]],
+            "alpha": "A",
+            "drop": "ignored",
+            "nullish": NSNull(),
+        ]
+
+        let functionFilter = FunctionFilter { key, value in
+            guard key.isEmpty, var dict = value as? [String: Any] else { return value }
+            dict.removeValue(forKey: "drop")
+            dict["gamma"] = "3"
+            return dict
+        }
+
+        let opts = EncodeOptions(
+            listFormat: .comma,
+            allowDots: true,
+            addQueryPrefix: true,
+            allowEmptyLists: true,
+            charset: .isoLatin1,
+            charsetSentinel: true,
+            delimiter: ";",
+            encode: true,
+            encodeDotInKeys: true,
+            format: .rfc1738,
+            filter: functionFilter,
+            skipNulls: true,
+            strictNullHandling: true,
+            commaRoundTrip: true,
+            sort: { lhs, rhs in
+                let la = String(describing: lhs ?? "")
+                let lb = String(describing: rhs ?? "")
+                return la.compare(lb).rawValue
+            }
+        )
+
+        let encoded = try Qs.encode(data, options: opts)
+        #expect(encoded.hasPrefix("?utf8=%26%2310003%3B"))
+        let printable = encoded.removingPercentEncoding ?? encoded
+        #expect(printable.contains("alpha=A"))
+        #expect(printable.contains("beta%2Ekey%2Elist[]=x"))
+        #expect(printable.contains("gamma=3"))
+
+        let iterableOutput = try Qs.encode(
+            ["alpha": 1, "beta": 2, "gamma": 3],
+            options: EncodeOptions(
+                encode: false,
+                filter: IterableFilter.mixed("gamma", "alpha"),
+                skipNulls: true
+            )
+        )
+        #expect(iterableOutput == "gamma=3&alpha=1")
+    }
+
+    @Test("encode - strict null handling, custom encoder, and comma round-trip")
+    func encode_strictNullsAndCommaRoundTrip() async throws {
+        let data: [String: Any?] = [
+            "nilValue": nil,
+            "null": NSNull(),
+            "list": ["single"],
+        ]
+
+        let result = try Qs.encode(
+            data,
+            options: EncodeOptions(
+                listFormat: .comma,
+                allowEmptyLists: true,
+                encode: false,
+                skipNulls: false,
+                strictNullHandling: true,
+                commaRoundTrip: true
+            )
+        )
+        #expect(result.contains("nilValue"))
+        #expect(result.contains("null"))
+        #expect(result.contains("list[]=single"))
+
+        let custom = try Qs.encode(
+            ["value": "v"],
+            options: EncodeOptions(
+                encoder: { value, _, _ in
+                    if let s = value as? String { return "ENC:\(s)" }
+                    return "ENC"
+                },
+                listFormat: nil,
+                encode: true,
+                encodeValuesOnly: true,
+                format: .rfc3986
+            )
+        )
+        #expect(custom == "value=ENC:v")
+    }
+
     @Test("encode - Default parameter initializations in _encode method")
     func testDefaultParameterInitializations() async throws {
         // This test targets default initializations
@@ -3241,6 +3455,152 @@ struct EncodeTests {
             #expect(outRepeat == (stringifyOutput["repeat"] ?? ""), "\(label) (repeat)")
         }
     }
+
+    #if canImport(Darwin)
+        @Test("Encoder.encode drops NSNull entries inside containers when skipNulls is true")
+        func encoder_skipNulls_dropsNSNull() throws {
+            let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+            let result = try Encoder.encode(
+                data: ["a": NSNull()],
+                undefined: false,
+                sideChannel: sideChannel,
+                prefix: nil,
+                listFormat: .indices,
+                commaRoundTrip: false,
+                allowEmptyLists: false,
+                strictNullHandling: false,
+                skipNulls: true,
+                encodeDotInKeys: false,
+                encoder: nil,
+                serializeDate: nil,
+                sort: nil,
+                filter: nil,
+                allowDots: false,
+                format: .rfc3986,
+                formatter: nil,
+                encodeValuesOnly: false,
+                charset: .utf8,
+                addQueryPrefix: false,
+                depth: 0
+            )
+
+            if let array = result as? [Any] {
+                #expect(array.isEmpty)
+            } else {
+                Issue.record("Expected empty array from skipNulls branch, got: \(String(describing: result))")
+            }
+        }
+    #endif
+
+    #if canImport(Darwin)
+        @Test("Encoder.encode short-circuits when undefined flag is true")
+        func encoder_undefined_flag_returnsEmpty() throws {
+            let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+            let result = try Encoder.encode(
+                data: ["k": "v"],
+                undefined: true,
+                sideChannel: sideChannel,
+                prefix: "k",
+                listFormat: .indices,
+                commaRoundTrip: false,
+                allowEmptyLists: false,
+                strictNullHandling: false,
+                skipNulls: false,
+                encodeDotInKeys: false,
+                encoder: nil,
+                serializeDate: nil,
+                sort: nil,
+                filter: nil,
+                allowDots: false,
+                format: .rfc3986,
+                formatter: nil,
+                encodeValuesOnly: false,
+                charset: .utf8,
+                addQueryPrefix: false,
+                depth: 0
+            )
+
+            if let array = result as? [Any] {
+                #expect(array.isEmpty)
+            } else {
+                Issue.record("Expected empty array from undefined branch, got: \(String(describing: result))")
+            }
+        }
+    #endif
+
+    #if canImport(Darwin)
+        @Test("Encoder.encode emits empty list shell when allowEmptyLists is true")
+        func encoder_allowEmptyLists_emitsBracket() throws {
+            let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+            let result = try Encoder.encode(
+                data: [Any](),
+                undefined: false,
+                sideChannel: sideChannel,
+                prefix: "items",
+                listFormat: .indices,
+                commaRoundTrip: false,
+                allowEmptyLists: true,
+                strictNullHandling: false,
+                skipNulls: false,
+                encodeDotInKeys: false,
+                encoder: nil,
+                serializeDate: nil,
+                sort: nil,
+                filter: nil,
+                allowDots: false,
+                format: .rfc3986,
+                formatter: nil,
+                encodeValuesOnly: false,
+                charset: .utf8,
+                addQueryPrefix: false,
+                depth: 0
+            )
+
+            if let string = result as? String {
+                #expect(string == "items[]")
+            } else {
+                Issue.record("Expected string output for empty list, got: \(String(describing: result))")
+            }
+        }
+    #endif
+
+    #if canImport(Darwin)
+        @Test("Encoder.encode handles comma list format round-tripping single-element arrays")
+        func encoder_commaRoundTrip_adjustsPrefix() throws {
+            let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+            let result = try Encoder.encode(
+                data: ["only"],
+                undefined: false,
+                sideChannel: sideChannel,
+                prefix: "flags",
+                listFormat: .comma,
+                commaRoundTrip: true,
+                allowEmptyLists: false,
+                strictNullHandling: false,
+                skipNulls: false,
+                encodeDotInKeys: false,
+                encoder: nil,
+                serializeDate: nil,
+                sort: nil,
+                filter: nil,
+                allowDots: false,
+                format: .rfc3986,
+                formatter: nil,
+                encodeValuesOnly: false,
+                charset: .utf8,
+                addQueryPrefix: false,
+                depth: 0
+            )
+
+            if let string = result as? String {
+                #expect(string == "flags[]=only")
+            } else if let parts = result as? [Any], let first = parts.first as? String {
+                #expect(first == "flags[]=only")
+            } else {
+                Issue.record("Unexpected type for comma round-trip branch: \(String(describing: result))")
+            }
+        }
+    #endif
 }
 
 // Linux-only: Validate NSMapTable facade basic behavior for weakToWeakObjects

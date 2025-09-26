@@ -808,6 +808,21 @@ struct DecodeTests {
         }
     }
 
+    @Test("DecodeOptions convenience decoders bridge legacy closures")
+    func decodeOptions_convenienceLegacy() {
+        let legacy: LegacyDecoder = { value, charset in
+            let label = charset == .utf8 ? "utf8" : "other"
+            return "\(label):\(value ?? "nil")"
+        }
+
+        let options = DecodeOptions(legacyDecoder: legacy)
+        let decoded = options.getDecoder("value", charset: String.Encoding.utf8) as? String
+        #expect(decoded == "utf8:value")
+
+        let fallback = options.decodeValue("other", charset: String.Encoding.isoLatin1) as? String
+        #expect(fallback == "other:other")
+    }
+
     @Test("decode - allows for empty strings in lists")
     func testDecode_EmptyStringsInLists() async throws {
         do {
@@ -3012,20 +3027,20 @@ extension DecodeTests {
     @Test("parse: custom encoding (Shift_JIS)")
     func parse_customShiftJIS() throws {
         #if os(Linux)
-        // Try a real Shift_JIS decode. If it fails, record as a known issue; if it succeeds, assert normally.
-        let bytes: [UInt8] = [0x91, 0xE5, 0x8D, 0xE3, 0x95, 0x7B]  // "大阪府" in Shift_JIS
-        let decoded = String(data: Data(bytes), encoding: .shiftJIS)
-        if decoded == "大阪府" {
-            // It works on this Linux runtime — pass normally (do not use withKnownIssue).
-            #expect(decoded == "大阪府")
-        } else {
-            try withKnownIssue("Got: \(decoded.debugDescription)") {
-                // Expected failure on Linux today: Shift_JIS decoding often unavailable in corelibs-foundation.
-                // If/when this ever starts working, the branch above will exercise instead.
+            // Try a real Shift_JIS decode. If it fails, record as a known issue; if it succeeds, assert normally.
+            let bytes: [UInt8] = [0x91, 0xE5, 0x8D, 0xE3, 0x95, 0x7B]  // "大阪府" in Shift_JIS
+            let decoded = String(data: Data(bytes), encoding: .shiftJIS)
+            if decoded == "大阪府" {
+                // It works on this Linux runtime — pass normally (do not use withKnownIssue).
                 #expect(decoded == "大阪府")
+            } else {
+                try withKnownIssue("Got: \(decoded.debugDescription)") {
+                    // Expected failure on Linux today: Shift_JIS decoding often unavailable in corelibs-foundation.
+                    // If/when this ever starts working, the branch above will exercise instead.
+                    #expect(decoded == "大阪府")
+                }
             }
-        }
-        return
+            return
         #endif
         // Local helper needs to be @Sendable if captured by a @Sendable closure.
         @Sendable
@@ -3787,6 +3802,38 @@ private func isNSNull(_ v: Any??) -> Bool {
     case .some(.some(_ as NSNull)): return true
     default: return false
     }
+}
+
+@Test("parseQueryStringValues throws when parameter limit exceeded")
+func parseQuery_enforcesParameterLimit() {
+    let options = DecodeOptions(parameterLimit: 1, throwOnLimitExceeded: true)
+    #expect(throws: DecodeError.parameterLimitExceeded(limit: 1)) {
+        _ = try Decoder.parseQueryStringValues("a=1&b=2", options: options)
+    }
+}
+
+@Test("parseQueryStringValues honors charset sentinel")
+func parseQuery_honorsCharsetSentinel() throws {
+    let options = DecodeOptions(charsetSentinel: true)
+    let out = try Decoder.parseQueryStringValues(
+        "utf8=%E2%9C%93&value=%E4%B8%AD",
+        options: options
+    )
+    #expect(out["value"] as? String == "中")
+}
+
+@Test("parseQueryStringValues uses custom scalar decoder")
+func parseQuery_usesCustomDecoder() throws {
+    let options = DecodeOptions(decoder: { value, _, _ in value?.uppercased() })
+    let out = try Decoder.parseQueryStringValues("key=value", options: options)
+    #expect(out["KEY"] as? String == "VALUE")
+}
+
+@Test("parseQueryStringValues interprets numeric entities in latin1 mode")
+func parseQuery_interpretsNumericEntities() throws {
+    let options = DecodeOptions(charset: .isoLatin1, interpretNumericEntities: true)
+    let out = try Decoder.parseQueryStringValues("value=%26%239786%3B", options: options)
+    #expect(out["value"] as? String == "☺")
 }
 
 private func isNSNullValue(_ v: Any?) -> Bool { v is NSNull }

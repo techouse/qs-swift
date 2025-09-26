@@ -4,6 +4,7 @@
     import Testing
 
     @testable import QsObjC
+    @testable import QsSwift
 
     struct ObjCBridgeTests {
         @Test("encode → decode round-trip (flat)")
@@ -106,6 +107,24 @@
             #expect(out?["k"] as? String == "v")
         }
 
+        @Test("bridgeInputForDecode: NSDictionary stringifies non-AnyHashable keys when not forcing reduce")
+        func decode_dictionary_stringifies_nonHashable_keys() {
+            let arrayKey: NSArray = ["k"]
+            let dict = NSMutableDictionary()
+            dict[arrayKey] = "value"
+
+            let bridged = QsBridge.bridgeInputForDecode(dict)
+
+            if let out = bridged as? [AnyHashable: Any] {
+                #expect(out.count == 1)
+                let firstKeyDescription = out.keys.first.map { String(describing: $0) } ?? ""
+                #expect(firstKeyDescription.contains("k"))
+                #expect(out.values.first as? String == "value")
+            } else {
+                Issue.record("Unexpected bridged type: \(type(of: bridged))")
+            }
+        }
+
         @Test("bridgeInputForDecode: NSArray → [Any]")
         func decode_nsarray_maps_to_swift_array() {
             let a: NSArray = ["x" as NSString, NSNumber(value: 42), NSNull()]
@@ -165,6 +184,208 @@
             #expect((arr?[0] as? NSNumber)?.intValue == 1)
             let s1 = (arr?[1] as? String) ?? (arr?[1] as? NSString).map(String.init)
             #expect(s1 == "z")
+        }
+
+        @Test("bridgeInputForEncode: Swift [String: Any] produces OrderedDictionary")
+        func encode_swiftDictionary_bridgesToOrdered() {
+            let payload: [String: Any] = [
+                "alpha": 1,
+                "sentinel": UndefinedObjC()
+            ]
+
+            let bridged = QsBridge.bridgeInputForEncode(payload)
+
+            if let out = bridged as? OrderedDictionary<String, Any> {
+                #expect(out["alpha"] as? Int == 1)
+                #expect(out["sentinel"] is UndefinedObjC)
+            } else {
+                Issue.record("Unexpected bridged type: \(type(of: bridged))")
+            }
+        }
+
+        @Test("bridgeInputForEncode handles Swift-only values that cannot bridge to NSDictionary")
+        func encode_swiftDictionary_withSwiftOnlyValues() {
+            struct SwiftOnly: CustomStringConvertible {
+                let id: Int
+                var description: String { "swift-\(id)" }
+            }
+
+            let payload: [String: Any] = [
+                "custom": SwiftOnly(id: 1),
+                "sentinel": UndefinedObjC()
+            ]
+
+            let bridged = QsBridge.bridgeInputForEncode(payload)
+            if let out = bridged as? OrderedDictionary<String, Any> {
+                #expect(out["custom"] is SwiftOnly)
+                #expect(out["sentinel"] is UndefinedObjC)
+            } else {
+                Issue.record("Swift-only dictionary branch not exercised: \(type(of: bridged))")
+            }
+        }
+
+        @Test("bridgeInputForEncode: Swift [Any] bridges elements recursively")
+        func encode_swiftArray_bridgesElements() {
+            let payload: [Any] = [UndefinedObjC(), ["key": "value"]]
+            let bridged = QsBridge.bridgeInputForEncode(payload)
+
+            if let out = bridged as? [Any] {
+                #expect(out.first is UndefinedObjC)
+                let nested = out.dropFirst().first as? OrderedDictionary<String, Any>
+                #expect(nested?["key"] as? String == "value")
+            } else {
+                Issue.record("Unexpected bridged type: \(type(of: bridged))")
+            }
+        }
+
+        @Test("bridgeInputForEncode: OrderedDictionary<NSString, Any> normalizes keys")
+        func encode_orderedDictionaryNSString_keys() {
+            let od = OrderedDictionary<NSString, Any>(uniqueKeysWithValues: [
+                ("one" as NSString, 1),
+                ("two" as NSString, 2)
+            ])
+
+            let bridged = QsBridge.bridgeInputForEncode(od)
+            let out = bridged as? OrderedDictionary<String, Any>
+            #expect(out?.keys.elementsEqual(["one", "two"]) == true)
+            #expect(out?["one"] as? Int == 1)
+        }
+
+        @Test("bridgeInputForEncode: OrderedDictionary<String, Any> preserves ordering")
+        func encode_orderedDictionaryString_keys() {
+            var od = OrderedDictionary<String, Any>()
+            od["first"] = 1
+            od["second"] = OrderedDictionary<NSString, Any>(uniqueKeysWithValues: [
+                ("nested" as NSString, UndefinedObjC())
+            ])
+
+            let bridged = QsBridge.bridgeInputForEncode(od)
+
+            if let out = bridged as? OrderedDictionary<String, Any> {
+                #expect(out["first"] as? Int == 1)
+                let nested = out["second"] as? OrderedDictionary<String, Any>
+                let nestedValue = nested?["nested"]
+                let unwrapped: Any?
+                if let value = nestedValue {
+                    let mirror = Mirror(reflecting: value)
+                    unwrapped = mirror.displayStyle == .optional ? mirror.children.first?.value : value
+                } else {
+                    unwrapped = nil
+                }
+                #expect((unwrapped is UndefinedObjC) || (unwrapped is QsSwift.Undefined))
+            } else {
+                Issue.record("Unexpected bridged type: \(type(of: bridged))")
+            }
+        }
+
+        @Test("bridgeInputForEncode: OrderedDictionary<AnyHashable, Any> stringifies mixed keys")
+        func encode_orderedDictionaryAnyHashable_keys() {
+            let entries: [(AnyHashable, Any)] = [
+                (AnyHashable(42), "answer"),
+                (AnyHashable("two"), 2)
+            ]
+            let od = OrderedDictionary<AnyHashable, Any>(uniqueKeysWithValues: entries)
+
+            let bridged = QsBridge.bridgeInputForEncode(od)
+
+            if let out = bridged as? OrderedDictionary<String, Any> {
+                #expect(out["42"] as? String == "answer")
+                #expect(out["two"] as? Int == 2)
+            } else if let dict = bridged as? [String: Any] {
+                #expect(dict["42"] as? String == "answer")
+                #expect(dict["two"] as? Int == 2)
+            } else if let od = bridged as? OrderedDictionary<AnyHashable, Any> {
+                #expect(od[AnyHashable("42")] as? String == "answer")
+                #expect(od[AnyHashable("two")] as? Int == 2)
+            } else {
+                Issue.record("Unexpected bridged type: \(type(of: bridged))")
+            }
+        }
+
+        @Test("bridgeUndefinedPreservingOrder bridges OrderedDictionary<NSString, Any>")
+        func bridgeUndefined_handlesOrderedNSStringDictionary() {
+            let ordered = OrderedDictionary<NSString, Any>(uniqueKeysWithValues: [
+                ("u" as NSString, UndefinedObjC())
+            ])
+
+            let bridged = QsBridge.bridgeUndefinedPreservingOrder(ordered)
+            let out = bridged as? OrderedDictionary<String, Any>
+            #expect(out?["u"] is QsSwift.Undefined)
+        }
+
+        @Test("bridgeUndefinedPreservingOrder bridges OrderedDictionary<AnyHashable, Any>")
+        func bridgeUndefined_handlesOrderedAnyHashableDictionary() {
+            let entries: [(AnyHashable, Any)] = [
+                (AnyHashable("u"), UndefinedObjC()),
+                (AnyHashable(7), "v")
+            ]
+            let ordered = OrderedDictionary<AnyHashable, Any>(uniqueKeysWithValues: entries)
+
+            let bridged = QsBridge.bridgeUndefinedPreservingOrder(ordered)
+            guard let out = bridged as? OrderedDictionary<String, Any> else {
+                Issue.record("Expected OrderedDictionary<String, Any>, got \(String(describing: bridged))")
+                return
+            }
+
+            #expect(Array(out.keys) == ["u", "7"])
+            #expect(out["u"] is QsSwift.Undefined)
+            #expect(out["7"] as? String == "v")
+        }
+
+        @Test("bridgeUndefinedPreservingOrder replaces sentinels and keeps identity")
+        func bridgeUndefined_rewritesContainers() {
+            let innerArray: NSMutableArray = [UndefinedObjC()]
+            innerArray.add(innerArray)  // cycle
+
+            var ordered = OrderedDictionary<String, Any>()
+            ordered["u"] = UndefinedObjC()
+            ordered["array"] = innerArray
+
+            let bridged = QsBridge.bridgeUndefinedPreservingOrder(ordered)
+            let out = bridged as? OrderedDictionary<String, Any>
+            #expect(out?["u"] is QsSwift.Undefined)
+
+            let bridgedArray = out?["array"] as? [Any]
+            #expect(bridgedArray?.first is QsSwift.Undefined)
+            #expect((bridgedArray?[1] as AnyObject?) === innerArray)
+        }
+
+        @Test("bridgeUndefinedPreservingOrder bridges NSDictionary values")
+        func bridgeUndefined_handlesNSDictionary() {
+            let dict: NSDictionary = [
+                "u": UndefinedObjC(),
+                "value": "v"
+            ]
+
+            let bridged = QsBridge.bridgeUndefinedPreservingOrder(dict)
+            let out = bridged as? OrderedDictionary<String, Any>
+            #expect(out?["u"] is QsSwift.Undefined)
+            #expect(out?["value"] as? String == "v")
+        }
+
+        @Test("bridgeUndefinedPreservingOrder handles Swift dictionaries and arrays without ObjC bridging")
+        func bridgeUndefined_swiftContainersNoObjCBridge() {
+            var seen = Set<ObjectIdentifier>()
+            let swiftDict: [String: Any] = [
+                "value": 42,
+                "sentinel": UndefinedObjC()
+            ]
+
+            if let bridgedDict = QsBridge._bridgeUndefinedPreservingOrder(swiftDict, seen: &seen) as? OrderedDictionary<String, Any> {
+                #expect(bridgedDict["value"] as? Int == 42)
+                #expect(bridgedDict["sentinel"] is QsSwift.Undefined)
+            } else {
+                Issue.record("Swift dictionary branch not exercised")
+            }
+
+            let swiftArray: [Any] = ["first", UndefinedObjC()]
+            seen.removeAll()
+            if let bridgedArray = QsBridge._bridgeUndefinedPreservingOrder(swiftArray, seen: &seen) as? [Any] {
+                #expect(bridgedArray[0] as? String == "first")
+                #expect(bridgedArray[1] is QsSwift.Undefined)
+            } else {
+                Issue.record("Swift array branch not exercised")
+            }
         }
 
         // MARK: - _bridgeUndefined via encode() (private helper exercised transitively)

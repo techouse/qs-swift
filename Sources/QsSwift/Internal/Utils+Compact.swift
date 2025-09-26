@@ -29,34 +29,6 @@ extension Utils {
             }
 
             // Array branches – tolerate both [Any] and [Any?] shapes.
-            if let arr = value as? [Any] {
-                var out: [Any] = []
-                out.reserveCapacity(arr.count)
-                for element in arr {
-                    if element is Undefined {
-                        if allowSparse { out.append(NSNull()) }
-                        // else: drop it
-                        continue
-                    }
-                    if let subDict = element as? [String: Any?] {
-                        if let cv = compactValue(subDict, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else if let subArr = element as? [Any] {
-                        if let cv = compactValue(subArr, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else if let subArrOpt = element as? [Any?] {
-                        if let cv = compactValue(subArrOpt, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else {
-                        out.append(element)
-                    }
-                }
-                return out
-            }
-
             if let arrOpt = value as? [Any?] {
                 var out: [Any] = []
                 out.reserveCapacity(arrOpt.count)
@@ -83,6 +55,34 @@ extension Utils {
                         }
                     } else {
                         out.append(unwrapped)
+                    }
+                }
+                return out
+            }
+
+            if let arr = value as? [Any] {
+                var out: [Any] = []
+                out.reserveCapacity(arr.count)
+                for element in arr {
+                    if element is Undefined {
+                        if allowSparse { out.append(NSNull()) }
+                        // else: drop it
+                        continue
+                    }
+                    if let subDict = element as? [String: Any?] {
+                        if let cv = compactValue(subDict, allowSparse: allowSparse) {
+                            out.append(cv)
+                        }
+                    } else if let subArr = element as? [Any] {
+                        if let cv = compactValue(subArr, allowSparse: allowSparse) {
+                            out.append(cv)
+                        }
+                    } else if let subArrOpt = element as? [Any?] {
+                        if let cv = compactValue(subArrOpt, allowSparse: allowSparse) {
+                            out.append(cv)
+                        }
+                    } else {
+                        out.append(element)
                     }
                 }
                 return out
