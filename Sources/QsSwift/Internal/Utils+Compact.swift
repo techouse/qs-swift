@@ -28,6 +28,7 @@ extension Utils {
                 return out
             }
 
+            // Array branches – tolerate both [Any] and [Any?] shapes.
             if let arrOpt = value as? [Any?] {
                 var out: [Any] = []
                 out.reserveCapacity(arrOpt.count)
