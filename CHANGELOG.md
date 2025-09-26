@@ -1,3 +1,9 @@
+## 1.1.6
+
+- [FEAT] add support in `QsBridge._bridgeInputForEncode` for handling `OrderedDictionary<AnyHashable, Any>`, converting keys to deterministic string representations to ensure consistent bridging of heterogeneous key types
+- [FIX] refine array handling in `Utils.compactValue` to better tolerate both [Any] and [Any?] array shapes, ensuring correct compaction and bridging of arrays with optional elements and nested containers
+- [CHORE] increase test coverage
+
 ## 1.1.5
 
 - [FEAT] add experimental Linux support
