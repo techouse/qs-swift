@@ -265,7 +265,8 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Swift ${{ env.SWIFT_VERSION }}
-        uses: swift-actions/setup-swift@v2
+        #uses: swift-actions/setup-swift@v2
+        uses: mman/setup-swift@bb9d928d17930db5f808fa68520e2dc2e0ff1f2c
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
