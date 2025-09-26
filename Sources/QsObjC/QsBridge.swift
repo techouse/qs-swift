@@ -261,6 +261,16 @@
                 }
                 return out
 
+            // Ordered Swift dict (AnyHashable keys) → normalize to String keys
+            case let od as OrderedDictionary<AnyHashable, Any>:
+                var out = OrderedDictionary<String, Any>()
+                out.reserveCapacity(od.count)
+                for (key, val) in od {
+                    let stringKey = stringifyKey(key)
+                    out[stringKey] = _bridgeUndefinedPreservingOrder(val, seen: &seen) ?? val
+                }
+                return out
+
             // NSDictionary → OrderedDictionary<String, Any>
             case let dict as NSDictionary:
                 let obj = dict as AnyObject
