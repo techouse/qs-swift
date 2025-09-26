@@ -313,6 +313,25 @@
             #expect(out?["u"] is QsSwift.Undefined)
         }
 
+        @Test("bridgeUndefinedPreservingOrder bridges OrderedDictionary<AnyHashable, Any>")
+        func bridgeUndefined_handlesOrderedAnyHashableDictionary() {
+            let entries: [(AnyHashable, Any)] = [
+                (AnyHashable("u"), UndefinedObjC()),
+                (AnyHashable(7), "v")
+            ]
+            let ordered = OrderedDictionary<AnyHashable, Any>(uniqueKeysWithValues: entries)
+
+            let bridged = QsBridge.bridgeUndefinedPreservingOrder(ordered)
+            guard let out = bridged as? OrderedDictionary<String, Any> else {
+                Issue.record("Expected OrderedDictionary<String, Any>, got \(String(describing: bridged))")
+                return
+            }
+
+            #expect(Array(out.keys) == ["u", "7"])
+            #expect(out["u"] is QsSwift.Undefined)
+            #expect(out["7"] as? String == "v")
+        }
+
         @Test("bridgeUndefinedPreservingOrder replaces sentinels and keeps identity")
         func bridgeUndefined_rewritesContainers() {
             let innerArray: NSMutableArray = [UndefinedObjC()]
