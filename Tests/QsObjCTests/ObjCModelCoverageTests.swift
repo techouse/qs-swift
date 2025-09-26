@@ -155,7 +155,7 @@
         @Test("DecodeOptionsObjC bridges core properties")
         func decodeOptionsSwiftBridgeProperties() {
             let opts = DecodeOptionsObjC().with {
-                $0.allowDots = false
+                $0.allowDots = true
                 $0.decodeDotInKeys = true
                 $0.allowEmptyLists = true
                 $0.allowSparseLists = true
