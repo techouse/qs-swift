@@ -276,11 +276,24 @@ jobs:
   linux-tests:
     permissions:
       contents: read
-    name: Swift tests (Linux)
+    name: ${{ format('Swift tests (Linux, Swift {0}{1})', matrix.swift, matrix.experimental && ' — experimental' || '') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    continue-on-error: true
+    continue-on-error: ${{ matrix.experimental }}
     needs: analyze
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - swift: '6.1'
+            experimental: false
+          - swift: '6.2'
+            experimental: true
+
+    env:
+      SWIFT_VERSION: ${{ matrix.swift }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -288,8 +301,10 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Swift ${{ env.SWIFT_VERSION }}
-        #uses: swift-actions/setup-swift@v2
-        uses: mman/setup-swift@bb9d928d17930db5f808fa68520e2dc2e0ff1f2c
+        # Temporarily, point to a specific commit in a fork of `swift-actions/setup-swift` that:
+        #  - fixes the GPG key import
+        #  - supports Swift 6.2
+        uses: mman/setup-swift@ceda4ad4a25f0298db1fd6d678c9c74d9fa4d73e
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
@@ -297,6 +312,10 @@ jobs:
         run: |
           swift --version
           uname -a
+
+      - name: Experimental Swift notice
+        if: ${{ matrix.experimental }}
+        run: echo "::warning::Running Linux tests with Swift ${{ env.SWIFT_VERSION }} (experimental). This job is allowed to fail."
 
       - name: Cache SwiftPM artifacts (Linux)
         uses: actions/cache@v4
