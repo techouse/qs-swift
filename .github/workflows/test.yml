@@ -56,10 +56,29 @@ jobs:
   tests:
     permissions:
       contents: read
-    name: Swift tests + coverage (macOS, Xcode)
+    name: ${{ format('Swift tests + coverage ({0}, Xcode {1}, Swift {2}{3})', matrix.runner, matrix.xcode, matrix.swift, matrix.experimental && ' — experimental' || '') }}
     timeout-minutes: 45
-    runs-on: macos-15
+    runs-on: ${{ matrix.runner }}
     needs: analyze
+    continue-on-error: ${{ matrix.experimental }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            xcode: '16.3'
+            swift: '6.1'
+            experimental: false
+          - runner: macos-26
+            xcode: '26'
+            swift: '6.2'
+            experimental: true
+
+    env:
+      XCODE_VERSION: ${{ matrix.xcode }}
+      SWIFT_VERSION: ${{ matrix.swift }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -75,6 +94,10 @@ jobs:
         run: |
           xcodebuild -version
           swift --version
+
+      - name: Experimental macOS 26 notice
+        if: ${{ matrix.experimental }}
+        run: echo "::warning::Using macos-26 runner (public preview). This job is marked experimental and allowed to fail."
 
       - name: Cache SwiftPM artifacts
         uses: actions/cache@v4
@@ -101,7 +124,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: macOS-crashlogs-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}
+          name: macOS-crashlogs-${{ matrix.runner }}-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}
           path: crashlogs
           if-no-files-found: ignore
 
@@ -109,8 +132,8 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: coverage/info.lcov
-          flags: swift,macos-15,xcode-${{ env.XCODE_VERSION }},swift-${{ env.SWIFT_VERSION }}
-          name: QsSwift-macos-15-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}
+          flags: swift,${{ matrix.runner }},xcode-${{ env.XCODE_VERSION }},swift-${{ env.SWIFT_VERSION }}
+          name: QsSwift-${{ matrix.runner }}-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
