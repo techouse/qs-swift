@@ -56,7 +56,7 @@ jobs:
   tests:
     permissions:
       contents: read
-    name: ${{ format('Swift tests + coverage ({0}, Xcode {1}, Swift {2}{3})', matrix.runner, matrix.xcode, matrix.swift, matrix.experimental && ' — experimental' || '') }}
+    name: ${{ format('Swift tests ({0}, Xcode {1}, Swift {2}{3})', matrix.runner, matrix.xcode, matrix.swift, matrix.experimental && ' — experimental' || '') }}
     timeout-minutes: 45
     runs-on: ${{ matrix.runner }}
     needs: analyze
