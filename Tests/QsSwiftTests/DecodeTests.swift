@@ -38,6 +38,56 @@ struct DecodeTests {
         #expect(as2DStrings(result4["a"] as Any?) == [["third"]])
     }
 
+    @Test("Decoder.parseObject treats [] as dictionary key when lists are disabled")
+    func parseObject_treatsEmptySegmentAsDictionaryKey() throws {
+        let options = DecodeOptions(parseLists: false)
+        let parsed = try Decoder.parseObject(
+            chain: ["[]"],
+            value: "value",
+            options: options,
+            valuesParsed: true
+        )
+        let dict = parsed as? [String: Any]
+        #expect(dict?["0"] as? String == "value")
+    }
+
+    @Test("Decoder.parseObject normalizes optional arrays into NSNull placeholders")
+    func parseObject_normalizesOptionalArrays() throws {
+        let options = DecodeOptions(allowEmptyLists: true, strictNullHandling: true)
+        let list: [Any?] = ["alpha", nil, Undefined.instance]
+        let parsed = try Decoder.parseObject(
+            chain: ["[]"],
+            value: list,
+            options: options,
+            valuesParsed: true
+        )
+        let array = parsed as? [Any]
+        #expect(array?.count == 3)
+        #expect(array?[0] as? String == "alpha")
+
+        let bridged = array as? NSArray
+        #expect(bridged?[1] is NSNull)
+        #expect(bridged?[2] is Undefined)
+    }
+
+    @Test("Decoder.parseObject reuses nested list length when appending []")
+    func parseObject_reusesExistingListLength() throws {
+        let nested: [Any?] = [[Any?](["existing", "values"])]
+        let parsed = try Decoder.parseObject(
+            chain: ["0", "[]"],
+            value: nested,
+            options: DecodeOptions(),
+            valuesParsed: true
+        )
+        let dict = parsed as? [String: Any]
+        let list = dict?["0"] as? [Any]
+        #expect(list?.count == 1)
+        let inner = list?.first as? [Any]
+        #expect(inner?.count == 2)
+        #expect(inner?.first as? String == "existing")
+        #expect(inner?.last as? String == "values")
+    }
+
     @Test("parseQueryStringValues - duplicates policy")
     func testDuplicatesPolicy() throws {
         // combine
@@ -60,6 +110,22 @@ struct DecodeTests {
             let res = try Decoder.parseQueryStringValues("a=1&a=2", options: opts)
             #expect("\(res["a"]!)" == "2")
         }
+    }
+
+    @Test("parseQueryStringValues applies custom decoder to comma lists")
+    func parseQueryStringValues_customDecoderCommaLists() throws {
+        let opts = DecodeOptions(
+            decoder: { token, _, kind in
+                guard kind == .value else { return token }
+                return token?.uppercased()
+            },
+            comma: true
+        )
+
+        let result = try Decoder.parseQueryStringValues("tags=a,b", options: opts)
+        let values = result["tags"] as? [Any]
+        let strings = values?.compactMap { $0 as? String }
+        #expect(strings == ["A", "B"])
     }
 
     @Test("decode - throws when input is not a String or Dictionary")
