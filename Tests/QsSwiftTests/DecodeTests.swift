@@ -70,6 +70,24 @@ struct DecodeTests {
         #expect(bridged?[2] is Undefined)
     }
 
+    @Test("Decoder.parseObject maps optional array leaves to NSNull placeholders")
+    func parseObject_optionalArrayLeafProducesNSNulls() throws {
+        let options = DecodeOptions(allowEmptyLists: true)
+        let list: [Any?] = ["first", nil, nil]
+        let parsed = try Decoder.parseObject(
+            chain: ["[]"],
+            value: list,
+            options: options,
+            valuesParsed: true
+        )
+
+        let bridged = parsed as? NSArray
+        #expect(bridged?.count == 3)
+        #expect(bridged?[0] as? String == "first")
+        #expect(bridged?[1] is NSNull)
+        #expect(bridged?[2] is NSNull)
+    }
+
     @Test("Decoder.parseObject reuses nested list length when appending []")
     func parseObject_reusesExistingListLength() throws {
         let nested: [Any?] = [[Any?](["existing", "values"])]
