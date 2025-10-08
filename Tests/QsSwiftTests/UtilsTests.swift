@@ -1192,6 +1192,58 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.compact handles Swift [Any] arrays without sparse placeholders")
+    func utils_compact_swiftAnyDense() {
+        let undefined = Undefined.instance
+        let nested: [String: Any?] = ["child": undefined]
+        var root: [String: Any?] = [
+            "list": [Any]([undefined, nested, "tail"])
+        ]
+
+        let compacted = Utils.compact(&root)
+        if let list = compacted["list"] as? [Any] {
+            #expect(list.count == 2)
+            #expect((list.first as? [String: Any])?.isEmpty == true)
+            #expect(list.last as? String == "tail")
+        } else {
+            Issue.record("Dense Swift [Any] branch not compacted as expected")
+        }
+    }
+
+    @Test("Utils.compact preserves Undefined placeholders in Swift [Any] when allowSparse=true")
+    func utils_compact_swiftAnySparse() {
+        let undefined = Undefined.instance
+        var root: [String: Any?] = ["list": [Any]([undefined, "keep"])]
+
+        let compacted = Utils.compact(&root, allowSparseLists: true)
+        if let list = compacted["list"] as? [Any] {
+            #expect(list.count == 2)
+            #expect(list.first is NSNull)
+            #expect(list.last as? String == "keep")
+        } else {
+            Issue.record("Sparse Swift [Any] branch not compacted as expected")
+        }
+    }
+
+    @Test("Utils.compact recurses optional arrays nested inside optional elements")
+    func utils_compact_optionalArraysNestedOptionalElements() {
+        let undefined = Undefined.instance
+        let inner: [Any?] = [undefined, "leaf", nil]
+        let optionalInner: [Any?]? = inner
+        var root: [String: Any?] = ["list": [Any?](arrayLiteral: optionalInner, nil)]
+
+        let compacted = Utils.compact(&root, allowSparseLists: true)
+        if let list = compacted["list"] as? [Any], let nested = list.first as? [Any] {
+            #expect(nested.count == 3)
+            #expect(nested.first is NSNull)
+            #expect(nested[1] as? String == "leaf")
+            #expect(nested.last is NSNull)
+            #expect(list.last is NSNull)
+        } else {
+            Issue.record("Nested optional arrays branch not exercised")
+        }
+    }
+
     @Test("Utils.compact handles Foundation arrays and nested optionals across sparse modes")
     func utils_compact_foundationAndNestedBranches() {
         let undefined = Undefined.instance
