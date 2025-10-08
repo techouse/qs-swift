@@ -1174,6 +1174,24 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.compact normalizes optional elements that wrap [Any?] payloads")
+    func utils_compact_optionalElementsWrappingOptionalArrays() {
+        let undefined = Undefined.instance
+        let inner: [Any?] = [undefined, "leaf", nil]
+        var root: [String: Any?] = ["list": [Any?](arrayLiteral: inner, nil)]
+
+        let compacted = Utils.compact(&root, allowSparseLists: true)
+        if let list = compacted["list"] as? [Any] {
+            #expect(list.count == 2)
+            let nested = list.first as? [Any]
+            #expect(nested?.contains { ($0 as? String) == "leaf" } == true)
+            #expect(nested?.contains { $0 is NSNull } == true)
+            #expect(list.last is NSNull)
+        } else {
+            Issue.record("Expected compacted list for nested optional arrays")
+        }
+    }
+
     @Test("Utils.compact handles Foundation arrays and nested optionals across sparse modes")
     func utils_compact_foundationAndNestedBranches() {
         let undefined = Undefined.instance
@@ -1589,6 +1607,12 @@ struct UtilsTests {
     func utils_dropOnMainThread_nilPayload() {
         Utils.dropOnMainThread(nil as Any?)
         Utils.dropOnMainThread(nil as AnyObject?)
+    }
+
+    @Test("Utils.apply returns nil when the value cannot be cast to generic type")
+    func utils_apply_typeMismatchReturnsNil() {
+        let transformed = Utils.apply("not-an-int") { (value: Int) -> Int in value * 2 }
+        #expect(transformed == nil)
     }
 
     #if DEBUG && os(macOS)
