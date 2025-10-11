@@ -652,6 +652,27 @@ struct EncodeTests {
         )
     }
 
+    @Test("encode - nil value with strictNullHandling renders key/value pair")
+    func encode_nilWithStrictNullHandlingProducesPair() async throws {
+        let payload: [String: Any?] = ["a": nil]
+        let out = try Qs.encode(payload, options: EncodeOptions(strictNullHandling: true))
+        #expect(out == "a=nil")
+    }
+
+    @Test("encode - nil value with strictNullHandling uses custom encoder when provided")
+    func encode_nilWithStrictNullHandlingRespectsCustomEncoder() async throws {
+        let payload: [String: Any?] = ["a": nil]
+        let opts = EncodeOptions(
+            encoder: { value, _, _ in
+                guard let token = value as? String else { return "" }
+                return "enc(\(token))"
+            },
+            strictNullHandling: true
+        )
+        let out = try Qs.encode(payload, options: opts)
+        #expect(out == "enc(a)=")
+    }
+
     // MARK: encodeValuesOnly: one item vs multiple items
 
     @Test("encode - non-list item with encodeValuesOnly")
