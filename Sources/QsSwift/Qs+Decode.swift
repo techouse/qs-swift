@@ -23,7 +23,7 @@ extension Qs {
     /// - Returns: A plain `[String: Any]`. Insertion order of parsed keys is preserved.
     ///
     /// - Throws:
-    ///   - An `NSError(domain: "Qs.decode")` if `input` has an unsupported type.
+    ///   - An `NSError(domain: DecodeError.errorDomain)` if `input` has an unsupported type.
     ///   - `DecodeError` on limit/depth violations when `strictDepth` / `throwOnLimitExceeded`
     ///     are enabled.
     ///
@@ -143,8 +143,8 @@ extension Qs {
                 || input is [AnyHashable: Any]
         else {
             throw NSError(
-                domain: "Qs.decode",
-                code: 1,
+                domain: DecodeError.errorDomain,
+                code: 1,  // preserve legacy code for unsupported type
                 userInfo: [
                     NSLocalizedDescriptionKey: "The input must be a String or a Map<String, Any?>"
                 ]
