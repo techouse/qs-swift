@@ -659,6 +659,13 @@ struct EncodeTests {
         #expect(out == "a=nil")
     }
 
+    @Test("encode - NSNull value with strictNullHandling renders key/value pair")
+    func encode_NSNullWithStrictNullHandlingProducesPair() async throws {
+        let payload: [String: Any?] = ["a": NSNull()]
+        let out = try Qs.encode(payload, options: EncodeOptions(strictNullHandling: true))
+        #expect(out == "a")
+    }
+
     @Test("encode - nil value with strictNullHandling uses custom encoder when provided")
     func encode_nilWithStrictNullHandlingRespectsCustomEncoder() async throws {
         let payload: [String: Any?] = ["a": nil]
