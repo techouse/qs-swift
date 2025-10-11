@@ -139,7 +139,7 @@ struct ModelCoverageTests {
             Issue.record("Expected decode failure for unsupported type")
         case .failure(let error):
             let nsError = error as NSError
-            #expect(nsError.domain == "Qs.decode")
+            #expect(nsError.domain == DecodeError.errorDomain)
         }
     }
 
