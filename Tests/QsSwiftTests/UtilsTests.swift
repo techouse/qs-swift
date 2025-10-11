@@ -924,6 +924,16 @@ struct UtilsTests {
         #expect(Utils.isEmpty(emptyOrderedHashable) == true)
         emptyOrderedHashable[AnyHashable("filled")] = 1
         #expect(Utils.isEmpty(emptyOrderedHashable) == false)
+
+        let dict: [AnyHashable: Any] = [1: "value"]
+        #expect(Utils.isEmpty(dict) == false)
+    }
+
+    @Test("Utils.decode - decodes ISO-8859-1 percent bytes via regex branch")
+    func testDecodeIsoLatin1RegexPath() async throws {
+        let input = "%E4%F6%FC+encoded"
+        let decoded = Utils.decode(input, charset: .isoLatin1)
+        #expect(decoded == "äöü encoded")
     }
 
     // MARK: - Utils.deepBridgeToAnyIterative
