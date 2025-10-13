@@ -924,6 +924,16 @@ struct UtilsTests {
         #expect(Utils.isEmpty(emptyOrderedHashable) == true)
         emptyOrderedHashable[AnyHashable("filled")] = 1
         #expect(Utils.isEmpty(emptyOrderedHashable) == false)
+
+        let dict: [AnyHashable: Any] = [1: "value"]
+        #expect(Utils.isEmpty(dict) == false)
+    }
+
+    @Test("Utils.decode - decodes ISO-8859-1 percent bytes via regex branch")
+    func testDecodeIsoLatin1RegexPath() async throws {
+        let input = "%E4%F6%FC+encoded"
+        let decoded = Utils.decode(input, charset: .isoLatin1)
+        #expect(decoded == "äöü encoded")
     }
 
     // MARK: - Utils.deepBridgeToAnyIterative
@@ -1171,6 +1181,76 @@ struct UtilsTests {
             #expect(inner[1] is NSNull)
         } else {
             Issue.record("Nested optional arrays not compacted as expected")
+        }
+    }
+
+    @Test("Utils.compact normalizes optional elements that wrap [Any?] payloads")
+    func utils_compact_optionalElementsWrappingOptionalArrays() {
+        let undefined = Undefined.instance
+        let inner: [Any?] = [undefined, "leaf", nil]
+        var root: [String: Any?] = ["list": [Any?](arrayLiteral: inner, nil)]
+
+        let compacted = Utils.compact(&root, allowSparseLists: true)
+        if let list = compacted["list"] as? [Any] {
+            #expect(list.count == 2)
+            let nested = list.first as? [Any]
+            #expect(nested?.contains { ($0 as? String) == "leaf" } == true)
+            #expect(nested?.contains { $0 is NSNull } == true)
+            #expect(list.last is NSNull)
+        } else {
+            Issue.record("Expected compacted list for nested optional arrays")
+        }
+    }
+
+    @Test("Utils.compact handles Swift [Any] arrays without sparse placeholders")
+    func utils_compact_swiftAnyDense() {
+        let undefined = Undefined.instance
+        let nested: [String: Any?] = ["child": undefined]
+        var root: [String: Any?] = [
+            "list": [Any]([undefined, nested, "tail"])
+        ]
+
+        let compacted = Utils.compact(&root)
+        if let list = compacted["list"] as? [Any] {
+            #expect(list.count == 2)
+            #expect((list.first as? [String: Any])?.isEmpty == true)
+            #expect(list.last as? String == "tail")
+        } else {
+            Issue.record("Dense Swift [Any] branch not compacted as expected")
+        }
+    }
+
+    @Test("Utils.compact preserves Undefined placeholders in Swift [Any] when allowSparse=true")
+    func utils_compact_swiftAnySparse() {
+        let undefined = Undefined.instance
+        var root: [String: Any?] = ["list": [Any]([undefined, "keep"])]
+
+        let compacted = Utils.compact(&root, allowSparseLists: true)
+        if let list = compacted["list"] as? [Any] {
+            #expect(list.count == 2)
+            #expect(list.first is NSNull)
+            #expect(list.last as? String == "keep")
+        } else {
+            Issue.record("Sparse Swift [Any] branch not compacted as expected")
+        }
+    }
+
+    @Test("Utils.compact recurses optional arrays nested inside optional elements")
+    func utils_compact_optionalArraysNestedOptionalElements() {
+        let undefined = Undefined.instance
+        let inner: [Any?] = [undefined, "leaf", nil]
+        let optionalInner: [Any?]? = inner
+        var root: [String: Any?] = ["list": [Any?](arrayLiteral: optionalInner, nil)]
+
+        let compacted = Utils.compact(&root, allowSparseLists: true)
+        if let list = compacted["list"] as? [Any], let nested = list.first as? [Any] {
+            #expect(nested.count == 3)
+            #expect(nested.first is NSNull)
+            #expect(nested[1] as? String == "leaf")
+            #expect(nested.last is NSNull)
+            #expect(list.last is NSNull)
+        } else {
+            Issue.record("Nested optional arrays branch not exercised")
         }
     }
 
@@ -1589,6 +1669,12 @@ struct UtilsTests {
     func utils_dropOnMainThread_nilPayload() {
         Utils.dropOnMainThread(nil as Any?)
         Utils.dropOnMainThread(nil as AnyObject?)
+    }
+
+    @Test("Utils.apply returns nil when the value cannot be cast to generic type")
+    func utils_apply_typeMismatchReturnsNil() {
+        let transformed = Utils.apply("not-an-int") { (value: Int) -> Int in value * 2 }
+        #expect(transformed == nil)
     }
 
     #if DEBUG && os(macOS)

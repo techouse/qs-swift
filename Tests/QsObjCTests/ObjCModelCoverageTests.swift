@@ -1,5 +1,6 @@
 #if canImport(ObjectiveC) && (os(macOS) || os(iOS) || os(tvOS) || os(watchOS))
     import Foundation
+    import OrderedCollections
 
     @testable import QsObjC
     @testable import QsSwift
@@ -330,6 +331,43 @@
             #expect((keys.swift as? IterableFilter)?.iterable.first as? String == "name")
             #expect((indices.swift as? IterableFilter)?.iterable.first as? Int == 0)
             #expect((mixed.swift as? IterableFilter)?.iterable.last as? Int == 3)
+        }
+
+        @Test("bridgeUndefinedPreservingOrder normalizes Swift dictionaries and arrays")
+        func bridgeUndefined_preservesSwiftContainers() {
+            let swiftDict: [String: Any] = [
+                "scalar": UndefinedObjC(),
+                "array": [UndefinedObjC(), "value"]
+            ]
+
+            if let bridged = QsBridge.bridgeUndefinedPreservingOrder(swiftDict)
+                as? OrderedDictionary<String, Any>
+            {
+                #expect(bridged["scalar"] is Undefined)
+                let array = bridged["array"] as? [Any]
+                #expect(array?.first is Undefined)
+                #expect(array?.last as? String == "value")
+            } else {
+                Issue.record("Expected OrderedDictionary when bridging Swift dictionary")
+            }
+
+            let swiftArray: [Any] = [
+                UndefinedObjC(),
+                ["nested": UndefinedObjC()]
+            ]
+
+            if let bridgedArray = QsBridge.bridgeUndefinedPreservingOrder(swiftArray) as? [Any] {
+                #expect(bridgedArray.first is Undefined)
+                if let nested = bridgedArray.last as? OrderedDictionary<String, Any> {
+                    #expect(nested["nested"] is Undefined)
+                } else if let nested = bridgedArray.last as? [String: Any] {
+                    #expect(nested["nested"] is Undefined)
+                } else {
+                    Issue.record("Expected nested container when bridging Swift array")
+                }
+            } else {
+                Issue.record("Expected bridged Swift array")
+            }
         }
     }
 #endif

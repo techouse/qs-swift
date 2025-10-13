@@ -75,6 +75,74 @@ struct ModelCoverageTests {
         #expect((depthNSError.userInfo[DecodeError.userInfoMaxDepthKey] as? Int) == 3)
     }
 
+    @Test("DecodeError surface errorDescription and userInfo for every case")
+    func decodeError_nserrorProperties() {
+        let cases: [(DecodeError, (NSError) -> Void)] = [
+            (
+                .parameterLimitNotPositive,
+                { error in
+                    #expect(error.userInfo.isEmpty)
+                }
+            ),
+            (
+                .parameterLimitExceeded(limit: 9),
+                { error in
+                    #expect((error.userInfo[DecodeError.userInfoLimitKey] as? Int) == 9)
+                }
+            ),
+            (
+                .listLimitExceeded(limit: 4),
+                { error in
+                    #expect((error.userInfo[DecodeError.userInfoLimitKey] as? Int) == 4)
+                }
+            ),
+            (
+                .depthExceeded(maxDepth: 7),
+                { error in
+                    #expect((error.userInfo[DecodeError.userInfoMaxDepthKey] as? Int) == 7)
+                }
+            ),
+        ]
+
+        for (error, validate) in cases {
+            // Touch the bridging helpers to exercise their implementations.
+            #expect(error.errorDescription?.isEmpty == false)
+            let nsError = error as NSError
+            validate(nsError)
+        }
+    }
+
+    @Test("EncodeError bridges NSError metadata")
+    func encodeError_nserrorProperties() {
+        let error = EncodeError.cyclicObject
+        #expect(error.errorDescription == error.description)
+
+        let nsError = error as NSError
+        #expect(nsError.domain == EncodeError.errorDomain)
+        #expect(nsError.code == error.errorCode)
+        #expect((nsError.userInfo[NSLocalizedDescriptionKey] as? String) == error.description)
+    }
+
+    @Test("decodeResult wraps success and failure without throwing")
+    func decodeResult_wrapsSuccessAndFailure() {
+        let success = Qs.decodeResult("foo=bar")
+        switch success {
+        case .success(let value):
+            #expect((value["foo"] as? String) == "bar")
+        case .failure(let error):
+            Issue.record("Unexpected failure: \(error)")
+        }
+
+        let failure = Qs.decodeResult(NSNumber(value: 1))
+        switch failure {
+        case .success:
+            Issue.record("Expected decode failure for unsupported type")
+        case .failure(let error):
+            let nsError = error as NSError
+            #expect(nsError.domain == DecodeError.errorDomain)
+        }
+    }
+
     @Test("Unsafe sendable wrapper exposes stored value")
     func unsafeSendable_wrapsValue() {
         let boxed = _UnsafeSendable(["k": "v"])
