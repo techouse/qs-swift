@@ -325,7 +325,7 @@ try Qs.encode(["a": ["b", "c"]], options: .init(listFormat: .comma, encode: fals
 // "a=b,c"
 ```
 
-_Note:_ When you select `.comma`, you can also set `commaRoundTrip` to `true` to append `[]` for single-element lists so they can decode back into arrays. Set `commaCompactNulls = true` alongside the comma format to drop `NSNull` entries before joining (for example, `["one", NSNull(), "two"]` encodes as `one,two`).
+_Note:_ When you select `.comma`, you can set `commaRoundTrip = true` to append `[]` for single‑element lists so they can decode back into arrays. Set `commaCompactNulls = true` to drop `NSNull`/`nil` entries before joining (e.g., `["one", NSNull(), nil, "two"]` → `one,two`). If all entries are `NSNull`/`nil`, the key is omitted; if filtering leaves a single item and `commaRoundTrip = true`, `[]` is preserved.
 
 ### Nested maps and dot notation
 
