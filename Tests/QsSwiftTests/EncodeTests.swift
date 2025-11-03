@@ -3001,8 +3001,8 @@ struct EncodeTests {
         #expect(out == "a%5B%5D=x")
     }
 
-    @Test("encode: .comma + commaCompactNulls drops null entries before joining")
-    func comma_compactNulls_drops_null_entries() throws {
+    @Test("encode: .comma + commaCompactNulls drops NSNull entries before joining")
+    func comma_compactNulls_drops_NSNull_entries() throws {
         let payload: [String: Any] = [
             "a": ["b": ["one", NSNull(), "two", NSNull(), "three"]]
         ]
@@ -3024,8 +3024,29 @@ struct EncodeTests {
         #expect(compact == "a[b]=one,two,three")
     }
 
+    @Test("encode: .comma + commaCompactNulls drops optional nil entries before joining")
+    func comma_compactNulls_drops_optional_nil_entries() throws {
+        let payload: [String: Any] = ["a": ["one", nil, "two", nil, "three"] as [String?]]
+
+        let baseline = try Qs.encode(
+            payload,
+            options: EncodeOptions(listFormat: .comma, encode: false)
+        )
+        #expect(baseline == "a=one,,two,,three")
+
+        let compact = try Qs.encode(
+            payload,
+            options: EncodeOptions(
+                listFormat: .comma,
+                encode: false,
+                commaCompactNulls: true
+            )
+        )
+        #expect(compact == "a=one,two,three")
+    }
+
     @Test("encode: .comma + commaCompactNulls omits the key when all entries are null")
-    func comma_compactNulls_omits_all_nulls() throws {
+    func comma_compactNulls_omits_all_NSNulls() throws {
         let payload: [String: Any] = ["a": [NSNull(), NSNull()]]
 
         let baseline = try Qs.encode(
@@ -3045,9 +3066,77 @@ struct EncodeTests {
         #expect(compact.isEmpty)
     }
 
+    @Test("encode: .comma + commaCompactNulls omits the key when all entries are null")
+    func comma_compactNulls_omits_all_nil() throws {
+        let payload: [String: Any] = ["a": [nil, nil]]
+
+        let baseline = try Qs.encode(
+            payload,
+            options: EncodeOptions(listFormat: .comma, encode: false)
+        )
+        #expect(baseline == "a=,")
+
+        let compact = try Qs.encode(
+            payload,
+            options: EncodeOptions(
+                listFormat: .comma,
+                encode: false,
+                commaCompactNulls: true
+            )
+        )
+        #expect(compact.isEmpty)
+    }
+
+    @Test("encode: .comma + commaCompactNulls omits the key when all entries are null")
+    func comma_compactNulls_omits_all_NSNull_and_nil() throws {
+        let payload: [String: Any] = ["a": [NSNull(), nil]]
+
+        let baseline = try Qs.encode(
+            payload,
+            options: EncodeOptions(listFormat: .comma, encode: false)
+        )
+        #expect(baseline == "a=,")
+
+        let compact = try Qs.encode(
+            payload,
+            options: EncodeOptions(
+                listFormat: .comma,
+                encode: false,
+                commaCompactNulls: true
+            )
+        )
+        #expect(compact.isEmpty)
+    }
+
     @Test("encode: .comma + commaCompactNulls preserves round-trip marker after filtering")
-    func comma_compactNulls_preserves_round_trip_marker() throws {
+    func comma_compactNulls_preserves_round_trip_marker_NSNull() throws {
         let payload: [String: Any] = ["a": [NSNull(), "foo"]]
+
+        let baseline = try Qs.encode(
+            payload,
+            options: EncodeOptions(
+                listFormat: .comma,
+                encode: false,
+                commaRoundTrip: true
+            )
+        )
+        #expect(baseline == "a=,foo")
+
+        let compact = try Qs.encode(
+            payload,
+            options: EncodeOptions(
+                listFormat: .comma,
+                encode: false,
+                commaRoundTrip: true,
+                commaCompactNulls: true
+            )
+        )
+        #expect(compact == "a[]=foo")
+    }
+
+    @Test("encode: .comma + commaCompactNulls preserves round-trip marker after filtering")
+    func comma_compactNulls_preserves_round_trip_marker_nil() throws {
+        let payload: [String: Any] = ["a": [nil, "foo"]]
 
         let baseline = try Qs.encode(
             payload,
