@@ -204,6 +204,8 @@ extension Qs {
                     listFormat: options.getListFormat,
                     commaRoundTrip: (options.getListFormat == .comma)
                         && (options.commaRoundTrip == true),
+                    commaCompactNulls: (options.getListFormat == .comma)
+                        && options.commaCompactNulls,
                     allowEmptyLists: options.allowEmptyLists,
                     strictNullHandling: options.strictNullHandling,
                     skipNulls: options.skipNulls,

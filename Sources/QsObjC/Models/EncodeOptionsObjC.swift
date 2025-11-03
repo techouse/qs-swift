@@ -101,6 +101,9 @@
         /// to allow it to round-trip back to an array on decode.
         public var commaRoundTrip: Bool = false
 
+        /// Only meaningful with `.comma` list format: when true, drop `null` entries before joining.
+        public var commaCompactNulls: Bool = false
+
         /// Convenience: provide a predictable case-insensitive A→Z sort (ties broken case-sensitively
         /// so `"A"` sorts before `"a"`). Ignored if `sortComparatorBlock` is set.
         public var sortKeysCaseInsensitively: Bool = false
@@ -176,6 +179,7 @@
                 skipNulls: skipNulls,
                 strictNullHandling: strictNullHandling,
                 commaRoundTrip: commaRoundTrip,
+                commaCompactNulls: commaCompactNulls,
 
                 // Sorting
                 sort: swiftSorter
