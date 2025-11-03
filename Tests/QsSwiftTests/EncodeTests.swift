@@ -3160,6 +3160,14 @@ struct EncodeTests {
         #expect(compact == "a[]=foo")
     }
 
+    @Test("encode: .comma + encode=true + valuesOnly + commaCompactNulls")
+    func comma_compactNulls_valuesOnly_encodes_once() throws {
+        let payload: [String: Any] = ["a": ["c,d", NSNull(), "e%"]]
+        let opts = EncodeOptions(listFormat: .comma, encode: true, encodeValuesOnly: true, commaCompactNulls: true)
+        // Expect comma preserved as %2C and '%' encoded once
+        #expect(try Qs.encode(payload, options: opts) == "a=c%2Cd,e%25")
+    }
+
     @Test("encode: allowEmptyLists renders foo[] for empty arrays")
     func empty_list_emits_brackets() throws {
         let opts = EncodeOptions(allowEmptyLists: true)
