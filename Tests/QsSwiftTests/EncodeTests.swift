@@ -3001,6 +3001,76 @@ struct EncodeTests {
         #expect(out == "a%5B%5D=x")
     }
 
+    @Test("encode: .comma + commaCompactNulls drops null entries before joining")
+    func comma_compactNulls_drops_null_entries() throws {
+        let payload: [String: Any] = [
+            "a": ["b": ["one", NSNull(), "two", NSNull(), "three"]]
+        ]
+
+        let baseline = try Qs.encode(
+            payload,
+            options: EncodeOptions(listFormat: .comma, encode: false)
+        )
+        #expect(baseline == "a[b]=one,,two,,three")
+
+        let compact = try Qs.encode(
+            payload,
+            options: EncodeOptions(
+                listFormat: .comma,
+                encode: false,
+                commaCompactNulls: true
+            )
+        )
+        #expect(compact == "a[b]=one,two,three")
+    }
+
+    @Test("encode: .comma + commaCompactNulls omits the key when all entries are null")
+    func comma_compactNulls_omits_all_nulls() throws {
+        let payload: [String: Any] = ["a": [NSNull(), NSNull()]]
+
+        let baseline = try Qs.encode(
+            payload,
+            options: EncodeOptions(listFormat: .comma, encode: false)
+        )
+        #expect(baseline == "a=,")
+
+        let compact = try Qs.encode(
+            payload,
+            options: EncodeOptions(
+                listFormat: .comma,
+                encode: false,
+                commaCompactNulls: true
+            )
+        )
+        #expect(compact.isEmpty)
+    }
+
+    @Test("encode: .comma + commaCompactNulls preserves round-trip marker after filtering")
+    func comma_compactNulls_preserves_round_trip_marker() throws {
+        let payload: [String: Any] = ["a": [NSNull(), "foo"]]
+
+        let baseline = try Qs.encode(
+            payload,
+            options: EncodeOptions(
+                listFormat: .comma,
+                encode: false,
+                commaRoundTrip: true
+            )
+        )
+        #expect(baseline == "a=,foo")
+
+        let compact = try Qs.encode(
+            payload,
+            options: EncodeOptions(
+                listFormat: .comma,
+                encode: false,
+                commaRoundTrip: true,
+                commaCompactNulls: true
+            )
+        )
+        #expect(compact == "a[]=foo")
+    }
+
     @Test("encode: allowEmptyLists renders foo[] for empty arrays")
     func empty_list_emits_brackets() throws {
         let opts = EncodeOptions(allowEmptyLists: true)

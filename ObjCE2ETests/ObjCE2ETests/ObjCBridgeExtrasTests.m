@@ -171,6 +171,19 @@
     XCTAssertEqualObjects(got, @"a=x");
 }
 
+- (void)test_encode_comma_list_compact_nulls {
+    QsEncodeOptions *o = [self optsNoEncode];
+    o.listFormat = @(QsListFormatComma);
+
+    NSArray *payload = @[ @"one", [NSNull null], @"two" ];
+    NSString *baseline = [QsObjCTestHelpers encode:OD(@[@"a"], @[ payload ]) options:o];
+    XCTAssertEqualObjects(baseline, @"a=one,,two");
+
+    o.commaCompactNulls = YES;
+    NSString *compact = [QsObjCTestHelpers encode:OD(@[@"a"], @[ payload ]) options:o];
+    XCTAssertEqualObjects(compact, @"a=one,two");
+}
+
 #pragma mark - 10) allowDots vs encodeDotInKeys
 
 - (void)test_allowDots_vs_encodeDotInKeys {
