@@ -192,23 +192,24 @@ internal enum Encoder {
                 var elems = elems0
 
                 if commaCompactNulls {
-                    let filtered = elems.compactMap { element -> Any? in
+                    elems = elems.compactMap { element -> Any? in
                         if element is NSNull { return nil }
-                        if let unwrapped = unwrapOptional(element) {
+                        if isOptional(element) {
+                            guard let unwrapped = unwrapOptional(element) else { return nil }
                             if unwrapped is NSNull { return nil }
                             return unwrapped
                         }
                         return element
                     }
-                    elems = filtered
-                    arrayView = filtered
-                    obj = filtered
+                    arrayView = elems
+                    obj = elems
                 }
 
                 if encodeValuesOnly, let encoder = encoder {
                     elems = elems.map { el in encoder(describeForComma(el), nil, nil) }
                     obj = elems
                 }
+                arrayView = arrayize(obj)
 
                 if !elems.isEmpty {
                     let joined = elems.map { describeForComma($0) }.joined(separator: ",")
@@ -485,6 +486,11 @@ extension QsSwift.Encoder {
         if value is [String: Any] || value is NSDictionary { return true }
         if value is OrderedDictionary<String, Any> { return true }
         return false
+    }
+
+    @inline(__always)
+    private static func isOptional(_ value: Any) -> Bool {
+        Mirror(reflecting: value).displayStyle == .optional
     }
 
     @inline(__always)
