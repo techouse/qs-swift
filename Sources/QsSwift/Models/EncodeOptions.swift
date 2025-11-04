@@ -114,6 +114,9 @@ public struct EncodeOptions: @unchecked Sendable {
     /// so they round-trip back to a list on decode (e.g. `a[]=x` instead of `a=x`).
     public let commaRoundTrip: Bool?
 
+    /// If `.comma` list format is used, drop `nil`/`NSNull` items before joining to produce a compact payload.
+    public let commaCompactNulls: Bool
+
     /// Sort function for keys when you want deterministic output independent of input order.
     ///
     /// If `nil`, the encoder preserves the input traversal order (see note above).
@@ -158,6 +161,7 @@ public struct EncodeOptions: @unchecked Sendable {
     ///   - skipNulls: Omit keys with `nil` values.
     ///   - strictNullHandling: Distinguish `nil` (`a`) from empty `""` (`a=`).
     ///   - commaRoundTrip: With `.comma`, ensure single-element lists keep `[]` for round-trip.
+    ///   - commaCompactNulls: With `.comma`, drop `nil` entries before joining to avoid empty slots.
     ///   - sort: Optional comparator for deterministic key ordering.
     public init(
         encoder: ValueEncoder? = nil,
@@ -178,6 +182,7 @@ public struct EncodeOptions: @unchecked Sendable {
         skipNulls: Bool = false,
         strictNullHandling: Bool = false,
         commaRoundTrip: Bool? = nil,
+        commaCompactNulls: Bool = false,
         sort: Sorter? = nil
     ) {
         // Validate charset (.utf8 or .isoLatin1)
@@ -201,6 +206,7 @@ public struct EncodeOptions: @unchecked Sendable {
         self.skipNulls = skipNulls
         self.strictNullHandling = strictNullHandling
         self.commaRoundTrip = commaRoundTrip
+        self.commaCompactNulls = commaCompactNulls
         self.sort = sort
     }
 
@@ -282,6 +288,7 @@ public struct EncodeOptions: @unchecked Sendable {
         skipNulls: Bool? = nil,
         strictNullHandling: Bool? = nil,
         commaRoundTrip: Bool?? = nil,
+        commaCompactNulls: Bool? = nil,
         sort: Sorter?? = nil
     ) -> EncodeOptions {
         @inline(__always)
@@ -310,6 +317,7 @@ public struct EncodeOptions: @unchecked Sendable {
             skipNulls: skipNulls ?? self.skipNulls,
             strictNullHandling: strictNullHandling ?? self.strictNullHandling,
             commaRoundTrip: pick(commaRoundTrip, self.commaRoundTrip),
+            commaCompactNulls: commaCompactNulls ?? self.commaCompactNulls,
             sort: pick(sort, self.sort)
         )
     }

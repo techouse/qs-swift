@@ -15,6 +15,7 @@ internal enum Encoder {
     ///   - prefix: An optional prefix for the encoded string.
     ///   - generateArrayPrefix: A generator for array prefixes.
     ///   - commaRoundTrip: If true, uses comma for array encoding.
+    ///   - commaCompactNulls: When true, drops `nil` entries before joining comma lists.
     ///   - allowEmptyLists: If true, allows empty lists in the output.
     ///   - strictNullHandling: If true, handles nulls strictly.
     ///   - skipNulls: If true, skips null values in the output.
@@ -40,6 +41,7 @@ internal enum Encoder {
         generateArrayPrefix: ListFormatGenerator? = nil,
         listFormat: ListFormat = .indices,
         commaRoundTrip: Bool = false,
+        commaCompactNulls: Bool = false,
         allowEmptyLists: Bool = false,
         strictNullHandling: Bool = false,
         skipNulls: Bool = false,
@@ -182,16 +184,32 @@ internal enum Encoder {
 
         if undefined { return values }
 
-        let arrayView = arrayize(obj)
+        var arrayView = arrayize(obj)
 
         // Determine object keys
         let objKeys: [Any] = {
             if isComma, let elems0 = arrayView {
                 var elems = elems0
-                if encodeValuesOnly, let encoder = encoder {
-                    elems = elems0.map { el in encoder(describeForComma(el), nil, nil) }
+
+                if commaCompactNulls {
+                    elems = elems.compactMap { element -> Any? in
+                        if element is NSNull { return nil }
+                        if isOptional(element) {
+                            guard let unwrapped = unwrapOptional(element) else { return nil }
+                            if unwrapped is NSNull { return nil }
+                            return unwrapped
+                        }
+                        return element
+                    }
+                    arrayView = elems
                     obj = elems
                 }
+
+                if encodeValuesOnly, let encoder = encoder {
+                    elems = elems.map { el in encoder(describeForComma(el), nil, nil) }
+                    obj = elems
+                }
+                arrayView = arrayize(obj)
 
                 if !elems.isEmpty {
                     let joined = elems.map { describeForComma($0) }.joined(separator: ",")
@@ -385,6 +403,7 @@ internal enum Encoder {
                 generateArrayPrefix: generator,
                 listFormat: listFormat,
                 commaRoundTrip: commaRoundTripEffective,
+                commaCompactNulls: commaCompactNulls,
                 allowEmptyLists: allowEmptyLists,
                 strictNullHandling: strictNullHandling,
                 skipNulls: skipNulls,
@@ -467,6 +486,11 @@ extension QsSwift.Encoder {
         if value is [String: Any] || value is NSDictionary { return true }
         if value is OrderedDictionary<String, Any> { return true }
         return false
+    }
+
+    @inline(__always)
+    private static func isOptional(_ value: Any) -> Bool {
+        Mirror(reflecting: value).displayStyle == .optional
     }
 
     @inline(__always)

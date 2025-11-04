@@ -127,6 +127,7 @@ o.listFormat      = QsListFormatIndices;
 o.indices         = @(YES);              // only used when listFormat is nil (deprecated)
 o.allowEmptyLists = NO;
 o.commaRoundTrip  = NO;                  // append [] for singletons under .comma
+o.commaCompactNulls = NO;                // drop NSNull entries when using .comma; omit key if all entries are null
 
 // Nulls
 // - strictNullHandling: key with nil value → "key" (no '=')
