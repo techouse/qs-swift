@@ -1,3 +1,7 @@
+## 1.2.0
+
+- [FEAT] add `EncodeOptions.commaCompactNulls` to drop `NSNull`/`nil` values when producing comma lists
+
 ## 1.1.6
 
 - [FEAT] add support in `QsBridge._bridgeInputForEncode` for handling `OrderedDictionary<AnyHashable, Any>`, converting keys to deterministic string representations to ensure consistent bridging of heterogeneous key types
