@@ -46,6 +46,10 @@ jobs:
         if: matrix.language == 'swift'
         run: swift --version
 
+      - name: Compute Package.resolved hash
+        if: matrix.language == 'swift'
+        run: echo "PACKAGE_RESOLVED_HASH=$(git hash-object Package.resolved 2>/dev/null || echo none)" >> "$GITHUB_ENV"
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
@@ -62,7 +66,7 @@ jobs:
           path: |
             ~/.swiftpm
             .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          key: ${{ runner.os }}-spm-${{ env.PACKAGE_RESOLVED_HASH }}
           restore-keys: |
             ${{ runner.os }}-spm-
 

@@ -95,6 +95,9 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Compute Package.resolved hash
+        run: echo "PACKAGE_RESOLVED_HASH=$(git hash-object Package.resolved 2>/dev/null || echo none)" >> "$GITHUB_ENV"
+
       - name: Experimental macOS 26 notice
         if: ${{ matrix.experimental }}
         run: echo "::warning::Using macos-26 runner (public preview). This job is marked experimental and allowed to fail."
@@ -106,7 +109,7 @@ jobs:
             ~/.swiftpm
             .build
             ~/Library/Caches/org.swift.swiftpm
-          key: spm-${{ runner.os }}-swift-${{ env.SWIFT_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-${{ runner.os }}-swift-${{ env.SWIFT_VERSION }}-${{ env.PACKAGE_RESOLVED_HASH }}
           restore-keys: |
             spm-${{ runner.os }}-swift-${{ env.SWIFT_VERSION }}-
 
@@ -161,6 +164,9 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Compute Package.resolved hash
+        run: echo "PACKAGE_RESOLVED_HASH=$(git hash-object Package.resolved 2>/dev/null || echo none)" >> "$GITHUB_ENV"
+
       - name: Warn if Swift toolchain doesn’t match env.SWIFT_VERSION
         run: |
           set -euo pipefail
@@ -204,7 +210,7 @@ jobs:
             ~/.swiftpm
             ~/Library/Developer/Xcode/DerivedData/SourcePackages
             .derivedData-objc/SourcePackages
-          key: spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}-${{ env.PACKAGE_RESOLVED_HASH }}
           restore-keys: |
             spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}-
 
@@ -300,6 +306,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Compute Package.resolved hash
+        run: echo "PACKAGE_RESOLVED_HASH=$(git hash-object Package.resolved 2>/dev/null || echo none)" >> "$GITHUB_ENV"
+
       - name: Setup Swift ${{ env.SWIFT_VERSION }}
         uses: swift-actions/setup-swift@v2
         with:
@@ -321,7 +330,7 @@ jobs:
             ~/.swiftpm
             .build
             ~/.cache/org.swift.swiftpm
-          key: spm-${{ runner.os }}-swift-${{ env.SWIFT_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-${{ runner.os }}-swift-${{ env.SWIFT_VERSION }}-${{ env.PACKAGE_RESOLVED_HASH }}
           restore-keys: |
             spm-${{ runner.os }}-swift-${{ env.SWIFT_VERSION }}-
 
@@ -358,6 +367,9 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Compute Package.resolved hash
+        run: echo "PACKAGE_RESOLVED_HASH=$(git hash-object Package.resolved 2>/dev/null || echo none)" >> "$GITHUB_ENV"
+
       - name: Cache SwiftPM artifacts
         uses: actions/cache@v4
         with:
@@ -366,7 +378,7 @@ jobs:
             .build
             ~/Library/Caches/org.swift.swiftpm
             Tools/QsSwiftComparison/.build
-          key: spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-${{ env.PACKAGE_RESOLVED_HASH }}
           restore-keys: |
             spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-
 
