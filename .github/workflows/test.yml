@@ -301,10 +301,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Swift ${{ env.SWIFT_VERSION }}
-        # Temporarily, point to a specific commit in a fork of `swift-actions/setup-swift` that:
-        #  - fixes the GPG key import
-        #  - supports Swift 6.2
-        uses: mman/setup-swift@ceda4ad4a25f0298db1fd6d678c9c74d9fa4d73e
+        uses: swift-actions/setup-swift@v2
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
