@@ -310,7 +310,7 @@ jobs:
         run: echo "PACKAGE_RESOLVED_HASH=$(git hash-object Package.resolved 2>/dev/null || echo none)" >> "$GITHUB_ENV"
 
       - name: Setup Swift ${{ env.SWIFT_VERSION }}
-        uses: swift-actions/setup-swift@v2
+        uses: swift-actions/setup-swift@v3
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
