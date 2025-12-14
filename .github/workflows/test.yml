@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload macOS crash logs (if any)
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: macOS-crashlogs-${{ matrix.runner }}-xcode-${{ env.XCODE_VERSION }}-swift-${{ env.SWIFT_VERSION }}
           path: crashlogs
@@ -261,7 +261,7 @@ jobs:
 
       - name: Upload ObjC test result bundle
         if: ${{ always() }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ObjC-Tests-xcode-${{ env.XCODE_VERSION }}
           path: ObjC-Tests.xcresult
@@ -273,7 +273,7 @@ jobs:
 
       - name: Upload macOS crash logs (ObjC job, if any)
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: macOS-crashlogs-objc-xcode-${{ env.XCODE_VERSION }}-macos-latest
           path: crashlogs-objc
