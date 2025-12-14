@@ -103,7 +103,7 @@ jobs:
         run: echo "::warning::Using macos-26 runner (public preview). This job is marked experimental and allowed to fail."
 
       - name: Cache SwiftPM artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.swiftpm
@@ -204,7 +204,7 @@ jobs:
           ls -lah "$EXPECTED" || true
 
       - name: Cache SPM (Xcode)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.swiftpm
@@ -324,7 +324,7 @@ jobs:
         run: echo "::warning::Running Linux tests with Swift ${{ env.SWIFT_VERSION }} (experimental). This job is allowed to fail."
 
       - name: Cache SwiftPM artifacts (Linux)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.swiftpm
@@ -371,7 +371,7 @@ jobs:
         run: echo "PACKAGE_RESOLVED_HASH=$(git hash-object Package.resolved 2>/dev/null || echo none)" >> "$GITHUB_ENV"
 
       - name: Cache SwiftPM artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.swiftpm
