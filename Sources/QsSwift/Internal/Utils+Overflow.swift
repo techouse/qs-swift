@@ -17,12 +17,12 @@ extension Utils {
     @usableFromInline
     internal static func isOverflow(_ value: Any?) -> Bool {
         guard let dict = value as? [AnyHashable: Any] else { return false }
-        return dict[AnyHashable(overflowKey)] is Int
+        return dict[overflowKey] is Int
     }
 
     @usableFromInline
     internal static func overflowMaxIndex(_ dict: [AnyHashable: Any]) -> Int? {
-        dict[AnyHashable(overflowKey)] as? Int
+        dict[overflowKey] as? Int
     }
 
     @usableFromInline
@@ -42,7 +42,7 @@ extension Utils {
 
     @usableFromInline
     internal static func isOverflowKey(_ key: AnyHashable) -> Bool {
-        key == AnyHashable(overflowKey)
+        key.base is OverflowKey
     }
 
     @usableFromInline
