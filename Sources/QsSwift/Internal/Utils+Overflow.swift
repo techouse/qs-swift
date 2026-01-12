@@ -46,6 +46,8 @@ extension Utils {
     }
 
     @usableFromInline
+    /// Scans non-overflow keys to compute the maximum integer index and stores it.
+    /// Sets -1 if no integer keys are present.
     internal static func refreshOverflowMaxIndex(_ dict: inout [AnyHashable: Any]) {
         var maxIndex = -1
         for key in dict.keys where !isOverflowKey(key) {
