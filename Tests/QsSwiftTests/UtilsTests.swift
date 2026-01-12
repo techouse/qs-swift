@@ -820,6 +820,30 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.combine - flattens arrays when appending to overflow objects")
+    func testCombineFlattensOverflowAppend() async throws {
+        let overflow = Utils.combine(["a"], "b", listLimit: 1)
+        let combined = Utils.combine(overflow, ["c", "d"], listLimit: 10)
+        let combinedDict = combined as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(combinedDict))
+        if let combinedDict {
+            let cleaned = combinedDict.filter { !Utils.isOverflowKey($0.key) }
+            #expect(cleaned[AnyHashable(0)] as? String == "a")
+            #expect(cleaned[AnyHashable(1)] as? String == "b")
+            #expect(cleaned[AnyHashable(2)] as? String == "c")
+            #expect(cleaned[AnyHashable(3)] as? String == "d")
+        }
+
+        let combinedWithNil = Utils.combine(overflow, [nil, "e"], listLimit: 10)
+        let combinedNilDict = combinedWithNil as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(combinedNilDict))
+        if let combinedNilDict {
+            let cleaned = combinedNilDict.filter { !Utils.isOverflowKey($0.key) }
+            #expect((cleaned[AnyHashable(2)] as AnyObject) is NSNull)
+            #expect(cleaned[AnyHashable(3)] as? String == "e")
+        }
+    }
+
     @Test("Utils.merge - handles overflow objects")
     func testMergeOverflowObjects() async throws {
         let overflow = Utils.combine(["a"], "b", listLimit: 1) as? [AnyHashable: Any]

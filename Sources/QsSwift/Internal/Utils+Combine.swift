@@ -69,12 +69,27 @@ extension Utils {
         _ dict: [AnyHashable: Any],
         value: Any?
     ) -> [AnyHashable: Any] {
-        guard let value = value else { return dict }
         var copy = dict
-        let currentMax = overflowMaxIndex(copy) ?? -1
-        let nextIndex = currentMax + 1
-        copy[nextIndex] = value
-        setOverflowMaxIndex(&copy, nextIndex)
+        var maxIndex = overflowMaxIndex(copy) ?? -1
+
+        func appendElement(_ element: Any?) {
+            maxIndex += 1
+            copy[maxIndex] = element ?? NSNull()
+        }
+
+        if let arrOpt = value as? [Any?] {
+            for element in arrOpt {
+                appendElement(element)
+            }
+        } else if let arr = value as? [Any] {
+            for element in arr {
+                appendElement(element)
+            }
+        } else {
+            appendElement(value)
+        }
+
+        setOverflowMaxIndex(&copy, maxIndex)
         return copy
     }
 }

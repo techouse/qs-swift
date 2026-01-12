@@ -41,10 +41,10 @@ extension Utils {
     internal static func refreshOverflowMaxIndex(_ dict: inout [AnyHashable: Any]) {
         var maxIndex = -1
         for key in dict.keys where !isOverflowKey(key) {
-            if let idx = key as? Int, idx > maxIndex {
+            if let idx = (key as? Int) ?? (key as? NSNumber)?.intValue, idx > maxIndex {
                 maxIndex = idx
             }
         }
-        dict[overflowKey] = maxIndex
+        setOverflowMaxIndex(&dict, maxIndex)
     }
 }
