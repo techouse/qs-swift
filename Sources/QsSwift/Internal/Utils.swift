@@ -103,6 +103,7 @@ internal enum Utils {
                     let box = DictBox()
                     stack.append(.commitDict(box, assign))
                     for (keyHash, child) in dictAHOpt {
+                        if Utils.isOverflowKey(keyHash) { continue }
                         let keyString = String(describing: keyHash)
                         stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
                     }
@@ -113,6 +114,7 @@ internal enum Utils {
                     let box = DictBox()
                     stack.append(.commitDict(box, assign))
                     for (keyHash, child) in dictAH {
+                        if Utils.isOverflowKey(keyHash) { continue }
                         let keyString = String(describing: keyHash)
                         stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
                     }

@@ -556,7 +556,9 @@ struct DecodeTests {
         }
         do {
             let r = try Qs.decode("a[]=b&a=c", options: DecodeOptions(listLimit: 0))
-            #expect(asStrings(r["a"]) == ["b", "c"])
+            let a = asDictString(r["a"])
+            #expect((a?["0"] as? String) == "b")
+            #expect((a?["1"] as? String) == "c")
         }
         do {
             let r = try Qs.decode("a[]=b&a=c")
@@ -569,7 +571,9 @@ struct DecodeTests {
         }
         do {
             let r = try Qs.decode("a=b&a[]=c", options: DecodeOptions(listLimit: 0))
-            #expect(asStrings(r["a"]) == ["b", "c"])
+            let a = asDictString(r["a"])
+            #expect((a?["0"] as? String) == "b")
+            #expect((a?["1"] as? String) == "c")
         }
         do {
             let r = try Qs.decode("a=b&a[]=c")
@@ -929,11 +933,11 @@ struct DecodeTests {
                 "a[]=b&a[]&a[]=c&a[]=",
                 options: DecodeOptions(listLimit: 0, strictNullHandling: true)
             )
-            let arr = r["a"] as? [Any]
-            #expect((arr?[0] as? String) == "b")
-            #expect(isNSNullValue(arr?[1]))
-            #expect((arr?[2] as? String) == "c")
-            #expect((arr?[3] as? String) == "")
+            let a = asDictString(r["a"])
+            #expect((a?["0"] as? String) == "b")
+            #expect(isNSNullValue(a?["1"]))
+            #expect((a?["2"] as? String) == "c")
+            #expect((a?["3"] as? String) == "")
         }
         do {
             let r = try Qs.decode(
@@ -951,11 +955,11 @@ struct DecodeTests {
                 "a[]=b&a[]=&a[]=c&a[]",
                 options: DecodeOptions(listLimit: 0, strictNullHandling: true)
             )
-            let arr = r["a"] as? [Any]
-            #expect((arr?[0] as? String) == "b")
-            #expect((arr?[1] as? String) == "")
-            #expect((arr?[2] as? String) == "c")
-            #expect(isNSNullValue(arr?[3]))
+            let a = asDictString(r["a"])
+            #expect((a?["0"] as? String) == "b")
+            #expect((a?["1"] as? String) == "")
+            #expect((a?["2"] as? String) == "c")
+            #expect(isNSNullValue(a?["3"]))
         }
         do {
             let r = try Qs.decode("a[]=&a[]=b&a[]=c")
@@ -1386,11 +1390,11 @@ struct DecodeTests {
             let r = try Qs.decode(
                 "a[]=b&a[]&a[]=c&a[]=",
                 options: DecodeOptions(listLimit: 0, strictNullHandling: true))
-            let a = r["a"] as? [Any]
-            #expect((a?[0] as? String) == "b")
-            #expect(isNSNullValue(a?[1]))
-            #expect((a?[2] as? String) == "c")
-            #expect((a?[3] as? String) == "")
+            let a = asDictString(r["a"])
+            #expect((a?["0"] as? String) == "b")
+            #expect(isNSNullValue(a?["1"]))
+            #expect((a?["2"] as? String) == "c")
+            #expect((a?["3"] as? String) == "")
         }
         do {
             let r = try Qs.decode(
@@ -1406,11 +1410,11 @@ struct DecodeTests {
             let r = try Qs.decode(
                 "a[]=b&a[]=&a[]=c&a[]",
                 options: DecodeOptions(listLimit: 0, strictNullHandling: true))
-            let a = r["a"] as? [Any]
-            #expect((a?[0] as? String) == "b")
-            #expect((a?[1] as? String) == "")
-            #expect((a?[2] as? String) == "c")
-            #expect(isNSNullValue(a?[3]))
+            let a = asDictString(r["a"])
+            #expect((a?["0"] as? String) == "b")
+            #expect((a?["1"] as? String) == "")
+            #expect((a?["2"] as? String) == "c")
+            #expect(isNSNullValue(a?["3"]))
         }
         #expect(asStrings(try Qs.decode("a[]=&a[]=b&a[]=c")["a"]) == ["", "b", "c"])
     }
@@ -2236,7 +2240,60 @@ struct ListLimitTests {
     @Test("handles list limit of zero correctly")
     func listLimitZero() throws {
         let r = try Qs.decode("a[]=1&a[]=2", options: .init(listLimit: 0))
-        #expect((r["a"] as? [String]) == ["1", "2"])
+        let a = asDictString(r["a"])
+        #expect((a?["0"] as? String) == "1")
+        #expect((a?["1"] as? String) == "2")
+        #expect(a?.count == 2)
+    }
+
+    @Test("list limit applies to [] overflow")
+    func listLimitAppliesToEmptyBracketOverflow() throws {
+        let attack = Array(repeating: "a[]=x", count: 105).joined(separator: "&")
+        let result = try Qs.decode(attack, options: .init(listLimit: 100))
+        let a = asDictString(result["a"])
+        #expect(a?.count == 105)
+        #expect((a?["0"] as? String) == "x")
+        #expect((a?["104"] as? String) == "x")
+    }
+
+    @Test("list limit boundary conditions for []")
+    func listLimitBoundaryConditions() throws {
+        do {
+            let result = try Qs.decode(
+                "a[]=1&a[]=2&a[]=3",
+                options: .init(listLimit: 3))
+            #expect(asStrings(result["a"]) == ["1", "2", "3"])
+        }
+        do {
+            let result = try Qs.decode(
+                "a[]=1&a[]=2&a[]=3&a[]=4",
+                options: .init(listLimit: 3))
+            let a = asDictString(result["a"])
+            #expect((a?["0"] as? String) == "1")
+            #expect((a?["3"] as? String) == "4")
+            #expect(a?.count == 4)
+        }
+        do {
+            let result = try Qs.decode(
+                "a[]=1&a[]=2",
+                options: .init(listLimit: 1))
+            let a = asDictString(result["a"])
+            #expect((a?["0"] as? String) == "1")
+            #expect((a?["1"] as? String) == "2")
+            #expect(a?.count == 2)
+        }
+    }
+
+    @Test("list limit applies to duplicate keys")
+    func listLimitAppliesToDuplicateKeys() throws {
+        let under = try Qs.decode("a=b&a=c&a=d", options: .init(listLimit: 20))
+        #expect(asStrings(under["a"]) == ["b", "c", "d"])
+
+        let over = try Qs.decode("a=b&a=c&a=d", options: .init(listLimit: 2))
+        let a = asDictString(over["a"])
+        #expect((a?["0"] as? String) == "b")
+        #expect((a?["2"] as? String) == "d")
+        #expect(a?.count == 3)
     }
 
     @Test("negative list limit throws (when throwOnLimitExceeded = true)")
@@ -2450,13 +2507,23 @@ extension DecodeTests {
         #expect((r["a"] as? [Any])?.count == 2)
 
         r = try Qs.decode("a[]=b&a=c", options: opt0)
-        #expect((r["a"] as? [Any])?.count == 2)
+        do {
+            let a = asDictString(r["a"])
+            #expect((a?["0"] as? String) == "b")
+            #expect((a?["1"] as? String) == "c")
+            #expect(a?.count == 2)
+        }
 
         r = try Qs.decode("a=b&a[1]=c", options: opt20)
         #expect((r["a"] as? [Any])?.count == 2)
 
         r = try Qs.decode("a=b&a[]=c", options: opt0)
-        #expect((r["a"] as? [Any])?.count == 2)
+        do {
+            let a = asDictString(r["a"])
+            #expect((a?["0"] as? String) == "b")
+            #expect((a?["1"] as? String) == "c")
+            #expect(a?.count == 2)
+        }
     }
 
     // MARK: nested arrays
@@ -2759,11 +2826,11 @@ extension DecodeTests {
         #expect(a1?.last as? String == "")
 
         r = try Qs.decode("a[]=b&a[]&a[]=c&a[]=", options: optStrict0)
-        let a2 = r["a"] as? [Any]
-        #expect(a2?[0] as? String == "b")
-        #expect(a2?[1] is NSNull)
-        #expect(a2?[2] as? String == "c")
-        #expect(a2?[3] as? String == "")
+        let a2 = asDictString(r["a"])
+        #expect(a2?["0"] as? String == "b")
+        #expect(isNSNullValue(a2?["1"]))
+        #expect(a2?["2"] as? String == "c")
+        #expect(a2?["3"] as? String == "")
 
         r = try Qs.decode("a[0]=b&a[1]=&a[2]=c&a[19]", options: optStrict20)
         let a3 = r["a"] as? [Any]
@@ -2773,17 +2840,17 @@ extension DecodeTests {
         #expect(a3?.last is NSNull)
 
         r = try Qs.decode("a[]=b&a[]=&a[]=c&a[]", options: optStrict0)
-        let a4 = r["a"] as? [Any]
-        #expect(a4?[0] as? String == "b")
-        #expect(a4?[1] as? String == "")
-        #expect(a4?[2] as? String == "c")
-        #expect(a4?[3] is NSNull)
+        let a4 = asDictString(r["a"])
+        #expect(a4?["0"] as? String == "b")
+        #expect(a4?["1"] as? String == "")
+        #expect(a4?["2"] as? String == "c")
+        #expect(isNSNullValue(a4?["3"]))
 
         r = try Qs.decode("a[]=&a[]=b&a[]=c", options: optStrict0)
-        let a5 = r["a"] as? [Any]
-        #expect(a5?[0] as? String == "")
-        #expect(a5?[1] as? String == "b")
-        #expect(a5?[2] as? String == "c")
+        let a5 = asDictString(r["a"])
+        #expect(a5?["0"] as? String == "")
+        #expect(a5?["1"] as? String == "b")
+        #expect(a5?["2"] as? String == "c")
     }
 
     // MARK: compact arrays (no sparse)
@@ -2852,6 +2919,10 @@ extension DecodeTests {
         let strict = DecodeOptions(strictNullHandling: true)
 
         var r = try Qs.decode("[]=&a=b", options: opt)
+        #expect(r["0"] as? String == "")
+        #expect(r["a"] as? String == "b")
+
+        r = try Qs.decode("[]=&a=b", options: DecodeOptions(listLimit: 0))
         #expect(r["0"] as? String == "")
         #expect(r["a"] as? String == "b")
 

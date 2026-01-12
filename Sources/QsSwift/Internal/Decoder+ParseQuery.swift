@@ -199,8 +199,14 @@ extension QsSwift.Decoder {
             case .combine:
                 if exists {
                     let prev: Any? = obj[key] ?? nil
-                    let combined: [Any?] = Utils.combine(prev, value)
-                    obj[key] = combined.map { $0 ?? NSNull() }  // normalize optionals
+                    let combined = Utils.combine(prev, value, listLimit: options.listLimit)
+                    if let combinedArray = combined as? [Any?] {
+                        obj[key] = combinedArray.map { $0 ?? NSNull() }  // normalize optionals
+                    } else if let combinedArray = combined as? [Any] {
+                        obj[key] = combinedArray
+                    } else {
+                        obj[key] = combined
+                    }
                 } else {
                     obj[key] = value ?? NSNull()
                 }

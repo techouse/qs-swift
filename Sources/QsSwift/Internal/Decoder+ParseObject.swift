@@ -55,16 +55,19 @@ extension QsSwift.Decoder {
             let obj: Any?
 
             if root == "[]" && options.parseLists {
-                if options.allowEmptyLists
+                if Utils.isOverflow(leaf) {
+                    obj = leaf
+                } else if options.allowEmptyLists
                     && ((leaf as? String) == "" || (options.strictNullHandling && leaf == nil))
                 {
                     obj = [Any]()  // empty list
-                } else if let arr = leaf as? [Any] {
-                    obj = arr
-                } else if let arrOpt = leaf as? [Any?] {
-                    obj = arrOpt.map { $0 ?? NSNull() }  // normalize to non-optional
                 } else {
-                    obj = [leaf ?? NSNull()]  // wrap scalar
+                    let valueForCombine: Any? = {
+                        if let arr = leaf as? [Any] { return arr }
+                        if let arrOpt = leaf as? [Any?] { return arrOpt }
+                        return leaf ?? NSNull()
+                    }()
+                    obj = Utils.combine([], valueForCombine, listLimit: options.listLimit)
                 }
             } else {
                 var mutableObj: [AnyHashable: Any] = [:]
