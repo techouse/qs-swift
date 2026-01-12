@@ -33,6 +33,9 @@ extension QsSwift.Utils {
             }
 
             if Utils.isOverflow(sDict) {
+                if let sourceMax = Utils.overflowMaxIndex(sDict), sourceMax > maxIndex {
+                    maxIndex = sourceMax
+                }
                 Utils.setOverflowMaxIndex(&tDict, maxIndex)
             }
             return tDict
