@@ -1,3 +1,7 @@
+## 1.2.1
+
+- [FIX] enhance Utils with overflow handling and list limit enforcement
+
 ## 1.2.0
 
 - [FEAT] add `EncodeOptions.commaCompactNulls` to drop `NSNull`/`nil` values when producing comma lists
