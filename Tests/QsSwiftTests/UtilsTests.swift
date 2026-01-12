@@ -863,6 +863,19 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.refreshOverflowMaxIndex - recomputes max numeric key")
+    func testRefreshOverflowMaxIndex() async throws {
+        var dict: [AnyHashable: Any] = [
+            AnyHashable(0): "a",
+            AnyHashable(2): "b",
+            AnyHashable("x"): "y",
+            AnyHashable(Utils.overflowKey): -1
+        ]
+
+        Utils.refreshOverflowMaxIndex(&dict)
+        #expect(Utils.overflowMaxIndex(dict) == 2)
+    }
+
     // MARK: - Utils.interpretNumericEntities tests
 
     @Test("Utils.interpretNumericEntities - returns input unchanged when there are no entities")
