@@ -50,7 +50,10 @@ extension Utils {
         if let arrOpt = value as? [Any?] {
             array.append(contentsOf: arrOpt)
         } else if let arr = value as? [Any] {
-            array.append(contentsOf: arr.map(Optional.some))
+            array.reserveCapacity(array.count + arr.count)
+            for element in arr {
+                array.append(element)
+            }
         } else if let value = value {
             array.append(value)
         }
