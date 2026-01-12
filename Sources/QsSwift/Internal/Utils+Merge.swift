@@ -27,7 +27,7 @@ extension QsSwift.Utils {
 
             for (key, value) in sDict where !Utils.isOverflowKey(key) {
                 tDict[key] = value
-                if let idx = key as? Int, idx > maxIndex {
+                if let idx = Utils.intIndex(key), idx > maxIndex {
                     maxIndex = idx
                 }
             }
@@ -210,7 +210,7 @@ extension QsSwift.Utils {
                     }
                     for (key, value) in sourceDict where !Utils.isOverflowKey(key) {
                         mutableTarget[key] = value
-                        if let idx = key as? Int, idx > maxIndex {
+                        if let idx = Utils.intIndex(key), idx > maxIndex {
                             maxIndex = idx
                         }
                     }
@@ -226,7 +226,7 @@ extension QsSwift.Utils {
                 }
 
                 for (key, value) in sourceDict where !Utils.isOverflowKey(key) {
-                    if let idx = key as? Int {
+                    if let idx = Utils.intIndex(key) {
                         result[idx + 1] = value
                     } else {
                         result[key] = value
@@ -300,7 +300,7 @@ extension QsSwift.Utils {
                     mergeTarget[key] = value
                 }
 
-                if let idx = key as? Int, let current = overflowMax, idx > current {
+                if let idx = Utils.intIndex(key), let current = overflowMax, idx > current {
                     overflowMax = idx
                 }
             }

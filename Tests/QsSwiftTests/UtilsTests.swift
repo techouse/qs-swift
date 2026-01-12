@@ -892,12 +892,13 @@ struct UtilsTests {
         var dict: [AnyHashable: Any] = [
             AnyHashable(0): "a",
             AnyHashable(2): "b",
+            AnyHashable(NSNumber(value: 7)): "c",
             AnyHashable("x"): "y",
             AnyHashable(Utils.overflowKey): -1
         ]
 
         Utils.refreshOverflowMaxIndex(&dict)
-        #expect(Utils.overflowMaxIndex(dict) == 2)
+        #expect(Utils.overflowMaxIndex(dict) == 7)
     }
 
     // MARK: - Utils.interpretNumericEntities tests

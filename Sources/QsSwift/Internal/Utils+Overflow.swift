@@ -6,6 +6,14 @@ extension Utils {
     @usableFromInline
     internal static let overflowKey = OverflowKey()
 
+    @inline(__always)
+    @usableFromInline
+    internal static func intIndex(_ key: AnyHashable) -> Int? {
+        if let intValue = key.base as? Int { return intValue }
+        if let number = key.base as? NSNumber { return number.intValue }
+        return nil
+    }
+
     @usableFromInline
     internal static func isOverflow(_ value: Any?) -> Bool {
         guard let dict = value as? [AnyHashable: Any] else { return false }
@@ -41,7 +49,7 @@ extension Utils {
     internal static func refreshOverflowMaxIndex(_ dict: inout [AnyHashable: Any]) {
         var maxIndex = -1
         for key in dict.keys where !isOverflowKey(key) {
-            if let idx = (key as? Int) ?? (key as? NSNumber)?.intValue, idx > maxIndex {
+            if let idx = intIndex(key), idx > maxIndex {
                 maxIndex = idx
             }
         }
