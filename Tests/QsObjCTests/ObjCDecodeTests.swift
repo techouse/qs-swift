@@ -204,6 +204,14 @@
             #expect(a?["1"] as? String == "b")
         }
 
+        @Test("objc-decode: listLimit applies to [] notation")
+        func listLimitZeroEmptyBrackets() throws {
+            let r = decode("a[]=1&a[]=2") { o in o.listLimit = 0 }
+            let a = r["a"] as? NSDictionary
+            #expect(a?["0"] as? String == "1")
+            #expect(a?["1"] as? String == "2")
+        }
+
         @Test("objc-decode: parseLists=false forces map")
         func parseListsFalse() throws {
             let r = decode("a[]=b") { o in o.parseLists = false }

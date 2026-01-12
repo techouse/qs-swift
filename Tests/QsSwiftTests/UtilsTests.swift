@@ -777,6 +777,92 @@ struct UtilsTests {
         #expect(result2 == [1, 2, 3])
     }
 
+    @Test("Utils.combine - applies list limit and overflow tracking")
+    func testCombineListLimitOverflow() async throws {
+        let under = Utils.combine(["a", "b"], "c", listLimit: 10)
+        #expect((under as? [Any]) != nil)
+
+        let exact = Utils.combine(["a", "b"], "c", listLimit: 3)
+        #expect((exact as? [Any]) != nil)
+
+        let over = Utils.combine(["a", "b", "c"], "d", listLimit: 3)
+        let overDict = over as? [AnyHashable: Any]
+        #expect(overDict != nil)
+        #expect(Utils.isOverflow(overDict))
+        if let overDict {
+            let cleaned = overDict.filter { !Utils.isOverflowKey($0.key) }
+            #expect(cleaned[AnyHashable(0)] as? String == "a")
+            #expect(cleaned[AnyHashable(3)] as? String == "d")
+        }
+
+        let zero = Utils.combine([], "a", listLimit: 0)
+        let zeroDict = zero as? [AnyHashable: Any]
+        #expect(zeroDict != nil)
+        if let zeroDict {
+            let cleaned = zeroDict.filter { !Utils.isOverflowKey($0.key) }
+            #expect(cleaned[AnyHashable(0)] as? String == "a")
+        }
+    }
+
+    @Test("Utils.combine - appends to overflow objects")
+    func testCombineAppendsToOverflow() async throws {
+        let overflow = Utils.combine(["a"], "b", listLimit: 1)
+        let overflowDict = overflow as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(overflowDict))
+
+        let combined = Utils.combine(overflow, "c", listLimit: 10)
+        let combinedDict = combined as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(combinedDict))
+        if let combinedDict {
+            let cleaned = combinedDict.filter { !Utils.isOverflowKey($0.key) }
+            #expect(cleaned[AnyHashable(0)] as? String == "a")
+            #expect(cleaned[AnyHashable(2)] as? String == "c")
+        }
+    }
+
+    @Test("Utils.merge - handles overflow objects")
+    func testMergeOverflowObjects() async throws {
+        let overflow = Utils.combine(["a"], "b", listLimit: 1) as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(overflow))
+
+        if let overflow {
+            let merged = Utils.merge(target: overflow, source: "c") as? [AnyHashable: Any]
+            #expect(Utils.isOverflow(merged))
+            if let merged {
+                let cleaned = merged.filter { !Utils.isOverflowKey($0.key) }
+                #expect(cleaned[AnyHashable(0)] as? String == "a")
+                #expect(cleaned[AnyHashable(2)] as? String == "c")
+            }
+
+            let mergedIntoPrimitive = Utils.merge(target: "z", source: overflow) as? [AnyHashable: Any]
+            #expect(Utils.isOverflow(mergedIntoPrimitive))
+            if let mergedIntoPrimitive {
+                let cleaned = mergedIntoPrimitive.filter { !Utils.isOverflowKey($0.key) }
+                #expect(cleaned[AnyHashable(0)] as? String == "z")
+                #expect(cleaned[AnyHashable(2)] as? String == "b")
+            }
+        }
+    }
+
+    @Test("Utils.merge - preserves overflow max index when merging into array target")
+    func testMergeOverflowIntoArrayTarget() async throws {
+        let overflow = Utils.combine(["a"], "b", listLimit: 1) as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(overflow))
+
+        if let overflow {
+            let merged = Utils.merge(target: ["z"], source: overflow) as? [AnyHashable: Any]
+            #expect(Utils.isOverflow(merged))
+
+            let appended = Utils.merge(target: merged, source: "c") as? [AnyHashable: Any]
+            #expect(Utils.isOverflow(appended))
+            if let appended {
+                let cleaned = appended.filter { !Utils.isOverflowKey($0.key) }
+                #expect(cleaned[AnyHashable(0)] as? String == "a")
+                #expect(cleaned[AnyHashable(2)] as? String == "c")
+            }
+        }
+    }
+
     // MARK: - Utils.interpretNumericEntities tests
 
     @Test("Utils.interpretNumericEntities - returns input unchanged when there are no entities")

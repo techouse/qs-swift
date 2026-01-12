@@ -18,14 +18,37 @@ extension QsSwift.Utils {
 
         if let tArr = target as? [Any?], let sDict = source as? [AnyHashable: Any] {
             var tDict: [AnyHashable: Any] = [:]
+            var maxIndex = -1
+
             for (idx, element) in tArr.enumerated() where !(element is Undefined) {
                 tDict[idx] = element ?? NSNull()
+                if idx > maxIndex { maxIndex = idx }
             }
-            for (key, value) in sDict { tDict[key] = value }
+
+            for (key, value) in sDict where !Utils.isOverflowKey(key) {
+                tDict[key] = value
+                if let idx = key as? Int, idx > maxIndex {
+                    maxIndex = idx
+                }
+            }
+
+            if Utils.isOverflow(sDict) {
+                Utils.setOverflowMaxIndex(&tDict, maxIndex)
+            }
             return tDict
         }
 
         if let tDict = target as? [AnyHashable: Any], let sArr = source as? [Any?] {
+            if Utils.isOverflow(tDict) {
+                var overflow = tDict
+                var maxIndex = Utils.overflowMaxIndex(overflow) ?? -1
+                for element in sArr where !(element is Undefined) {
+                    maxIndex += 1
+                    overflow[maxIndex] = element ?? NSNull()
+                }
+                Utils.setOverflowMaxIndex(&overflow, maxIndex)
+                return overflow
+            }
             var sDict: [AnyHashable: Any] = [:]
             for (idx, element) in sArr.enumerated() where !(element is Undefined) {
                 sDict[idx] = element ?? NSNull()
@@ -135,6 +158,24 @@ extension QsSwift.Utils {
                     }
                 }
             } else if let targetDict = target as? [AnyHashable: Any] {
+                if Utils.isOverflow(targetDict) {
+                    var overflow = targetDict
+                    var maxIndex = Utils.overflowMaxIndex(overflow) ?? -1
+
+                    if let seq = asSequence(source) {
+                        for item in seq where !(item is Undefined) {
+                            maxIndex += 1
+                            overflow[maxIndex] = item
+                        }
+                    } else if !(source is Undefined) {
+                        maxIndex += 1
+                        overflow[maxIndex] = source
+                    }
+
+                    Utils.setOverflowMaxIndex(&overflow, maxIndex)
+                    return overflow
+                }
+
                 var mutableTarget = targetDict
 
                 if let seq = asSequence(source) {
@@ -159,6 +200,43 @@ extension QsSwift.Utils {
         }
 
         if target == nil || !(target is [AnyHashable: Any]) {
+            if let sourceDict = source as? [AnyHashable: Any], Utils.isOverflow(sourceDict) {
+                if let targetArray = target as? [Any] {
+                    var mutableTarget: [AnyHashable: Any] = [:]
+                    var maxIndex = -1
+                    for (index, value) in targetArray.enumerated() where !(value is Undefined) {
+                        mutableTarget[index] = value
+                        if index > maxIndex { maxIndex = index }
+                    }
+                    for (key, value) in sourceDict where !Utils.isOverflowKey(key) {
+                        mutableTarget[key] = value
+                        if let idx = key as? Int, idx > maxIndex {
+                            maxIndex = idx
+                        }
+                    }
+                    Utils.setOverflowMaxIndex(&mutableTarget, maxIndex)
+                    return mutableTarget
+                }
+
+                var result: [AnyHashable: Any] = [:]
+                if let target = target {
+                    result[0] = target
+                } else {
+                    result[0] = NSNull()
+                }
+
+                for (key, value) in sourceDict where !Utils.isOverflowKey(key) {
+                    if let idx = key as? Int {
+                        result[idx + 1] = value
+                    } else {
+                        result[key] = value
+                    }
+                }
+
+                let newMax = (Utils.overflowMaxIndex(sourceDict) ?? -1) + 1
+                return Utils.markOverflow(result, maxIndex: newMax)
+            }
+
             if let targetArray = target as? [Any] {
                 var mutableTarget: [AnyHashable: Any] = [:]
                 for (index, value) in targetArray.enumerated() where !(value is Undefined) {
@@ -205,11 +283,36 @@ extension QsSwift.Utils {
         }
 
         if let sourceDict = source as? [AnyHashable: Any] {
-            for (key, value) in sourceDict {
+            let targetIsOverflow = Utils.isOverflow(mergeTarget)
+            let sourceIsOverflow = Utils.isOverflow(sourceDict)
+            var overflowMax: Int?
+
+            if targetIsOverflow {
+                overflowMax = Utils.overflowMaxIndex(mergeTarget) ?? -1
+            } else if sourceIsOverflow {
+                overflowMax = -1
+            }
+
+            for (key, value) in sourceDict where !Utils.isOverflowKey(key) {
                 if let existingValue = mergeTarget[key] {
                     mergeTarget[key] = merge(target: existingValue, source: value, options: options)
                 } else {
                     mergeTarget[key] = value
+                }
+
+                if let idx = key as? Int, let current = overflowMax, idx > current {
+                    overflowMax = idx
+                }
+            }
+
+            if sourceIsOverflow || targetIsOverflow {
+                if let sourceMax = Utils.overflowMaxIndex(sourceDict),
+                    sourceMax > (overflowMax ?? -1)
+                {
+                    overflowMax = sourceMax
+                }
+                if let maxIndex = overflowMax {
+                    Utils.setOverflowMaxIndex(&mergeTarget, maxIndex)
                 }
             }
         }

@@ -210,6 +210,19 @@ extension Qs {
         // Merge each parsed key structure into the final object, preserving order
         var obj: [String: Any] = [:]
         if !tmp.isEmpty {
+            let objectifyOverflow: ([AnyHashable: Any]) -> [String: Any] = { dict in
+                var out: [String: Any] = [:]
+                out.reserveCapacity(dict.count)
+                for (key, value) in dict where !Utils.isOverflowKey(key) {
+                    if let idx = key as? Int {
+                        out[String(idx)] = value
+                    } else {
+                        out[String(describing: key)] = value
+                    }
+                }
+                return out
+            }
+
             for (key, value) in tmp {
                 let parsed = try QsSwift.Decoder.parseKeys(
                     givenKey: key,
@@ -221,6 +234,12 @@ extension Qs {
                 // (a) If the first parsed thing is a map, adopt it wholesale (fast path)
                 if obj.isEmpty, let firstMap = parsed as? [String: Any] {
                     obj = firstMap
+                    continue
+                }
+                if obj.isEmpty, let overflow = parsed as? [AnyHashable: Any],
+                    Utils.isOverflow(overflow)
+                {
+                    obj = objectifyOverflow(overflow)
                     continue
                 }
 
@@ -246,6 +265,13 @@ extension Qs {
                     for (index, element) in list.enumerated() where !(element is Undefined) {
                         indexed[String(index)] = element
                     }
+                    if let merged = Utils.merge(target: obj, source: indexed, options: finalOptions)
+                        as? [String: Any]
+                    {
+                        obj = merged
+                    }
+                } else if let overflow = parsed as? [AnyHashable: Any], Utils.isOverflow(overflow) {
+                    let indexed = objectifyOverflow(overflow)
                     if let merged = Utils.merge(target: obj, source: indexed, options: finalOptions)
                         as? [String: Any]
                     {
