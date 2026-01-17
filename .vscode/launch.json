@@ -7,8 +7,9 @@
             "args": [],
             "cwd": "${workspaceFolder:QsSwift}",
             "name": "Debug QsSwiftComparison",
-            "program": "${workspaceFolder:QsSwift}/.build/debug/QsSwiftComparison",
-            "preLaunchTask": "swift: Build Debug QsSwiftComparison"
+            "preLaunchTask": "swift: Build Debug QsSwiftComparison",
+            "target": "QsSwiftComparison",
+            "configuration": "debug"
         },
         {
             "type": "swift",
@@ -16,8 +17,9 @@
             "args": [],
             "cwd": "${workspaceFolder:QsSwift}",
             "name": "Release QsSwiftComparison",
-            "program": "${workspaceFolder:QsSwift}/.build/release/QsSwiftComparison",
-            "preLaunchTask": "swift: Build Release QsSwiftComparison"
+            "preLaunchTask": "swift: Build Release QsSwiftComparison",
+            "target": "QsSwiftComparison",
+            "configuration": "release"
         }
     ]
 }
