@@ -321,6 +321,10 @@ extension QsSwift.Decoder {
         return out
     }
 
-    /// Floor to keep modest sparse overflows materializable even when `listLimit` is very small.
+    /// Lower bound for dense overflow materialization when applying parser limits.
+    /// This keeps modest sparse overflows materializable even when `listLimit` is very small,
+    /// preserving list-like semantics instead of immediately falling back to overflow maps.
+    /// At 4_096 elements, pointer-sized storage is roughly 32 KiB (4_096 * 8 bytes) before
+    /// container overhead, which keeps the memory tradeoff bounded.
     private static let overflowDenseArrayMaterializationFloor = 4_096
 }
