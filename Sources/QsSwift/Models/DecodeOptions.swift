@@ -8,9 +8,10 @@ import Foundation
 /// - `kind` tells you whether the token originated from a **key** or a **value** (`.key` / `.value`).
 /// - Return `nil` to represent an *absent* value; this is honored (the library does **not** fall back).
 /// - When both are provided, this takes **precedence** over `legacyDecoder`.
-public typealias ScalarDecoder = @Sendable (
-    _ value: String?, _ charset: String.Encoding?, _ kind: DecodeKind?
-) -> Any?
+public typealias ScalarDecoder =
+    @Sendable (
+        _ value: String?, _ charset: String.Encoding?, _ kind: DecodeKind?
+    ) -> Any?
 
 /// Back‑compat adapter for `(value, charset) -> Any?` decoders.
 ///

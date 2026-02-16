@@ -11,9 +11,10 @@ import Foundation
 ///   - charset: The charset to use for percent-encoding (`.utf8` or `.isoLatin1`).
 ///   - format: The space-encoding strategy (RFC3986 = `%20`, RFC1738 = `+`).
 /// - Returns: The encoded string (do **not** include the key or `=` here).
-public typealias ValueEncoder = @Sendable (
-    _ value: Any?, _ charset: String.Encoding?, _ format: Format?
-) ->
+public typealias ValueEncoder =
+    @Sendable (
+        _ value: Any?, _ charset: String.Encoding?, _ format: Format?
+    ) ->
     String
 
 /// A closure that turns a `Date` into a string. If `nil`, the library uses an

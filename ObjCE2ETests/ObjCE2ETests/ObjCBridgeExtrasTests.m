@@ -201,7 +201,7 @@
     XCTAssertEqualObjects(got, @"a.b=1");
 }
 
-#pragma mark - 11) Async wrappers call back on main
+#pragma mark - 11) Async wrappers queue behavior and error paths
 
 - (void)test_encode_async_on_main_queue {
     XCTestExpectation *exp = [self expectationWithDescription:@"encode-async-main"];
@@ -224,6 +224,41 @@
         [exp fulfill];
     }];
     [self waitForExpectations:@[exp] timeout:2.0]; // macOS runners can be sluggish intermittently. A 2s timeout (like in other async tests) is safer.
+}
+
+- (void)test_decode_async_background_queue {
+    XCTestExpectation *exp = [self expectationWithDescription:@"decode-async-background"];
+    [Qs decodeAsync:@"a=b" options:nil completion:^(NSDictionary * _Nullable dict, NSError * _Nullable err) {
+        XCTAssertFalse([NSThread isMainThread]);
+        XCTAssertNil(err);
+        XCTAssertEqualObjects(dict[@"a"], @"b");
+        [exp fulfill];
+    }];
+    [self waitForExpectations:@[exp] timeout:2.0];
+}
+
+- (void)test_decode_async_on_main_invalid_input_returns_error {
+    XCTestExpectation *exp = [self expectationWithDescription:@"decode-async-main-error"];
+    [Qs decodeAsyncOnMain:@(1) options:nil completion:^(NSDictionary * _Nullable dict, NSError * _Nullable err) {
+        XCTAssertTrue([NSThread isMainThread]);
+        XCTAssertNil(dict);
+        XCTAssertNotNil(err);
+        XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
+        [exp fulfill];
+    }];
+    [self waitForExpectations:@[exp] timeout:2.0];
+}
+
+- (void)test_decode_async_invalid_input_returns_error_off_main {
+    XCTestExpectation *exp = [self expectationWithDescription:@"decode-async-background-error"];
+    [Qs decodeAsync:@(1) options:nil completion:^(NSDictionary * _Nullable dict, NSError * _Nullable err) {
+        XCTAssertFalse([NSThread isMainThread]);
+        XCTAssertNil(dict);
+        XCTAssertNotNil(err);
+        XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
+        [exp fulfill];
+    }];
+    [self waitForExpectations:@[exp] timeout:2.0];
 }
 
 #pragma mark - 12) Charset sentinel is present when requested
@@ -448,6 +483,26 @@
     NSDictionary *m = [Qs decode:@"x=%2E" options:nil error:&err];
     XCTAssertNil(err);
     XCTAssertEqualObjects(m[@"x"], @".");
+}
+
+#pragma mark - 22) Encode: very deep nested maps do not crash
+
+- (void)test_encode_very_deep_nested_maps_does_not_crash {
+    NSUInteger depth = 1000;
+
+    id leaf = @{ @"v": @"x" };
+    for (NSUInteger i = 0; i < depth; i++) {
+        leaf = @{ @"p": leaf };
+    }
+
+    NSDictionary *payload = @{ @"root": leaf };
+    NSError *err = nil;
+    NSString *encoded = [Qs encode:payload options:nil error:&err];
+
+    XCTAssertNil(err);
+    XCTAssertNotNil(encoded);
+    XCTAssertTrue([encoded hasPrefix:@"root"]);
+    XCTAssertTrue([encoded hasSuffix:@"=x"]);
 }
 
 @end

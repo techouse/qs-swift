@@ -9,12 +9,14 @@ extension QsSwift.Decoder {
     ///   split it into a `[String]` (preserving empty segments). Example: `"a,,b"` → `["a", "", "b"]`.
     /// - If `throwOnLimitExceeded == true`, validates both the split count (for comma lists)
     ///   and the *next* append (`currentListLength`) against `listLimit`.
-    /// - Otherwise returns `value` unchanged.
+    /// - If `throwOnLimitExceeded == false`, comma values that overflow the limit on first
+    ///   occurrence fall back to indexed-object (overflow) representation.
     ///
     /// - Parameters:
     ///   - value: The raw (decoded) RHS value for the current key part.
     ///   - options: The active `DecodeOptions`.
     ///   - currentListLength: The current length of the list under construction for this key, if any.
+    ///   - isFirstOccurrence: Whether this key has not been seen previously in the current query pass.
     /// - Returns: Either the original `value`, or a `[String]` when comma-splitting applies.
     /// - Throws: `.listLimitExceeded`.
     #if QSBENCH_INLINE
@@ -24,7 +26,8 @@ extension QsSwift.Decoder {
     internal static func parseListValue(
         _ value: Any?,
         options: DecodeOptions,
-        currentListLength: Int
+        currentListLength: Int,
+        isFirstOccurrence: Bool
     ) throws -> Any? {
         if options.throwOnLimitExceeded, options.listLimit == 0 {
             throw DecodeError.listLimitExceeded(limit: options.listLimit)
@@ -37,6 +40,22 @@ extension QsSwift.Decoder {
             {
                 throw DecodeError.listLimitExceeded(limit: options.listLimit)
             }
+
+            // qs@6.14.2 parity:
+            // If comma splitting alone overflows and we are not throwing, the first occurrence
+            // falls back to an indexed object shape instead of a list.
+            if !options.throwOnLimitExceeded,
+                isFirstOccurrence,
+                splitVal.count > options.listLimit
+            {
+                var overflow: [AnyHashable: Any] = [:]
+                overflow.reserveCapacity(splitVal.count + 1)
+                for (index, element) in splitVal.enumerated() {
+                    overflow[index] = element
+                }
+                return Utils.markOverflow(overflow, maxIndex: splitVal.count - 1)
+            }
+
             return splitVal
         }
 

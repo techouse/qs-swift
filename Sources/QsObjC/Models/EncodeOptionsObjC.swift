@@ -116,6 +116,11 @@
         /// Internal bridge that constructs the Swift `EncodeOptions` used by the core.
         /// We also normalize dot handling so **either** Obj-C flag enables dots.
         var swift: QsSwift.EncodeOptions {
+            let normalizedCharset: String.Encoding = {
+                let candidate = String.Encoding(rawValue: charset)
+                return (candidate == .utf8 || candidate == .isoLatin1) ? candidate : .utf8
+            }()
+
             // Value encoder → Swift
             let swiftEncoder: QsSwift.ValueEncoder? = {
                 guard let blk = valueEncoderBlock else { return nil }
@@ -168,7 +173,7 @@
                 // General formatting/behavior
                 addQueryPrefix: addQueryPrefix,
                 allowEmptyLists: allowEmptyLists,
-                charset: String.Encoding(rawValue: charset),
+                charset: normalizedCharset,
                 charsetSentinel: charsetSentinel,
                 delimiter: delimiter,
                 encode: encode,

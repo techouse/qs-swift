@@ -2,6 +2,21 @@
 import Foundation
 import OrderedCollections
 
+private protocol _AnyOptional {
+    var _wrappedAny: Any? { get }
+}
+
+extension Optional: _AnyOptional {
+    fileprivate var _wrappedAny: Any? {
+        switch self {
+        case .some(let wrapped):
+            return wrapped
+        case .none:
+            return nil
+        }
+    }
+}
+
 /// A helper object for encoding data into a query string format.
 internal enum Encoder {
     // MARK: - Encode
@@ -63,6 +78,34 @@ internal enum Encoder {
         let commaRoundTripEffective = (commaRoundTrip == true)
         let fmt = formatter ?? format.formatter
         let keyPrefix = prefix ?? (addQueryPrefix ? "?" : "")
+
+        if depth >= iterativeFallbackDepth,
+            canUseIterativeDeepFallback(
+                listFormat: listFormat,
+                commaRoundTrip: commaRoundTrip,
+                commaCompactNulls: commaCompactNulls,
+                allowEmptyLists: allowEmptyLists,
+                strictNullHandling: strictNullHandling,
+                skipNulls: skipNulls,
+                encodeDotInKeys: encodeDotInKeys,
+                sort: sort,
+                filter: filter,
+                allowDots: allowDots,
+                encodeValuesOnly: encodeValuesOnly
+            )
+        {
+            return try encodeIterativeDeepFallback(
+                data: data,
+                undefined: undefined,
+                prefix: keyPrefix,
+                depth: depth,
+                generator: generator,
+                encoder: encoder,
+                serializeDate: serializeDate,
+                formatter: fmt,
+                charset: charset
+            )
+        }
 
         var obj: Any? = data
 
@@ -135,6 +178,11 @@ internal enum Encoder {
             obj = ""
         }
 
+        if skipNulls, obj is NSNull {
+            // Drop direct null payloads entirely when skipNulls is enabled.
+            return []
+        }
+
         // Special-case NSNull to match original qs.js behavior
         if obj is NSNull {
             if strictNullHandling {
@@ -157,11 +205,6 @@ internal enum Encoder {
             }
         }
 
-        if skipNulls, obj is NSNull {
-            // drop this key entirely
-            return []  // signal "no pairs produced"
-        }
-
         // ---- Normalize the scalar once (unwrap Optional, collapse Optional.none to nil) ----
         let normalizedScalar: Any? = {
             guard let some = obj else { return nil }
@@ -177,7 +220,7 @@ internal enum Encoder {
                 let valPart = enc(normalizedScalar, nil, nil)  // pass unwrapped
                 return "\(fmt.apply(keyPart))=\(fmt.apply(valPart))"
             }
-            return "\(fmt.apply(keyPrefix))=\(fmt.apply(describe(normalizedScalar)))"  // unwrapped
+            return "\(fmt.apply(keyPrefix))=\(fmt.apply(describe(normalizedScalar, charset: charset)))"  // unwrapped
         }
 
         var values: [Any] = []
@@ -206,13 +249,16 @@ internal enum Encoder {
                 }
 
                 if encodeValuesOnly, let encoder = encoder {
-                    elems = elems.map { el in encoder(describeForComma(el), nil, nil) }
+                    elems = elems.map { el in
+                        encoder(describeForComma(el, charset: charset), nil, nil)
+                    }
                     obj = elems
                 }
                 arrayView = arrayize(obj)
 
                 if !elems.isEmpty {
-                    let joined = elems.map { describeForComma($0) }.joined(separator: ",")
+                    let joined = elems.map { describeForComma($0, charset: charset) }.joined(
+                        separator: ",")
                     // if strictNullHandling and joined is empty, use NSNull() to mean “no value”
                     let valueForJoin: Any =
                         joined.isEmpty
@@ -440,23 +486,266 @@ extension QsSwift.Encoder {
 
     /// Top-level unique token for cycle detection
     private static let SENTINEL = Sentinel()
+    private static let iterativeFallbackDepth = 256
+
+    // swiftlint:disable:next function_parameter_count
+    private static func canUseIterativeDeepFallback(
+        listFormat: ListFormat,
+        commaRoundTrip: Bool,
+        commaCompactNulls: Bool,
+        allowEmptyLists: Bool,
+        strictNullHandling: Bool,
+        skipNulls: Bool,
+        encodeDotInKeys: Bool,
+        sort: Sorter?,
+        filter: Filter?,
+        allowDots: Bool,
+        encodeValuesOnly: Bool
+    ) -> Bool {
+        listFormat == .indices
+            && !commaRoundTrip
+            && !commaCompactNulls
+            && !allowEmptyLists
+            && !strictNullHandling
+            && !skipNulls
+            && !encodeDotInKeys
+            && sort == nil
+            && filter == nil
+            && !allowDots
+            && !encodeValuesOnly
+    }
+
+    private struct IterativeNode {
+        let value: Any?
+        let undefined: Bool
+        let prefix: String
+        let depth: Int
+    }
+
+    private enum IterativeTask {
+        case visit(IterativeNode)
+        case leaveContainer(ObjectIdentifier)
+    }
+
+    // swiftlint:disable:next function_parameter_count
+    private static func encodeIterativeDeepFallback(
+        data: Any?,
+        undefined: Bool,
+        prefix: String,
+        depth: Int,
+        generator: ListFormatGenerator,
+        encoder: ValueEncoder?,
+        serializeDate: DateSerializer?,
+        formatter: Formatter,
+        charset: String.Encoding
+    ) throws -> Any {
+        if undefined { return [Any]() }
+
+        var stack: [IterativeTask] = [
+            .visit(.init(value: data, undefined: undefined, prefix: prefix, depth: depth))
+        ]
+        var values: [Any] = []
+        values.reserveCapacity(32)
+        var activeContainers: Set<ObjectIdentifier> = []
+
+        while let task = stack.popLast() {
+            if case .leaveContainer(let containerID) = task {
+                activeContainers.remove(containerID)
+                continue
+            }
+
+            guard case .visit(let node) = task else { continue }
+
+            var current = node.value
+
+            if let date = current as? Date {
+                current = serializeDate?(date) ?? iso8601().string(from: date)
+            }
+
+            if !node.undefined && current == nil {
+                current = ""
+            }
+
+            if let containerID = containerIdentity(current) {
+                if activeContainers.contains(containerID) {
+                    throw EncodeError.cyclicObject
+                }
+                activeContainers.insert(containerID)
+                stack.append(.leaveContainer(containerID))
+            }
+
+            if current is NSNull {
+                if let enc = encoder {
+                    let keyPart = enc(node.prefix, nil, nil)
+                    let valPart = enc("", nil, nil)
+                    values.append("\(formatter.apply(keyPart))=\(formatter.apply(valPart))")
+                } else {
+                    values.append("\(formatter.apply(node.prefix))=")
+                }
+                continue
+            }
+
+            let normalizedScalar: Any? = {
+                guard let some = current else { return nil }
+                return unwrapOptional(some) ?? some
+            }()
+
+            if Utils.isNonNullishPrimitive(normalizedScalar) || normalizedScalar is Data {
+                if let enc = encoder {
+                    let keyPart = enc(node.prefix, nil, nil)
+                    let valPart = enc(normalizedScalar, nil, nil)
+                    values.append("\(formatter.apply(keyPart))=\(formatter.apply(valPart))")
+                } else {
+                    values.append(
+                        "\(formatter.apply(node.prefix))=\(formatter.apply(describe(normalizedScalar, charset: charset)))"
+                    )
+                }
+                continue
+            }
+
+            if let arr = arrayize(current) {
+                if arr.isEmpty { continue }
+                for idx in stride(from: arr.count - 1, through: 0, by: -1) {
+                    let childPrefix = generator(node.prefix, String(idx))
+                    stack.append(
+                        .visit(
+                            .init(
+                                value: arr[idx],
+                                undefined: false,
+                                prefix: childPrefix,
+                                depth: node.depth + 1
+                            )))
+                }
+                continue
+            }
+
+            let entries = orderedEntriesForIterativeFallback(
+                current: current,
+                depth: node.depth,
+                hasEncoder: (encoder != nil)
+            )
+
+            for (key, child) in entries.reversed() {
+                let childPrefix = "\(node.prefix)[\(key)]"
+                stack.append(
+                    .visit(
+                        .init(
+                            value: child,
+                            undefined: false,
+                            prefix: childPrefix,
+                            depth: node.depth + 1
+                        )))
+            }
+        }
+
+        return values
+    }
+
+    @inline(__always)
+    private static func containerIdentity(_ value: Any?) -> ObjectIdentifier? {
+        guard let value else { return nil }
+
+        // Only track real class-backed containers. Swift value containers can bridge to
+        // transient Foundation wrappers whose object identity is not stable.
+        guard type(of: value) is AnyClass else { return nil }
+
+        if let array = value as? NSArray {
+            return ObjectIdentifier(array)
+        }
+        if let dictionary = value as? NSDictionary {
+            return ObjectIdentifier(dictionary)
+        }
+        return nil
+    }
+
+    private static func orderedEntriesForIterativeFallback(
+        current: Any?,
+        depth: Int,
+        hasEncoder: Bool
+    ) -> [(String, Any)] {
+        switch current {
+        case let od as OrderedDictionary<String, Any>:
+            var keys = Array(od.keys)
+            if depth > 0 {
+                let split = keys.stablePartition { key in isContainer(od[key]) }
+                if hasEncoder {
+                    keys[..<split].sort()
+                    keys[split...].sort()
+                }
+            }
+            return keys.compactMap { key in od[key].map { (key, $0) } }
+
+        case let dict as [String: Any]:
+            var keys = [String]()
+            keys.reserveCapacity(dict.count)
+            for (key, _) in dict { keys.append(key) }
+            if depth > 0, hasEncoder {
+                let split = keys.stablePartition { key in isContainer(dict[key]) }
+                keys[..<split].sort()
+                keys[split...].sort()
+            }
+            return keys.compactMap { key in dict[key].map { (key, $0) } }
+
+        case let nd as NSDictionary:
+            var keys: [Any] = []
+            keys.reserveCapacity(nd.count)
+            nd.forEach { key, _ in keys.append(key) }
+
+            if depth > 0 {
+                if hasEncoder {
+                    var prim: [Any] = []
+                    var cont: [Any] = []
+                    prim.reserveCapacity(keys.count)
+                    cont.reserveCapacity(keys.count)
+                    for key in keys {
+                        let value = nd[key]
+                        if isContainer(value) {
+                            cont.append(key)
+                        } else {
+                            prim.append(key)
+                        }
+                    }
+                    prim.sort { String(describing: $0) < String(describing: $1) }
+                    cont.sort { String(describing: $0) < String(describing: $1) }
+                    keys = prim + cont
+                } else {
+                    keys.sort { String(describing: $0) < String(describing: $1) }
+                }
+            }
+
+            var out: [(String, Any)] = []
+            out.reserveCapacity(keys.count)
+            for key in keys {
+                if let value = nd[key] {
+                    out.append((String(describing: key), value))
+                }
+            }
+            return out
+
+        default:
+            return []
+        }
+    }
 
     /// Unwraps an optional value, returning nil if the value is nil or an empty optional.
     @inline(__always)
     private static func unwrapOptional(_ any: Any) -> Any? {
-        let mirror = Mirror(reflecting: any)
-        if mirror.displayStyle != .optional { return any }
-        return mirror.children.first?.value
+        if let optional = any as? _AnyOptional {
+            return optional._wrappedAny
+        }
+        return any
     }
 
     /// Describes the value for encoding, handling nil and optional values.
     @inline(__always)
-    private static func describe(_ any: Any?) -> String {
+    private static func describe(_ any: Any?, charset: String.Encoding) -> String {
         guard let any = any else { return "" }
-        if let unwrapped = unwrapOptional(any) {
-            return String(describing: unwrapped)
+        if isOptional(any), unwrapOptional(any) == nil { return "" }  // Optional.none
+        let materialized = unwrapOptional(any) ?? any
+        if let data = materialized as? Data {
+            return describeData(data, charset: charset)
         }
-        return ""  // Optional.none
+        return String(describing: materialized)
     }
 
     /// Converts a value to an array if it is an array-like type.
@@ -469,14 +758,29 @@ extension QsSwift.Encoder {
 
     /// Describes a value for comma-separated encoding, handling nil and optional values.
     @inline(__always)
-    private static func describeForComma(_ any: Any?) -> String {
+    private static func describeForComma(_ any: Any?, charset: String.Encoding) -> String {
         guard let any = any else { return "" }
         if any is NSNull { return "" }
-        if let unwrapped = unwrapOptional(any) {
-            if unwrapped is NSNull { return "" }
-            return String(describing: unwrapped)
+        if isOptional(any), unwrapOptional(any) == nil { return "" }  // Optional.none
+        let materialized = unwrapOptional(any) ?? any
+        if materialized is NSNull { return "" }
+        if let data = materialized as? Data {
+            return describeData(data, charset: charset)
         }
-        return ""
+        return String(describing: materialized)
+    }
+
+    @inline(__always)
+    private static func describeData(_ data: Data, charset: String.Encoding) -> String {
+        if let decoded = String(bytes: data, encoding: charset) {
+            return decoded
+        }
+        if charset == .utf8 {
+            // Keep payload visible for malformed UTF-8 instead of collapsing to empty.
+            // swiftlint:disable:next optional_data_string_conversion
+            return String(decoding: data, as: UTF8.self)
+        }
+        return String(describing: data)
     }
 
     /// Checks if the value is a container (array, dictionary, etc.).
@@ -490,7 +794,7 @@ extension QsSwift.Encoder {
 
     @inline(__always)
     private static func isOptional(_ value: Any) -> Bool {
-        Mirror(reflecting: value).displayStyle == .optional
+        value is _AnyOptional
     }
 
     @inline(__always)

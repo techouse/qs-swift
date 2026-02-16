@@ -184,7 +184,8 @@ extension Qs {
                 }
 
                 // Bridge the encoder/date-serializer configs; avoid capturing `options` repeatedly.
-                let valueEncoder: ValueEncoder? = options.encode
+                let valueEncoder: ValueEncoder? =
+                    options.encode
                     ? { @Sendable (value: Any?, charset: String.Encoding?, format: Format?) -> String in
                         options.getEncoder(value, charset: charset, format: format)
                     }

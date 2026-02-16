@@ -8,4 +8,3 @@ enum DummyEnum: String, CaseIterable, CustomStringConvertible {
         return self.rawValue
     }
 }
-

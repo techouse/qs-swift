@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  XCODE_VERSION: '16.3'
-  SWIFT_VERSION: '6.1'
+  XCODE_VERSION: '26.2'
+  SWIFT_VERSION: '6.2'
 
 jobs:
   analyze:
@@ -67,13 +67,13 @@ jobs:
       matrix:
         include:
           - runner: macos-15
-            xcode: '16.3'
+            xcode: '16.4'
             swift: '6.1'
             experimental: false
           - runner: macos-26
-            xcode: '26'
+            xcode: '26.2'
             swift: '6.2'
-            experimental: true
+            experimental: false
 
     env:
       XCODE_VERSION: ${{ matrix.xcode }}
@@ -118,6 +118,14 @@ jobs:
           SKIP_EXPENSIVE_TESTS: 1
           SWIFT_DETERMINISTIC_HASHING: 1
         run: bash scripts/coverage.sh
+
+      - name: Run deep Swift encode regression with Address Sanitizer
+        if: ${{ !matrix.experimental }}
+        env:
+          SWIFT_DETERMINISTIC_HASHING: 1
+        run: |
+          set -euxo pipefail
+          swift test -q --sanitize=address --filter EncodeTests/encode_veryDeepMaps_noStackOverflow
 
       - name: Collect macOS crash logs
         if: ${{ failure() }}
@@ -240,6 +248,23 @@ jobs:
             -resultBundlePath ObjC-Tests.xcresult \
             test
 
+      - name: Run deep ObjC encode regression with Address Sanitizer
+        env:
+          NSUnbufferedIO: "YES"
+        run: |
+          set -euxo pipefail
+          xcodebuild -quiet \
+            -project ObjCE2ETests/ObjCE2ETests.xcodeproj \
+            -scheme ObjCE2ETests \
+            -configuration Debug \
+            -derivedDataPath .derivedData-objc-asan \
+            -destination "platform=macOS" -sdk macosx \
+            CODE_SIGNING_ALLOWED=NO \
+            -disableAutomaticPackageResolution \
+            -enableAddressSanitizer YES \
+            -only-testing:ObjCE2ETests/ObjCBridgeExtrasTests/test_encode_very_deep_nested_maps_does_not_crash \
+            test
+
       - name: Zip .xcresult and extract xccov JSON
         run: |
           set -euxo pipefail
@@ -295,7 +320,7 @@ jobs:
           - swift: '6.1'
             experimental: false
           - swift: '6.2'
-            experimental: true
+            experimental: false
 
     env:
       SWIFT_VERSION: ${{ matrix.swift }}

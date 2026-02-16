@@ -446,7 +446,7 @@ struct UtilsTests {
     @Test("Utils.merge - merges Map with List")
     func testMergeMapWithList() async throws {
         let result = Utils.merge(target: [0: "a"], source: [Undefined(), "b"])
-        let out: [AnyHashable : Any] = result as! [AnyHashable: Any]
+        let out: [AnyHashable: Any] = result as! [AnyHashable: Any]
         // Compare contents directly to avoid NSNumber/Int key-bridging differences on Linux
         #expect(out.count == 2)
         #expect(out[AnyHashable(0)] as? String == "a")
@@ -887,6 +887,138 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.merge - array target adopts larger overflow max index from source metadata")
+    func testMergeArrayTarget_OverflowSourceMaxPropagation() async throws {
+        let target: [Any?] = ["z"]
+        let source = Utils.markOverflow(
+            [
+                AnyHashable(0): "a",
+                AnyHashable(1): "b",
+            ],
+            maxIndex: 9
+        )
+
+        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(merged))
+        if let merged {
+            #expect(Utils.overflowMaxIndex(merged) == 9)
+            #expect(merged[AnyHashable(0)] as? String == "a")
+            #expect(merged[AnyHashable(1)] as? String == "b")
+        }
+    }
+
+    @Test("Utils.merge - overflow target appends array source by index")
+    func testMergeOverflowTarget_ArraySourceAppendPath() async throws {
+        let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 2)
+        let source: [Any?] = ["x", nil, Undefined.instance]
+
+        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(merged))
+        if let merged {
+            #expect(merged[AnyHashable(3)] as? String == "x")
+            #expect(merged[AnyHashable(4)] is NSNull)
+            #expect(Utils.overflowMaxIndex(merged) == 4)
+        }
+    }
+
+    @Test("Utils.merge - overflow target appends sequence source by index")
+    func testMergeOverflowTarget_SequenceSourceAppendPath() async throws {
+        let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 0)
+        let source = OrderedSet<AnyHashable>([AnyHashable("x"), AnyHashable("y")])
+
+        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(merged))
+        if let merged {
+            #expect((merged[AnyHashable(1)] as? AnyHashable)?.base as? String == "x")
+            #expect((merged[AnyHashable(2)] as? AnyHashable)?.base as? String == "y")
+            #expect(Utils.overflowMaxIndex(merged) == 2)
+        }
+    }
+
+    @Test("Utils.merge - nil target with overflow source seeds NSNull at index zero")
+    func testMergeNilTarget_OverflowSourceSeedsNSNull() async throws {
+        let source = Utils.markOverflow(
+            [
+                AnyHashable(0): "a",
+                AnyHashable(2): "c",
+                AnyHashable("k"): "v",
+            ],
+            maxIndex: 2
+        )
+
+        let merged = Utils.merge(target: nil, source: source) as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(merged))
+        if let merged {
+            #expect(merged[AnyHashable(0)] is NSNull)
+            #expect(merged[AnyHashable(1)] as? String == "a")
+            #expect(merged[AnyHashable(3)] as? String == "c")
+            #expect(merged[AnyHashable("k")] as? String == "v")
+            #expect(Utils.overflowMaxIndex(merged) == 3)
+        }
+    }
+
+    @Test("Utils.merge - array target with plain dictionary source produces keyed map")
+    func testMergeArrayTarget_PlainDictionaryConversionPath() async throws {
+        let target: [Any] = ["left", "right"]
+        let source: [AnyHashable: Any] = [
+            AnyHashable("extra"): "value",
+            AnyHashable(3): "tail",
+        ]
+
+        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        #expect(merged != nil)
+        if let merged {
+            #expect(merged[AnyHashable(0)] as? String == "left")
+            #expect(merged[AnyHashable(1)] as? String == "right")
+            #expect(merged[AnyHashable("extra")] as? String == "value")
+            #expect(merged[AnyHashable(3)] as? String == "tail")
+        }
+    }
+
+    @Test("Utils.merge - iterative dictionary merge preserves larger source overflow max")
+    func testMergeIterativeDictionary_OverflowMaxReconciliation() async throws {
+        let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 0)
+        let source = Utils.markOverflow([AnyHashable(1): "b"], maxIndex: 10)
+
+        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(merged))
+        if let merged {
+            #expect(merged[AnyHashable(1)] as? String == "b")
+            #expect(Utils.overflowMaxIndex(merged) == 10)
+        }
+    }
+
+    @Test("Utils.merge - does not propagate child overflow max into parent overflow metadata")
+    func testMergeNestedOverflowDoesNotInflateParentMax() async throws {
+        let parent: [AnyHashable: Any] = Utils.markOverflow(
+            [
+                AnyHashable(0): Utils.markOverflow(
+                    [AnyHashable(100): "target-child"],
+                    maxIndex: 100
+                )
+            ],
+            maxIndex: 0
+        )
+        let source: [AnyHashable: Any] = [
+            AnyHashable(0): Utils.markOverflow(
+                [AnyHashable(101): "source-child"],
+                maxIndex: 101
+            )
+        ]
+
+        let merged = Utils.merge(target: parent, source: source) as? [AnyHashable: Any]
+        #expect(Utils.isOverflow(merged))
+
+        if let merged {
+            #expect(Utils.overflowMaxIndex(merged) == 0)
+
+            let appended = Utils.merge(target: merged, source: "tail") as? [AnyHashable: Any]
+            #expect(Utils.isOverflow(appended))
+            #expect(appended?[AnyHashable(1)] as? String == "tail")
+            #expect(appended?[AnyHashable(102)] == nil)
+        }
+    }
+
     @Test("Utils.refreshOverflowMaxIndex - recomputes max numeric key")
     func testRefreshOverflowMaxIndex() async throws {
         var dict: [AnyHashable: Any] = [
@@ -894,11 +1026,45 @@ struct UtilsTests {
             AnyHashable(2): "b",
             AnyHashable(NSNumber(value: 7)): "c",
             AnyHashable("x"): "y",
-            AnyHashable(Utils.overflowKey): -1
+            AnyHashable(Utils.overflowKey): -1,
         ]
 
         Utils.refreshOverflowMaxIndex(&dict)
         #expect(Utils.overflowMaxIndex(dict) == 7)
+    }
+
+    @Test("Utils.merge - handles deeply nested dictionary merges without recursion overflow")
+    func testMergeDeepDictionaries_NoRecursionOverflow() async throws {
+        let depth = 1_500
+
+        var target: [String: Any] = ["left": "a"]
+        var source: [String: Any] = ["right": "b"]
+        for _ in 0..<depth {
+            target = ["p": target]
+            source = ["p": source]
+        }
+
+        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        #expect(merged != nil)
+
+        var node: Any? = merged
+        var traversed = 0
+        while traversed < depth {
+            guard let dict = node as? [AnyHashable: Any] else {
+                Issue.record("Expected dictionary at depth \(traversed)")
+                return
+            }
+            guard let next = dict[AnyHashable("p")] else {
+                Issue.record("Missing 'p' key at depth \(traversed)")
+                return
+            }
+            node = next
+            traversed += 1
+        }
+
+        let leaf = node as? [AnyHashable: Any]
+        #expect(leaf?[AnyHashable("left")] as? String == "a")
+        #expect(leaf?[AnyHashable("right")] as? String == "b")
     }
 
     // MARK: - Utils.interpretNumericEntities tests
@@ -1037,6 +1203,18 @@ struct UtilsTests {
         #expect(Utils.isNonNullishPrimitive("", skipNulls: true) == false)
     }
 
+    @Test("Utils.isNonNullishPrimitive - generic arrays and dictionaries are not primitives")
+    func testIsNonNullishPrimitive_GenericContainersFallback() async throws {
+        let intArray = [1, 2, 3]
+        let intDict = [1: "one", 2: "two"]
+
+        #expect(Utils.isNonNullishPrimitive(intArray) == false)
+        #expect(Utils.isNonNullishPrimitive(intDict) == false)
+        // Repeat to exercise cached lookup path.
+        #expect(Utils.isNonNullishPrimitive(intArray) == false)
+        #expect(Utils.isNonNullishPrimitive(intDict) == false)
+    }
+
     @Test("Utils.isEmpty - empty collections and maps")
     func testIsEmptyCollectionsAndMaps() async throws {
         let emptyDict: [String: Any?] = [:]
@@ -1122,7 +1300,7 @@ struct UtilsTests {
                 undefined,
                 ["nestedDrop": undefined, "nestedKeep": "ok"] as [String: Any?],
                 [undefined, "leaf"] as [Any],
-                "end"
+                "end",
             ] as [Any]
         ]
         let arrayCompacted = Utils.compact(&arrayRoot, allowSparseLists: false)
@@ -1153,7 +1331,7 @@ struct UtilsTests {
         let undefined = Undefined.instance
         var root: [String: Any?] = [
             "list": [undefined, "x"],
-            "optionalList": [Optional<Any>.some(undefined), Optional<Any>.some("y")]
+            "optionalList": [Optional<Any>.some(undefined), Optional<Any>.some("y")],
         ]
 
         let compacted = Utils.compact(&root, allowSparseLists: true)
@@ -1175,7 +1353,7 @@ struct UtilsTests {
         let input: [String: Any?] = [
             "drop": undefined,
             "dict": ["inner": undefined, "keep": "value"],
-            "array": [Optional<Any>.some(undefined), Optional<Any>.none, Optional<Any>.some("z")]
+            "array": [Optional<Any>.some(undefined), Optional<Any>.none, Optional<Any>.some("z")],
         ]
 
         let out = Utils.compactToAny(input, allowSparseLists: true)
@@ -1385,7 +1563,7 @@ struct UtilsTests {
             undefined,
             ["deep": undefined, "keep": "value"] as [String: Any?],
             nil,
-            "leaf"
+            "leaf",
         ]
         let optionalList: [Any?] = [undefined, nestedOptional, undefined]
         let foundationArray: NSArray = [undefined, ["inner": undefined], nestedOptional, "scalar"]
@@ -1395,7 +1573,7 @@ struct UtilsTests {
             "drop": undefined,
             "foundation": foundationArray,
             "optional": optionalList,
-            "plain": plainArray
+            "plain": plainArray,
         ]
 
         let sparse = Utils.compact(&sparseRoot, allowSparseLists: true)
@@ -1436,7 +1614,7 @@ struct UtilsTests {
         var denseRoot: [String: Any?] = [
             "foundation": foundationArray,
             "optional": optionalList,
-            "plain": plainArray
+            "plain": plainArray,
         ]
 
         let dense = Utils.compact(&denseRoot)
@@ -1464,12 +1642,12 @@ struct UtilsTests {
         let undefined = Undefined.instance
         let nestedDict: [String: Any?] = [
             "inner": undefined,
-            "value": 9
+            "value": 9,
         ]
         let nestedOptional: [Any?] = [undefined, ["deep": undefined, "keep": "leaf"] as [String: Any?]]
         let input: [String: Any?] = [
             "list": [undefined, nestedDict, nestedOptional, nil],
-            "noneRoot": nil
+            "noneRoot": nil,
         ]
 
         let sparse = Utils.compactToAny(input, allowSparseLists: true)
@@ -1506,13 +1684,12 @@ struct UtilsTests {
         }
     }
 
-
     @Test("Utils.containsUndefined detects sentinel in nested structures")
     func utils_containsUndefined_detects() {
         let undefined = Undefined.instance
         let sample: [String: Any?] = [
             "array": [undefined, "x"],
-            "dict": ["inner": undefined]
+            "dict": ["inner": undefined],
         ]
 
         #expect(Utils.containsUndefined(sample))
@@ -1625,13 +1802,16 @@ struct UtilsTests {
             Issue.record("OrderedSet branch did not return OrderedSet: \(String(describing: merged))")
         }
 
-        if let unioned = Utils.merge(target: target, source: OrderedSet([AnyHashable("b")]), options: .init()) as? OrderedSet<AnyHashable> {
+        if let unioned = Utils.merge(target: target, source: OrderedSet([AnyHashable("b")]), options: .init())
+            as? OrderedSet<AnyHashable>
+        {
             #expect(unioned.elementsEqual([AnyHashable("a"), AnyHashable("b")]))
         } else {
             Issue.record("OrderedSet union branch not exercised")
         }
 
-        if let unchanged = Utils.merge(target: target, source: undefined, options: .init()) as? OrderedSet<AnyHashable> {
+        if let unchanged = Utils.merge(target: target, source: undefined, options: .init()) as? OrderedSet<AnyHashable>
+        {
             #expect(unchanged.elementsEqual(target))
         } else {
             Issue.record("OrderedSet Undefined branch not exercised")
@@ -1741,7 +1921,7 @@ struct UtilsTests {
 
         let dict: [AnyHashable: Any] = [
             1: ["nested": NSNull()],
-            "two": 2
+            "two": 2,
         ]
         let bridged = Utils.deepBridgeToAnyIterative(dict)
         if let map = bridged as? [String: Any] {

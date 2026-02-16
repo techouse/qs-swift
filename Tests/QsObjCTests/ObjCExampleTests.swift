@@ -15,7 +15,7 @@
         private let urlEncodedOSlashInUtf8 = "%C3%B8"
         private let urlEncodedNumCheckmark = "%26%2310003%3B"
         private let urlEncodedNumSmiley = "%26%239786%3B"
-        
+
         // Small helpers to keep the tests tidy
         private func decode(
             _ qs: String,
@@ -524,7 +524,7 @@
             let s = encode(["a": "b c"]) { o in o.format = .rfc1738 }
             #expect(s as String == "a=b+c")
         }
-        
+
         // MARK: - Decoding • Maps (regex delimiter)
 
         @Test("maps: regex delimiter")
@@ -537,7 +537,7 @@
             #expect(r["a"] as? String == "b")
             #expect(r["c"] as? String == "d")
         }
-        
+
         // MARK: - Encoding (omit Undefined)
 
         @Test("encode: omits undefined properties")
@@ -545,7 +545,7 @@
             // NSNull encodes as empty value; Undefined should be omitted entirely
             let input: NSDictionary = [
                 "a": NSNull(),
-                "b": UndefinedObjC()
+                "b": UndefinedObjC(),
             ]
             let s = encode(input) { _ in }
             #expect(s as String == "a=")

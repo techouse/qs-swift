@@ -104,7 +104,7 @@
         func decodeErrorUserInfo() {
             let userInfo: [String: Any] = [
                 DecodeErrorInfoObjC.limitKey: 5,
-                DecodeErrorInfoObjC.maxDepthKey: 2
+                DecodeErrorInfoObjC.maxDepthKey: 2,
             ]
             let mock = NSError(
                 domain: DecodeErrorInfoObjC.domain,
@@ -197,38 +197,56 @@
             #expect(swift.throwOnLimitExceeded)
         }
 
+        @Test("DecodeOptionsObjC sanitizes invalid values before bridging")
+        func decodeOptionsSanitization() {
+            let opts = DecodeOptionsObjC().with {
+                $0.allowDots = false
+                $0.decodeDotInKeys = true
+                $0.charset = String.Encoding.shiftJIS.rawValue
+                $0.parameterLimit = 0
+                $0.depth = -5
+            }
+
+            let swift = opts.swift
+            #expect(swift.getAllowDots)
+            #expect(swift.getDecodeDotInKeys)
+            #expect(swift.charset == .utf8)
+            #expect(swift.parameterLimit == 1)
+            #expect(swift.depth == 0)
+        }
+
         @Test("DecodeOptionsObjC bridges decoder blocks in priority order")
         func decodeOptionsCustomBlocks() {
-        var seenKinds: [Int] = []
-        let opts = DecodeOptionsObjC()
-        opts.decoderBlock = { token, charset, kind in
-            seenKinds.append(kind?.intValue ?? -1)
-            guard let token else { return nil }
-            let utf8Raw = Int(String.Encoding.utf8.rawValue)
-            let suffix = (charset?.intValue ?? utf8Raw) == utf8Raw ? "!" : "?"
-            return ((token as String) + suffix) as NSString
-        }
+            var seenKinds: [Int] = []
+            let opts = DecodeOptionsObjC()
+            opts.decoderBlock = { token, charset, kind in
+                seenKinds.append(kind?.intValue ?? -1)
+                guard let token else { return nil }
+                let utf8Raw = Int(String.Encoding.utf8.rawValue)
+                let suffix = (charset?.intValue ?? utf8Raw) == utf8Raw ? "!" : "?"
+                return ((token as String) + suffix) as NSString
+            }
 
-        let swiftDecoder = opts.swift.decoder
-        let keyResult = swiftDecoder?("a", .utf8, .key) as? String
-        let valueResult = swiftDecoder?("b", .utf8, .value) as? String
-        #expect(seenKinds == [0, 1])
-        #expect(keyResult == "a!")
-        #expect(valueResult == "b!")
+            let swiftDecoder = opts.swift.decoder
+            let keyResult = swiftDecoder?("a", .utf8, .key) as? String
+            let valueResult = swiftDecoder?("b", .utf8, .value) as? String
+            #expect(seenKinds == [0, 1])
+            #expect(keyResult == "a!")
+            #expect(valueResult == "b!")
 
-        let valueOnly = DecodeOptionsObjC()
-        valueOnly.valueDecoderBlock = { token, _ in
-            (token as String?)?.uppercased()
-        }
-        let swiftValueDecoder = valueOnly.swift.decoder
-        #expect(swiftValueDecoder?("c", .isoLatin1, nil) as? String == "C")
+            let valueOnly = DecodeOptionsObjC()
+            valueOnly.valueDecoderBlock = { token, _ in
+                (token as String?)?.uppercased()
+            }
+            let swiftValueDecoder = valueOnly.swift.decoder
+            #expect(swiftValueDecoder?("c", .isoLatin1, nil) as? String == "C")
 
-        let legacy = DecodeOptionsObjC()
-        legacy.legacyDecoderBlock = { token, _ in
-            token?.appending("?")
-        }
-        let swiftLegacy = legacy.swift.legacyDecoder
-        #expect(swiftLegacy?("e", .utf8) as? String == "e?")
+            let legacy = DecodeOptionsObjC()
+            legacy.legacyDecoderBlock = { token, _ in
+                token?.appending("?")
+            }
+            let swiftLegacy = legacy.swift.legacyDecoder
+            #expect(swiftLegacy?("e", .utf8) as? String == "e?")
         }
 
         @Test("EncodeOptionsObjC bridges configuration and custom blocks")
@@ -305,11 +323,39 @@
             #expect(output.contains(";"))
         }
 
+        @Test("EncodeOptionsObjC listFormatBoxed getter and setter round-trip")
+        func encodeOptions_listFormatBoxedRoundTrip() {
+            let opts = EncodeOptionsObjC()
+
+            #expect(opts.listFormat == nil)
+            #expect(opts.listFormatBoxed == nil)
+
+            opts.listFormatBoxed = NSNumber(value: ListFormatObjC.comma.rawValue)
+            #expect(opts.listFormat == .comma)
+            #expect(opts.listFormatBoxed?.intValue == ListFormatObjC.comma.rawValue)
+
+            opts.listFormat = .indices
+            #expect(opts.listFormatBoxed?.intValue == ListFormatObjC.indices.rawValue)
+
+            opts.listFormatBoxed = NSNumber(value: 999)
+            #expect(opts.listFormat == nil)
+            #expect(opts.listFormatBoxed == nil)
+        }
+
+        @Test("EncodeOptionsObjC sanitizes invalid charset before bridging")
+        func encodeOptionsSanitization() {
+            let opts = EncodeOptionsObjC().with {
+                $0.charset = String.Encoding.shiftJIS.rawValue
+            }
+            #expect(opts.swift.charset == .utf8)
+        }
+
         @Test("FilterObjC factories wrap Swift filters")
         func filterObjCFactories() {
-            let functionFilter = FilterObjC.function(FunctionFilterObjC { key, value in
-                key == "drop" ? UndefinedObjC() : value
-            })
+            let functionFilter = FilterObjC.function(
+                FunctionFilterObjC { key, value in
+                    key == "drop" ? UndefinedObjC() : value
+                })
             let iterable = FilterObjC.iterable(IterableFilterObjC(iterable: ["keep", 1]))
             let excluding = FilterObjC.excluding { $0 == "omit" }
             let including = FilterObjC.including { $0 == "keep" }
@@ -333,11 +379,42 @@
             #expect((mixed.swift as? IterableFilter)?.iterable.last as? Int == 3)
         }
 
+        @Test("FunctionFilterObjC preserves nested traversal when returning value")
+        func functionFilterObjCPreservesNestedTraversal() {
+            let date = Date(timeIntervalSince1970: 0.123)
+            let input: NSDictionary = [
+                "a": "b",
+                "e": ["f": date, "g": [2]],
+            ]
+
+            let ff = FunctionFilterObjC { key, value in
+                if key == "e[f]" {
+                    guard let date = value as? Date else { return value }
+                    return NSNumber(value: Int((date.timeIntervalSince1970 * 1000).rounded()))
+                }
+                if key == "e[g][0]", let n = value as? NSNumber {
+                    return NSNumber(value: n.intValue * 2)
+                }
+                return value
+            }
+
+            let opts = EncodeOptionsObjC()
+            opts.encode = false
+            opts.filter = .function(ff)
+
+            let encoded = QsBridge.encode(input, options: opts, error: nil) as String?
+            #expect(encoded != nil)
+            let parts = Set((encoded ?? "").split(separator: "&").map(String.init))
+            #expect(parts.contains("a=b"))
+            #expect(parts.contains("e[f]=123"))
+            #expect(parts.contains("e[g][0]=4"))
+        }
+
         @Test("bridgeUndefinedPreservingOrder normalizes Swift dictionaries and arrays")
         func bridgeUndefined_preservesSwiftContainers() {
             let swiftDict: [String: Any] = [
                 "scalar": UndefinedObjC(),
-                "array": [UndefinedObjC(), "value"]
+                "array": [UndefinedObjC(), "value"],
             ]
 
             if let bridged = QsBridge.bridgeUndefinedPreservingOrder(swiftDict)
@@ -353,7 +430,7 @@
 
             let swiftArray: [Any] = [
                 UndefinedObjC(),
-                ["nested": UndefinedObjC()]
+                ["nested": UndefinedObjC()],
             ]
 
             if let bridgedArray = QsBridge.bridgeUndefinedPreservingOrder(swiftArray) as? [Any] {

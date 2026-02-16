@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import OrderedCollections
 
@@ -143,7 +144,7 @@ extension QsSwift.Utils {
 
                             for (index, item) in seq.enumerated() {
                                 if let existing = mutableTarget[index] {
-                                    mutableTarget[index] = merge(
+                                    mutableTarget[index] = mergeValues(
                                         target: existing, source: item, options: options)
                                 } else {
                                     mutableTarget[index] = item
@@ -286,38 +287,7 @@ extension QsSwift.Utils {
         }
 
         if let sourceDict = source as? [AnyHashable: Any] {
-            let targetIsOverflow = Utils.isOverflow(mergeTarget)
-            let sourceIsOverflow = Utils.isOverflow(sourceDict)
-            var overflowMax: Int?
-
-            if targetIsOverflow {
-                overflowMax = Utils.overflowMaxIndex(mergeTarget) ?? -1
-            } else if sourceIsOverflow {
-                overflowMax = -1
-            }
-
-            for (key, value) in sourceDict where !Utils.isOverflowKey(key) {
-                if let existingValue = mergeTarget[key] {
-                    mergeTarget[key] = merge(target: existingValue, source: value, options: options)
-                } else {
-                    mergeTarget[key] = value
-                }
-
-                if let idx = Utils.intIndex(key), let current = overflowMax, idx > current {
-                    overflowMax = idx
-                }
-            }
-
-            if sourceIsOverflow || targetIsOverflow {
-                if let sourceMax = Utils.overflowMaxIndex(sourceDict),
-                    sourceMax > (overflowMax ?? -1)
-                {
-                    overflowMax = sourceMax
-                }
-                if let maxIndex = overflowMax {
-                    Utils.setOverflowMaxIndex(&mergeTarget, maxIndex)
-                }
-            }
+            return mergeDictionariesIterative(target: mergeTarget, source: sourceDict, options: options)
         }
 
         return mergeTarget
@@ -331,5 +301,106 @@ extension QsSwift.Utils {
         if let orderedSet = value as? OrderedSet<AnyHashable> { return Array(orderedSet) }
         if let setValues = value as? Set<AnyHashable> { return Array(setValues) }
         return nil
+    }
+
+    @inline(__always)
+    private static func mergeValues(target: Any?, source: Any?, options: DecodeOptions) -> Any? {
+        if let targetDict = target as? [AnyHashable: Any], let sourceDict = source as? [AnyHashable: Any] {
+            return mergeDictionariesIterative(target: targetDict, source: sourceDict, options: options)
+        }
+        return merge(target: target, source: source, options: options)
+    }
+
+    private struct DictionaryMergeFrame {
+        var target: [AnyHashable: Any]
+        let sourceItems: [(AnyHashable, Any)]
+        var index: Int
+        let sourceIsOverflow: Bool
+        let sourceMax: Int?
+        var overflowMax: Int?
+        var pendingKey: AnyHashable?
+    }
+
+    private static func makeDictionaryMergeFrame(
+        target: [AnyHashable: Any],
+        source: [AnyHashable: Any]
+    ) -> DictionaryMergeFrame {
+        let targetIsOverflow = Utils.isOverflow(target)
+        let sourceIsOverflow = Utils.isOverflow(source)
+        let sourceMax = Utils.overflowMaxIndex(source)
+        let overflowMax: Int? = {
+            if targetIsOverflow { return Utils.overflowMaxIndex(target) ?? -1 }
+            if sourceIsOverflow { return -1 }
+            return nil
+        }()
+        let items = source.compactMap { (key: AnyHashable, value: Any) -> (AnyHashable, Any)? in
+            Utils.isOverflowKey(key) ? nil : (key, value)
+        }
+        return DictionaryMergeFrame(
+            target: target,
+            sourceItems: items,
+            index: 0,
+            sourceIsOverflow: sourceIsOverflow,
+            sourceMax: sourceMax,
+            overflowMax: overflowMax,
+            pendingKey: nil
+        )
+    }
+
+    private static func mergeDictionariesIterative(
+        target: [AnyHashable: Any],
+        source: [AnyHashable: Any],
+        options: DecodeOptions
+    ) -> [AnyHashable: Any] {
+        var stack: [DictionaryMergeFrame] = [makeDictionaryMergeFrame(target: target, source: source)]
+        var completed: [AnyHashable: Any]?
+
+        while var frame = stack.popLast() {
+            if let pendingKey = frame.pendingKey, let childResult = completed {
+                frame.target[pendingKey] = childResult
+                frame.pendingKey = nil
+                completed = nil
+            }
+
+            if frame.index < frame.sourceItems.count {
+                let (key, value) = frame.sourceItems[frame.index]
+                frame.index += 1
+
+                if let existingValue = frame.target[key] {
+                    if let existingDict = existingValue as? [AnyHashable: Any],
+                        let valueDict = value as? [AnyHashable: Any]
+                    {
+                        frame.pendingKey = key
+                        stack.append(frame)
+                        stack.append(
+                            makeDictionaryMergeFrame(target: existingDict, source: valueDict)
+                        )
+                        continue
+                    }
+                    frame.target[key] = mergeValues(target: existingValue, source: value, options: options)
+                } else {
+                    frame.target[key] = value
+                }
+
+                if let idx = Utils.intIndex(key), let current = frame.overflowMax, idx > current {
+                    frame.overflowMax = idx
+                }
+
+                stack.append(frame)
+                continue
+            }
+
+            if frame.sourceIsOverflow {
+                if let sourceMax = frame.sourceMax, sourceMax > (frame.overflowMax ?? -1) {
+                    frame.overflowMax = sourceMax
+                }
+            }
+            if let maxIndex = frame.overflowMax {
+                Utils.setOverflowMaxIndex(&frame.target, maxIndex)
+            }
+            completed = frame.target
+        }
+
+        return completed ?? target
     }
 }

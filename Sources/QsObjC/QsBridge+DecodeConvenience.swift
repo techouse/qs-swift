@@ -32,8 +32,7 @@
         /// - `input == nil` → `{}` (empty dictionary), *not* `nil`.
         /// - Errors → `nil`.
         @objc(decodeOrNil:options:)
-        public static func decodeOrNil(_ input: Any?, options: DecodeOptionsObjC?) -> NSDictionary?
-        {
+        public static func decodeOrNil(_ input: Any?, options: DecodeOptionsObjC?) -> NSDictionary? {
             let bridged = bridgeInputForDecode(input)
             let swiftOpts = options?.swift ?? .init()
             if let dict = Qs.decodeOrNil(bridged, options: swiftOpts) {
@@ -60,8 +59,7 @@
         /// - `input == nil` → `{}`.
         /// - Errors → `{}`.
         @objc(decodeOrEmpty:options:)
-        public static func decodeOrEmpty(_ input: Any?, options: DecodeOptionsObjC?) -> NSDictionary
-        {
+        public static func decodeOrEmpty(_ input: Any?, options: DecodeOptionsObjC?) -> NSDictionary {
             let bridged = bridgeInputForDecode(input)
             let swiftOpts = options?.swift ?? .init()
             let dict = Qs.decodeOrEmpty(bridged, options: swiftOpts)
