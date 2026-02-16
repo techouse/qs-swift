@@ -40,7 +40,18 @@
                 let out = self.block(key as NSString, value)
                 // Map Obj-C sentinel → Swift sentinel to DROP the key entirely.
                 if let undefinedObjC = out as? UndefinedObjC { return undefinedObjC.swift }
-                return out
+                // If Obj-C returns the same bridged object we passed in (common "return value;"
+                // pattern), keep the original Swift payload to preserve container traversal.
+                if let outObj = out as AnyObject?,
+                    let inObj = value as AnyObject?,
+                    outObj === inObj
+                {
+                    return value
+                }
+                guard let out else { return nil }
+                // Normalize Obj-C containers to the same Swift encode-side shapes used at entry.
+                let bridged = QsBridge.bridgeInputForEncode(out)
+                return QsBridge.bridgeUndefinedPreservingOrder(bridged) ?? bridged
             }
         }
     }

@@ -126,6 +126,15 @@
         /// Internal bridge that constructs the Swift `DecodeOptions` used by the core.
         /// We also normalize the dot‑parsing flags so **either** Obj‑C flag enables dots.
         var swift: QsSwift.DecodeOptions {
+            let normalizedAllowDots = allowDots || decodeDotInKeys
+            let normalizedDecodeDotInKeys = decodeDotInKeys && normalizedAllowDots
+            let normalizedCharset: String.Encoding = {
+                let candidate = String.Encoding(rawValue: charset)
+                return (candidate == .utf8 || candidate == .isoLatin1) ? candidate : .utf8
+            }()
+            let normalizedParameterLimit = max(1, parameterLimit)
+            let normalizedDepth = max(0, depth)
+
             // Bridge Obj-C decoder blocks → Swift ScalarDecoder
             // Prefer the KEY/VALUE-aware `decoderBlock`; fall back to `valueDecoderBlock`.
             let swiftDecoder: QsSwift.ScalarDecoder? = {
@@ -165,10 +174,10 @@
 
             return QsSwift.DecodeOptions(
                 // Dot handling: either flag enables it (compat with other ports).
-                allowDots: allowDots || decodeDotInKeys,
+                allowDots: normalizedAllowDots,
                 decoder: swiftDecoder,
                 legacyDecoder: swiftLegacy,
-                decodeDotInKeys: decodeDotInKeys,
+                decodeDotInKeys: normalizedDecodeDotInKeys,
 
                 // Lists / arrays
                 allowEmptyLists: allowEmptyLists,
@@ -176,14 +185,14 @@
                 listLimit: listLimit,
 
                 // Charset / wire format
-                charset: String.Encoding(rawValue: charset),
+                charset: normalizedCharset,
                 charsetSentinel: charsetSentinel,
                 comma: comma,
                 delimiter: delimiter.swift,
 
                 // Limits & behavior
-                depth: depth,
-                parameterLimit: parameterLimit,
+                depth: normalizedDepth,
+                parameterLimit: normalizedParameterLimit,
                 duplicates: duplicates.swift,
                 ignoreQueryPrefix: ignoreQueryPrefix,
                 interpretNumericEntities: interpretNumericEntities,
