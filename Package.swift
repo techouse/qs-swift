@@ -13,7 +13,7 @@ var targetDeps: [Target.Dependency] = [
     .product(name: "OrderedCollections", package: "swift-collections"),
 ]
 #if os(Linux)
-    deps.append(.package(url: "https://github.com/reers/ReerKit.git", from: "1.2.2"))
+    deps.append(.package(url: "https://github.com/reers/ReerKit.git", from: "1.2.5"))
     targetDeps.append(.product(name: "ReerKit", package: "ReerKit"))
 #endif
 

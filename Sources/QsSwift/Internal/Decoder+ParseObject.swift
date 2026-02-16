@@ -47,7 +47,12 @@ extension QsSwift.Decoder {
         var leaf: Any? =
             valuesParsed
             ? value
-            : try parseListValue(value, options: options, currentListLength: currentListLength)
+            : try parseListValue(
+                value,
+                options: options,
+                currentListLength: currentListLength,
+                isFirstOccurrence: true
+            )
 
         // Walk backwards from leaf to root
         for index in stride(from: chain.count - 1, through: 0, by: -1) {
