@@ -412,6 +412,38 @@ struct DecodeTests {
         #expect((a?["1"] as? String) == "☺")
     }
 
+    // MARK: - GHSA-w7fw-mjwx-w883 parity (qs PR #545 / v6.14.2)
+    //
+    // Upstream mapping notes:
+    // - JS qs `arrayLimit` -> QsSwift `listLimit`
+    // - JS qs `parse(...)` -> `Qs.decode(...)`
+    // - `throwOnLimitExceeded` semantics are the same
+
+    @Test("GHSA-w7fw-mjwx-w883: comma split respects listLimit when throwing (listLimit=1)")
+    func testGHSA_CommaSplit_Throwing_ListLimitOne() throws {
+        let opts = DecodeOptions(listLimit: 1, comma: true, throwOnLimitExceeded: true)
+        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+            _ = try Qs.decode("a=1,2", options: opts)
+        }
+    }
+
+    @Test("GHSA-w7fw-mjwx-w883: comma split respects listLimit when throwing (listLimit=0)")
+    func testGHSA_CommaSplit_Throwing_ListLimitZero() throws {
+        let opts = DecodeOptions(listLimit: 0, comma: true, throwOnLimitExceeded: true)
+        #expect(throws: DecodeError.listLimitExceeded(limit: 0)) {
+            _ = try Qs.decode("a=1,2", options: opts)
+        }
+    }
+
+    @Test("GHSA-w7fw-mjwx-w883: non-throwing overflow falls back to indexed map")
+    func testGHSA_CommaSplit_NonThrowing_IndexedMapFallback() throws {
+        let opts = DecodeOptions(listLimit: 0, comma: true, throwOnLimitExceeded: false)
+        let decoded = try Qs.decode("a=1,2", options: opts)
+        let a = asDictString(decoded["a"])
+        #expect((a?["0"] as? String) == "1")
+        #expect((a?["1"] as? String) == "2")
+    }
+
     @Test("allows enabling dot notation")
     func testAllowDots() async throws {
         do {
