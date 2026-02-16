@@ -95,5 +95,29 @@
                 }
             }
         }
+
+        @Test("decodeAsyncOnMain (ObjC) returns NSError on invalid input")
+        func decodeAsyncOnMain_error() async {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                QsBridge.decodeAsyncOnMain(NSNumber(value: 1), options: nil) { dict, err in
+                    #expect(Thread.isMainThread)
+                    #expect(dict == nil)
+                    #expect(err != nil)
+                    cont.resume()
+                }
+            }
+        }
+
+        @Test("decodeAsync (ObjC) returns NSError on invalid input")
+        func decodeAsync_error() async {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                QsBridge.decodeAsync(NSNumber(value: 1), options: nil) { dict, err in
+                    #expect(!Thread.isMainThread)
+                    #expect(dict == nil)
+                    #expect(err != nil)
+                    cont.resume()
+                }
+            }
+        }
     }
 #endif

@@ -190,7 +190,7 @@
         func encode_swiftDictionary_bridgesToOrdered() {
             let payload: [String: Any] = [
                 "alpha": 1,
-                "sentinel": UndefinedObjC()
+                "sentinel": UndefinedObjC(),
             ]
 
             let bridged = QsBridge.bridgeInputForEncode(payload)
@@ -212,7 +212,7 @@
 
             let payload: [String: Any] = [
                 "custom": SwiftOnly(id: 1),
-                "sentinel": UndefinedObjC()
+                "sentinel": UndefinedObjC(),
             ]
 
             let bridged = QsBridge.bridgeInputForEncode(payload)
@@ -242,7 +242,7 @@
         func encode_orderedDictionaryNSString_keys() {
             let od = OrderedDictionary<NSString, Any>(uniqueKeysWithValues: [
                 ("one" as NSString, 1),
-                ("two" as NSString, 2)
+                ("two" as NSString, 2),
             ])
 
             let bridged = QsBridge.bridgeInputForEncode(od)
@@ -282,7 +282,7 @@
         func encode_orderedDictionaryAnyHashable_keys() {
             let entries: [(AnyHashable, Any)] = [
                 (AnyHashable(42), "answer"),
-                (AnyHashable("two"), 2)
+                (AnyHashable("two"), 2),
             ]
             let od = OrderedDictionary<AnyHashable, Any>(uniqueKeysWithValues: entries)
 
@@ -317,7 +317,7 @@
         func bridgeUndefined_handlesOrderedAnyHashableDictionary() {
             let entries: [(AnyHashable, Any)] = [
                 (AnyHashable("u"), UndefinedObjC()),
-                (AnyHashable(7), "v")
+                (AnyHashable(7), "v"),
             ]
             let ordered = OrderedDictionary<AnyHashable, Any>(uniqueKeysWithValues: entries)
 
@@ -354,7 +354,7 @@
         func bridgeUndefined_handlesNSDictionary() {
             let dict: NSDictionary = [
                 "u": UndefinedObjC(),
-                "value": "v"
+                "value": "v",
             ]
 
             let bridged = QsBridge.bridgeUndefinedPreservingOrder(dict)
@@ -368,10 +368,12 @@
             var seen = Set<ObjectIdentifier>()
             let swiftDict: [String: Any] = [
                 "value": 42,
-                "sentinel": UndefinedObjC()
+                "sentinel": UndefinedObjC(),
             ]
 
-            if let bridgedDict = QsBridge._bridgeUndefinedPreservingOrder(swiftDict, seen: &seen) as? OrderedDictionary<String, Any> {
+            if let bridgedDict = QsBridge._bridgeUndefinedPreservingOrder(swiftDict, seen: &seen)
+                as? OrderedDictionary<String, Any>
+            {
                 #expect(bridgedDict["value"] as? Int == 42)
                 #expect(bridgedDict["sentinel"] is QsSwift.Undefined)
             } else {

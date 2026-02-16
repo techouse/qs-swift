@@ -39,6 +39,19 @@
             #expect(encode(["a": "א"]) as String == "a=%D7%90")
         }
 
+        @Test("objc-encode: encode=false serializes Data as decoded text")
+        func encode_data_encodeFalse() throws {
+            let bytes = Data("a b".utf8)
+            let plain = encode(["a": bytes]) { o in o.encode = false }
+            #expect(plain as String == "a=a b")
+
+            let comma = encode(["a": [bytes]]) { o in
+                o.listFormat = .comma
+                o.encode = false
+            }
+            #expect(comma as String == "a=a b")
+        }
+
         // MARK: - Top-level list / array
 
         @Test("objc-encode: top-level list encodes with indices")

@@ -138,6 +138,21 @@ struct EncodeTests {
         #expect(parts.contains { $0.hasPrefix("two=") })
     }
 
+    @Test("encode - set-like scalars are preserved")
+    func encode_setLikeScalarsArePreserved() async throws {
+        let value = try Qs.encode(
+            [
+                "tags": Set(["red"]),
+                "ordered": OrderedSet(["blue"]),
+            ],
+            options: EncodeOptions(encode: false)
+        )
+
+        let parts = Set(value.split(separator: "&").map(String.init))
+        #expect(parts.contains { $0.hasPrefix("tags=") && $0 != "tags=" })
+        #expect(parts.contains { $0.hasPrefix("ordered=") && $0 != "ordered=" })
+    }
+
     @Test("encode - applies filters, ordering, and sentinel options")
     func encode_filtersOrderingAndSentinel() async throws {
         let data: [String: Any] = [
@@ -2199,6 +2214,61 @@ struct EncodeTests {
         #expect(try Qs.encode(["a": "test".data(using: .utf8)!]) == "a=test")
     }
 
+    @Test("encode=false serializes Data as decoded text (not Data description)")
+    func testEncodeFalse_DataIsStringifiedAsText() async throws {
+        let bytes = Data("a b".utf8)
+        let plain = try Qs.encode(["a": bytes], options: .init(encode: false))
+        #expect(plain == "a=a b")
+
+        let comma = try Qs.encode(["a": [bytes]], options: .init(listFormat: .comma, encode: false))
+        #expect(comma == "a=a b")
+    }
+
+    @Test("encode=false keeps malformed UTF-8 Data visible")
+    func testEncodeFalse_InvalidUTF8DataDoesNotCollapseToEmpty() async throws {
+        let invalid = Data([0xC3, 0x28])  // malformed UTF-8 sequence
+        let expected = String(decoding: invalid, as: UTF8.self)
+
+        let plain = try Qs.encode(["a": invalid], options: .init(encode: false))
+        #expect(plain == "a=\(expected)")
+
+        let comma = try Qs.encode(
+            ["a": [invalid]],
+            options: .init(listFormat: .comma, encode: false)
+        )
+        #expect(comma == "a=\(expected)")
+    }
+
+    @Test("encode unwraps Optional.some values before stringifying")
+    func testEncodeUnwrapsOptionalSomeValues() async throws {
+        let optionalInt: Int? = 42
+        let optionalText: String? = "hello world"
+
+        let result = try Qs.encode(
+            ["a": optionalInt as Any, "b": optionalText as Any],
+            options: .init(encode: false)
+        )
+
+        let parts = Set(result.split(separator: "&").map(String.init))
+        #expect(parts.contains("a=42"))
+        #expect(parts.contains("b=hello world"))
+        #expect(!parts.contains(where: { $0.contains("Optional(") }))
+    }
+
+    @Test("encode unwraps Optional<Data> for plain and comma paths")
+    func testEncodeUnwrapsOptionalDataValues() async throws {
+        let optionalData: Data? = Data("a b".utf8)
+
+        let plain = try Qs.encode(["a": optionalData as Any], options: .init(encode: false))
+        #expect(plain == "a=a b")
+
+        let comma = try Qs.encode(
+            ["a": [optionalData as Any]],
+            options: .init(listFormat: .comma, encode: false)
+        )
+        #expect(comma == "a=a b")
+    }
+
     @Test("encode - encodes a date value (non-Strings)")
     func testEncodeDateValue_Primitive() async throws {
         let now = Date()
@@ -3716,6 +3786,638 @@ struct EncodeTests {
         }
     #endif
 
+    @Test("Encoder.encode strictNullHandling key-only path for nil values")
+    func encoder_strictNullHandling_nilKeyOnly() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+
+        let noEncoder = try Encoder.encode(
+            data: nil,
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "flag",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: true,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 0
+        )
+        #expect(noEncoder as? String == "flag")
+
+        let identity: ValueEncoder = { value, _, _ in String(describing: value ?? "") }
+        let withEncoder = try Encoder.encode(
+            data: nil,
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "flag",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: true,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: identity,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 0
+        )
+        #expect(withEncoder as? String == "flag")
+    }
+
+    @Test("Encoder.encode deep fallback handles list traversal")
+    func encoder_iterativeFallback_listTraversal() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        let result = try Encoder.encode(
+            data: [1, 2],
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+        let s = (result as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+        #expect(s == "a[0]=1&a[1]=2")
+    }
+
+    @Test("Encoder.encode deep fallback does not flag large acyclic input as cyclic")
+    func encoder_iterativeFallback_largeAcyclic_noFalseCycle() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        let large: [Any] = Array(repeating: [Any](), count: 250_001)
+
+        let result = try Encoder.encode(
+            data: large,
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+
+        if let array = result as? [Any] {
+            #expect(array.isEmpty)
+        } else {
+            Issue.record("Expected empty encoded parts for acyclic empty children")
+        }
+    }
+
+    #if canImport(Darwin)
+        @Test("Encoder.encode deep fallback detects NSDictionary cycles")
+        func encoder_iterativeFallback_detectsNSDictionaryCycle() throws {
+            let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+            let cyclic = NSMutableDictionary()
+            cyclic["self"] = cyclic
+
+            #expect(throws: EncodeError.cyclicObject) {
+                _ = try Encoder.encode(
+                    data: cyclic,
+                    undefined: false,
+                    sideChannel: sideChannel,
+                    prefix: "a",
+                    listFormat: .indices,
+                    commaRoundTrip: false,
+                    allowEmptyLists: false,
+                    strictNullHandling: false,
+                    skipNulls: false,
+                    encodeDotInKeys: false,
+                    encoder: nil,
+                    serializeDate: nil,
+                    sort: nil,
+                    filter: nil,
+                    allowDots: false,
+                    format: .rfc3986,
+                    formatter: nil,
+                    encodeValuesOnly: false,
+                    charset: .utf8,
+                    addQueryPrefix: false,
+                    depth: 512
+                )
+            }
+        }
+    #endif
+
+    @Test("Encoder.encode deep fallback handles NSDictionary traversal")
+    func encoder_iterativeFallback_nsdictionaryTraversal() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        let result = try Encoder.encode(
+            data: NSDictionary(dictionary: ["b": 2]),
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+        let s = (result as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+        #expect(s == "a[b]=2")
+    }
+
+    @Test("Encoder.encode deep fallback handles scalar edge cases")
+    func encoder_iterativeFallback_scalarEdges() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+
+        let nilResult = try Encoder.encode(
+            data: nil,
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+        #expect((nilResult as? [Any])?.map { String(describing: $0) } == ["a="])
+
+        let nullResult = try Encoder.encode(
+            data: NSNull(),
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+        #expect((nullResult as? [Any])?.map { String(describing: $0) } == ["a="])
+    }
+
+    @Test("Encoder.encode deep fallback NSNull path uses custom encoder")
+    func encoder_iterativeFallback_nsnullCustomEncoder() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        let custom: ValueEncoder = { value, _, _ in
+            if let key = value as? String { return "k_\(key)" }
+            guard let value else { return "null_token" }
+            return "v_\(String(describing: value))"
+        }
+
+        let result = try Encoder.encode(
+            data: NSNull(),
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: custom,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+        #expect((result as? [Any])?.map { String(describing: $0) } == ["k_a=k_"])
+    }
+
+    @Test("Encoder.encode deep fallback tracks NSArray roots for cycle identity")
+    func encoder_iterativeFallback_nsarrayRootUsesContainerIdentity() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        let result = try Encoder.encode(
+            data: NSArray(array: [1, 2]),
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+        let s = (result as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+        #expect(s == "a[0]=1&a[1]=2")
+    }
+
+    @Test("Encoder.encode deep fallback orders OrderedDictionary primitives before containers")
+    func encoder_iterativeFallback_orderedDictionaryPartition_withEncoder() throws {
+        var data = OrderedDictionary<String, Any>()
+        data["b"] = ["x": 1]
+        data["a"] = 1
+        data["c"] = 2
+
+        let identity: ValueEncoder = { value, _, _ in String(describing: value ?? "") }
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        let result = try Encoder.encode(
+            data: data,
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: identity,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+        let s = (result as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+        #expect(s == "a[a]=1&a[c]=2&a[b][x]=1")
+    }
+
+    @Test("Encoder.encode deep fallback orders NSDictionary primitives before containers with encoder")
+    func encoder_iterativeFallback_nsdictionaryPartition_withEncoder_depth512() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        let data = NSDictionary(
+            dictionary: [
+                NSNumber(value: 2): NSDictionary(dictionary: ["x": 1]),
+                NSNumber(value: 1): 1,
+                NSNumber(value: 3): 3,
+            ])
+        let identity: ValueEncoder = { value, _, _ in String(describing: value ?? "") }
+
+        let result = try Encoder.encode(
+            data: data,
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: identity,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+        let s = (result as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+        #expect(s == "a[1]=1&a[3]=3&a[2][x]=1")
+    }
+
+    @Test("Encoder.encode deep fallback default-entry path returns empty parts for Undefined")
+    func encoder_iterativeFallback_defaultEntryPath_undefined() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        let result = try Encoder.encode(
+            data: Undefined.instance,
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+        if let parts = result as? [Any] {
+            #expect(parts.isEmpty)
+        } else {
+            Issue.record("Expected [Any] output for deep fallback Undefined path")
+        }
+    }
+
+    @Test("Encoder.encode drops top-level NSNull when skipNulls is true")
+    func encoder_skipNulls_topLevelNSNull() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        let result = try Encoder.encode(
+            data: NSNull(),
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: true,
+            skipNulls: true,
+            encodeDotInKeys: false,
+            encoder: nil,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 0
+        )
+
+        if let array = result as? [Any] {
+            #expect(array.isEmpty)
+        } else {
+            Issue.record("Expected empty array for top-level NSNull + skipNulls, got: \(String(describing: result))")
+        }
+    }
+
+    @Test("Encoder.encode deep fallback covers date and custom encoder branches")
+    func encoder_iterativeFallback_dateAndCustomEncoder() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        let epoch = Date(timeIntervalSince1970: 0)
+
+        let dateResult = try Encoder.encode(
+            data: epoch,
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+        let dateString = (dateResult as? [Any])?.first as? String
+        #expect(dateString == "a=1970-01-01T00:00:00.000Z")
+
+        let custom: ValueEncoder = { value, _, _ in
+            "[\(String(describing: value ?? ""))]"
+        }
+        let customResult = try Encoder.encode(
+            data: 7,
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: custom,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 512
+        )
+        #expect((customResult as? [Any])?.map { String(describing: $0) } == ["[a]=[7]"])
+    }
+
+    @Test("Encoder.encode nested NSDictionary branch partitions primitive and container keys")
+    func encoder_nsdictionaryPartition_withEncoder() throws {
+        let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        let data = NSDictionary(
+            dictionary: [
+                NSNumber(value: 2): NSDictionary(dictionary: ["x": 1]),
+                NSNumber(value: 1): 1,
+            ])
+        let identity: ValueEncoder = { value, _, _ in String(describing: value ?? "") }
+
+        let result = try Encoder.encode(
+            data: data,
+            undefined: false,
+            sideChannel: sideChannel,
+            prefix: "a",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: identity,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 1
+        )
+        let s = (result as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+        #expect(s == "a[1]=1&a[2][x]=1")
+    }
+
+    @Test("Encoder.encode deep fallback preserves [String: Any] ordering parity")
+    func encoder_iterativeFallback_preservesDictionaryOrderingParity() throws {
+        let identity: ValueEncoder = { value, _, _ in String(describing: value ?? "") }
+        let data: [String: Any] = [
+            "b": ["x": 1],
+            "a": 1,
+            "c": 2,
+        ]
+
+        func encodeParts(depth: Int) throws -> [String] {
+            let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+            let result = try Encoder.encode(
+                data: data,
+                undefined: false,
+                sideChannel: sideChannel,
+                prefix: "a",
+                listFormat: .indices,
+                commaRoundTrip: false,
+                allowEmptyLists: false,
+                strictNullHandling: false,
+                skipNulls: false,
+                encodeDotInKeys: false,
+                encoder: identity,
+                serializeDate: nil,
+                sort: nil,
+                filter: nil,
+                allowDots: false,
+                format: .rfc3986,
+                formatter: nil,
+                encodeValuesOnly: false,
+                charset: .utf8,
+                addQueryPrefix: false,
+                depth: depth
+            )
+            return (result as? [Any])?.map { String(describing: $0) } ?? []
+        }
+
+        let recursiveParts = try encodeParts(depth: 255)
+        let fallbackParts = try encodeParts(depth: 256)
+        let expected = ["a[a]=1", "a[c]=2", "a[b][x]=1"]
+        #expect(recursiveParts == expected)
+        #expect(fallbackParts == expected)
+        #expect(recursiveParts == fallbackParts)
+    }
+
+    @Test("Encoder.encode deep fallback preserves NSDictionary ordering parity")
+    func encoder_iterativeFallback_preservesNSDictionaryOrderingParity() throws {
+        let data = NSDictionary(
+            dictionary: [
+                NSNumber(value: 2): NSDictionary(dictionary: ["x": 1]),
+                NSNumber(value: 1): 1,
+                NSNumber(value: 3): 3,
+            ])
+
+        func encodeParts(depth: Int) throws -> [String] {
+            let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+            let result = try Encoder.encode(
+                data: data,
+                undefined: false,
+                sideChannel: sideChannel,
+                prefix: "a",
+                listFormat: .indices,
+                commaRoundTrip: false,
+                allowEmptyLists: false,
+                strictNullHandling: false,
+                skipNulls: false,
+                encodeDotInKeys: false,
+                encoder: nil,
+                serializeDate: nil,
+                sort: nil,
+                filter: nil,
+                allowDots: false,
+                format: .rfc3986,
+                formatter: nil,
+                encodeValuesOnly: false,
+                charset: .utf8,
+                addQueryPrefix: false,
+                depth: depth
+            )
+            return (result as? [Any])?.map { String(describing: $0) } ?? []
+        }
+
+        let recursiveParts = try encodeParts(depth: 255)
+        let fallbackParts = try encodeParts(depth: 256)
+        #expect(recursiveParts == fallbackParts)
+    }
+
     #if canImport(Darwin)
         @Test("Encoder.encode emits empty list shell when allowEmptyLists is true")
         func encoder_allowEmptyLists_emitsBracket() throws {
@@ -3749,6 +4451,23 @@ struct EncodeTests {
             } else {
                 Issue.record("Expected string output for empty list, got: \(String(describing: result))")
             }
+        }
+    #endif
+
+    #if DEBUG && os(macOS)
+        @MainActor
+        @Test("encode: very deep nested maps do not overflow stack")
+        func encode_veryDeepMaps_noStackOverflow() throws {
+            let depth = 1_700
+
+            var leaf: Any? = ["v": "x"] as [String: Any]
+            for _ in 0..<depth {
+                leaf = ["p": leaf as Any]
+            }
+
+            let encoded = try Qs.encode(["root": leaf as Any], options: .init(encode: false))
+            #expect(encoded.hasPrefix("root"))
+            #expect(encoded.hasSuffix("=x"))
         }
     #endif
 
@@ -3806,6 +4525,33 @@ struct EncodeTests {
         // Post-scope, both key and value had only weak references in the table.
         // We can’t force ARC to collect deterministically; existence checks here are best‑effort.
         #expect(true)
+    }
+
+    @Test("Linux shim: NSMapTable strongToStrongObjects retains key/value strongly")
+    func linuxShim_NSMapTable_strong_retainSemantics() throws {
+        final class Foo: NSObject {}
+
+        weak var weakKey: Foo?
+        weak var weakValue: Foo?
+
+        let table = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+        do {
+            let key = Foo()
+            let value = Foo()
+            weakKey = key
+            weakValue = value
+
+            table.setObject(value, forKey: key)
+            #expect(table.object(forKey: key) === value)
+        }
+
+        #expect(weakKey != nil)
+        #expect(weakValue != nil)
+        if let retainedKey = weakKey {
+            #expect(table.object(forKey: retainedKey) != nil)
+        } else {
+            Issue.record("Expected key to be strongly retained by strongToStrongObjects")
+        }
     }
 #endif
 

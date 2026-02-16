@@ -106,6 +106,21 @@ struct DecodeTests {
         #expect(inner?.last as? String == "values")
     }
 
+    @Test("Decoder.parseObject falls back to zero list length for non-integer parent keys")
+    func parseObject_nonIntegerParentKeyFallsBackToZeroListLength() throws {
+        let parsed = try Decoder.parseObject(
+            chain: ["parent", "[]"],
+            value: "new",
+            options: DecodeOptions(),
+            valuesParsed: false
+        )
+
+        let dict = parsed as? [String: Any]
+        let list = dict?["parent"] as? [Any]
+        #expect(list?.count == 1)
+        #expect(list?.first as? String == "new")
+    }
+
     @Test("parseQueryStringValues - duplicates policy")
     func testDuplicatesPolicy() throws {
         // combine
@@ -293,6 +308,108 @@ struct DecodeTests {
                 String(describing: error)
                     == "List limit exceeded. Only 3 elements allowed in a list.")
         }
+    }
+
+    @Test("comma: listLimit 0 throws before comma split when throwOnLimitExceeded is enabled")
+    func testComma_ListLimit_Zero_Throws() throws {
+        let opts = DecodeOptions(listLimit: 0, comma: true, throwOnLimitExceeded: true)
+        #expect(throws: DecodeError.listLimitExceeded(limit: 0)) {
+            _ = try Qs.decode("a=b,c", options: opts)
+        }
+    }
+
+    @Test("comma: non-throwing overflow falls back to indexed map (qs 6.14.2 parity)")
+    func testComma_ListLimit_NonThrowingOverflowFallsBackToMap() throws {
+        let opts = DecodeOptions(listLimit: 1, comma: true, throwOnLimitExceeded: false)
+        let r = try Qs.decode("a=b,c", options: opts)
+        let a = asDictString(r["a"])
+        #expect((a?["0"] as? String) == "b")
+        #expect((a?["1"] as? String) == "c")
+    }
+
+    @Test("comma: explicit [] key keeps list-of-lists shape on non-throw overflow")
+    func testComma_ListLimit_NonThrowingOverflowExplicitArrayKeyKeepsListShape() throws {
+        let opts = DecodeOptions(listLimit: 1, comma: true, throwOnLimitExceeded: false)
+        let r = try Qs.decode("a[]=b,c", options: opts)
+        let a = r["a"] as? [Any]
+        let first = a?.first as? [Any]
+        #expect(a?.count == 1)
+        #expect(first?.compactMap { $0 as? String } == ["b", "c"])
+    }
+
+    @Test("comma: explicit [] huge overflow keeps sparse map to avoid dense allocation")
+    func testComma_ListLimit_NonThrowingOverflowExplicitArrayKeyHugeStaysOverflowMap() throws {
+        let opts = DecodeOptions(listLimit: 1, comma: true, throwOnLimitExceeded: false)
+        let count = 5_000
+        let rhs = Array(repeating: "x", count: count).joined(separator: ",")
+
+        let r = try Qs.decode("a[]=\(rhs)", options: opts)
+        let a = asDictString(r["a"])
+        #expect((a?["0"] as? String) == "x")
+        #expect((a?["\(count - 1)"] as? String) == "x")
+    }
+
+    @Test("comma: negative list limit still falls back to indexed map when non-throwing")
+    func testComma_NegativeListLimit_NonThrowingFallsBackToMap() throws {
+        let opts = DecodeOptions(listLimit: -1, comma: true, throwOnLimitExceeded: false)
+        let r = try Qs.decode("a=b,c", options: opts)
+        let a = asDictString(r["a"])
+        #expect((a?["0"] as? String) == "b")
+        #expect((a?["1"] as? String) == "c")
+    }
+
+    @Test("comma overflow fallback applies only on true first occurrence")
+    func testComma_ListLimit_NonThrowingDuplicateKeyStaysFlat() throws {
+        let opts = DecodeOptions(listLimit: 1, comma: true, throwOnLimitExceeded: false)
+        let r = try Qs.decode("a=x&a=b,c", options: opts)
+        let a = asDictString(r["a"])
+        #expect((a?["0"] as? String) == "x")
+        #expect((a?["1"] as? String) == "b")
+        #expect((a?["2"] as? String) == "c")
+    }
+
+    @Test("comma overflow fallback still percent-decodes split elements")
+    func testComma_ListLimit_NonThrowingOverflowDecodesElements() throws {
+        let opts = DecodeOptions(listLimit: 1, comma: true, throwOnLimitExceeded: false)
+        let r = try Qs.decode("a=b%20c,d%20e", options: opts)
+        let a = asDictString(r["a"])
+        #expect((a?["0"] as? String) == "b c")
+        #expect((a?["1"] as? String) == "d e")
+    }
+
+    @Test("comma overflow fallback applies custom scalar decoder per element")
+    func testComma_ListLimit_NonThrowingOverflowAppliesCustomDecoder() throws {
+        let decoder: ScalarDecoder = { token, _, kind in
+            guard kind == .value else { return token }
+            guard let token else { return nil }
+            return "X:\(token)"
+        }
+
+        let opts = DecodeOptions(
+            decoder: decoder,
+            listLimit: 1,
+            comma: true,
+            throwOnLimitExceeded: false
+        )
+        let r = try Qs.decode("a=b,c", options: opts)
+        let a = asDictString(r["a"])
+        #expect((a?["0"] as? String) == "X:b")
+        #expect((a?["1"] as? String) == "X:c")
+    }
+
+    @Test("comma overflow + iso entities preserves map shape")
+    func testComma_ListLimit_NonThrowingOverflowIsoEntitiesPreserveMap() throws {
+        let opts = DecodeOptions(
+            listLimit: 1,
+            charset: .isoLatin1,
+            comma: true,
+            interpretNumericEntities: true,
+            throwOnLimitExceeded: false
+        )
+        let r = try Qs.decode("a=1,%26%239786%3B", options: opts)
+        let a = asDictString(r["a"])
+        #expect((a?["0"] as? String) == "1")
+        #expect((a?["1"] as? String) == "☺")
     }
 
     @Test("allows enabling dot notation")
@@ -1706,6 +1823,39 @@ struct DoesNotCrashTests {
             actual += 1
         }
         #expect(actual == depth)
+    }
+
+    @Test("decode - deep merge conflict does not overflow stack")
+    func testDecode_DeepMergeConflict_NoStackOverflow() throws {
+        let depth = 1_200
+        var left = "root"
+        var right = "root"
+        for _ in 0..<depth {
+            left += "[p]"
+            right += "[p]"
+        }
+        left += "[left]=1"
+        right += "[right]=2"
+
+        let decoded = try Qs.decode(
+            "\(left)&\(right)",
+            options: .init(depth: depth + 2)
+        )
+
+        var node: Any? = decoded["root"]
+        var traversed = 0
+        while traversed < depth {
+            guard let map = node as? [String: Any], let next = map["p"] else {
+                Issue.record("Expected nested map at depth \(traversed)")
+                return
+            }
+            node = next
+            traversed += 1
+        }
+
+        let leaf = node as? [String: Any]
+        #expect(leaf?["left"] as? String == "1")
+        #expect(leaf?["right"] as? String == "2")
     }
 
     #if DEBUG && os(macOS)

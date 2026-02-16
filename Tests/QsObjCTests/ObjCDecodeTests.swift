@@ -122,6 +122,85 @@
             #expect(err != nil)
         }
 
+        @Test("objc-decode: comma non-throw overflow falls back to indexed map")
+        func commaLimitNonThrowFallback() throws {
+            let r = decode("a=b,c") { o in
+                o.comma = true
+                o.listLimit = 1
+                o.throwOnLimitExceeded = false
+            }
+            let a = r["a"] as? NSDictionary
+            #expect(a?["0"] as? String == "b")
+            #expect(a?["1"] as? String == "c")
+        }
+
+        @Test("objc-decode: explicit [] key keeps list-of-lists shape on non-throw overflow")
+        func commaLimitNonThrowFallbackExplicitArrayKeyKeepsListShape() throws {
+            let r = decode("a[]=b,c") { o in
+                o.comma = true
+                o.listLimit = 1
+                o.throwOnLimitExceeded = false
+            }
+            let a = r["a"] as? [Any]
+            let first = a?.first as? [Any]
+            #expect(a?.count == 1)
+            #expect(first?.compactMap { $0 as? String } == ["b", "c"])
+        }
+
+        @Test("objc-decode: comma negative list limit still falls back to indexed map")
+        func commaNegativeLimitNonThrowFallback() throws {
+            let r = decode("a=b,c") { o in
+                o.comma = true
+                o.listLimit = -1
+                o.throwOnLimitExceeded = false
+            }
+            let a = r["a"] as? NSDictionary
+            #expect(a?["0"] as? String == "b")
+            #expect(a?["1"] as? String == "c")
+        }
+
+        @Test("objc-decode: comma non-throw fallback percent-decodes split elements")
+        func commaLimitNonThrowFallbackDecodesElements() throws {
+            let r = decode("a=b%20c,d%20e") { o in
+                o.comma = true
+                o.listLimit = 1
+                o.throwOnLimitExceeded = false
+            }
+            let a = r["a"] as? NSDictionary
+            #expect(a?["0"] as? String == "b c")
+            #expect(a?["1"] as? String == "d e")
+        }
+
+        @Test("objc-decode: comma non-throw fallback applies custom decoder")
+        func commaLimitNonThrowFallbackAppliesCustomDecoder() throws {
+            let r = decode("a=b,c") { o in
+                o.comma = true
+                o.listLimit = 1
+                o.throwOnLimitExceeded = false
+                o.decoderBlock = { token, _, kind in
+                    guard kind?.intValue == 1, let token = token as String? else { return token }
+                    return "X:\(token)" as NSString
+                }
+            }
+            let a = r["a"] as? NSDictionary
+            #expect(a?["0"] as? String == "X:b")
+            #expect(a?["1"] as? String == "X:c")
+        }
+
+        @Test("objc-decode: comma overflow + iso entities preserves indexed map")
+        func commaLimitNonThrowFallbackIsoEntitiesPreserveMap() throws {
+            let r = decode("a=1,%26%239786%3B") { o in
+                o.comma = true
+                o.listLimit = 1
+                o.throwOnLimitExceeded = false
+                o.charset = String.Encoding.isoLatin1.rawValue
+                o.interpretNumericEntities = true
+            }
+            let a = r["a"] as? NSDictionary
+            #expect(a?["0"] as? String == "1")
+            #expect(a?["1"] as? String == "☺")
+        }
+
         // MARK: - Dot / decodeDotInKeys combinations (subset)
 
         @Test("objc-decode: dot key combinations subset")
