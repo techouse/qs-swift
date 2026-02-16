@@ -1,4 +1,4 @@
-## 1.3.0-wip
+## 1.3.0
 
 - [FIX] harden deep encoding paths with iterative fallback to prevent stack overflows on very deep nested payloads, while preserving cycle detection and deterministic traversal behavior.
 - [FIX] improve scalar/optional encoding correctness: properly unwrap `Optional.some`, preserve `Data` stringification behavior (including malformed UTF-8 visibility), and keep set-like scalar values on the scalar encode path.
