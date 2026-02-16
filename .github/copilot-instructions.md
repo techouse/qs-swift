@@ -38,9 +38,11 @@ When implementing a new option or behavior:
 
 ## 6. Testing Guidelines
 - Run `make test` (exports `SWIFT_DETERMINISTIC_HASHING=1`). Release validation: `make test-release`.
+- SwiftPM tests in `Tests/QsSwiftTests` and `Tests/QsObjCTests` use `apple/swift-testing` (`@Test`, `#expect`).
+- Use `swift test --filter TypeName/testCase` for targeted SwiftPM runs.
 - Add new fixtures beside similar ones; for end-to-end cases, mutate `EndToEndTestCases.swift` only with `OrderedDictionary`.
 - Prefer explicit assertion helpers over vague equality when validating ordering or null semantics.
-- For ObjC tests use `QsObjCTests` and ensure key ordering expectations either avoid relying on `NSDictionary` enumeration order or explicitly sort.
+- For ObjC bridge tests use `QsObjCTests`; for host-level ObjC E2E tests use `ObjCE2ETests` (XCTest). Ensure key ordering expectations either avoid relying on `NSDictionary` enumeration order or explicitly sort.
 
 ## 7. Bench & Comparison
 - Use `Bench/` for micro performance checks (optional). Run with `swift build -c release` inside `Bench/`.

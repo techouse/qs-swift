@@ -3,6 +3,7 @@
 /Packages
 xcuserdata/
 DerivedData/
+.derivedData*/
 .swiftpm/configuration/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .swiftpm/cache
@@ -15,4 +16,3 @@ docs/
 core
 core.*
 vgcore.*
-AGENTS.md

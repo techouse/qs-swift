@@ -1,3 +1,16 @@
+## 1.3.0-wip
+
+- [FIX] harden deep encoding paths with iterative fallback to prevent stack overflows on very deep nested payloads, while preserving cycle detection and deterministic traversal behavior.
+- [FIX] improve scalar/optional encoding correctness: properly unwrap `Optional.some`, preserve `Data` stringification behavior (including malformed UTF-8 visibility), and keep set-like scalar values on the scalar encode path.
+- [FIX] align comma-list decode overflow behavior with `qs@6.14.2`: non-throwing first-occurrence overflows now fall back to indexed overflow maps, preserve explicit `[]` list-of-lists semantics, and apply decoder/entity transforms without shape loss.
+- [FIX] add overflow safety guards in decode materialization and list-length accounting (safe overflow arithmetic, bounded dense materialization floor, and metadata/key max-index reconciliation).
+- [FIX] make deep dictionary merges iterative to avoid recursion blowups and preserve overflow metadata/max-index reconciliation in nested merge scenarios.
+- [FIX][ObjC] normalize bridged decode/encode options (charset, depth, parameterLimit, dot flags) and preserve nested filter traversal when ObjC function filters return the original value object.
+- [FIX][Linux] extend `NSMapTable` shim with strong-to-strong storage semantics and safer weak-mode behavior; bump ReerKit dependency to `1.2.5`.
+- [TEST] expand Swift + ObjC regression coverage for deep encode/decode paths, comma overflow edge cases, merge overflow metadata behavior, ObjC async decode error delivery, and ObjC option/model bridging.
+- [CI] add Address Sanitizer deep-regression checks for Swift and ObjC encode paths on macOS runners; enable previously experimental matrix entries for regular validation.
+- [CHORE] update JS comparison fixture dependency to `qs@6.14.2` and refresh contributor/agent testing guidance docs.
+
 ## 1.2.1
 
 - [FIX] enhance Utils with overflow handling and list limit enforcement
