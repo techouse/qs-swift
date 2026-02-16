@@ -3,36 +3,129 @@ import OrderedCollections
 
 /// A collection of utility methods used by the library.
 internal enum Utils {
+    private final class GenericContainerTypeNameCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage: [ObjectIdentifier: Bool] = [:]
+
+        @inline(__always)
+        func value(for key: ObjectIdentifier) -> Bool? {
+            lock.lock()
+            defer { lock.unlock() }
+            return storage[key]
+        }
+
+        @inline(__always)
+        func set(_ value: Bool, for key: ObjectIdentifier) {
+            lock.lock()
+            defer { lock.unlock() }
+            storage[key] = value
+        }
+    }
+
+    private static let genericContainerTypeNameCache = GenericContainerTypeNameCache()
+
     // MARK: - Non-nullish Primitive Check
 
     /// Checks if a value is a non-nullish primitive type. A non-nullish primitive is defined as a
-    /// String, Number, Bool, enum, Date, or URL. If `skipNulls` is true, empty Strings and URLs are also considered non-nullish.
+    /// String, Number, Bool, enum, Date, or URL.
+    /// When `skipNulls == true`, empty `String` and empty `URL`/`NSURL` absolute-string values
+    /// are treated as null/ignored (this function returns `false` for them).
+    /// When `skipNulls == false`, those empty string/URL values are considered present
+    /// (this function returns `true` for them).
     ///
     /// - Parameters:
     ///   - value: The value to check.
-    ///   - skipNulls: If true, empty Strings and URLs are not considered non-nullish.
+    ///   - skipNulls: Controls empty string/URL handling (`true` => return `false`, `false` => return `true`).
     /// - Returns: True if the value is a non-nullish primitive, false otherwise.
     @usableFromInline
     static func isNonNullishPrimitive(_ value: Any?, skipNulls: Bool = false) -> Bool {
-        switch value {
-        case let string as String:
+        guard let value else { return false }
+
+        if let string = value as? String {
             return skipNulls ? !string.isEmpty : true
-        case is NSNumber, is Bool, is Date:
-            return true
-        case let url as URL:
-            return skipNulls ? !url.absoluteString.isEmpty : true
-        case is [Any],
-            is [AnyHashable: Any],
-            is OrderedDictionary<String, Any>,
-            is OrderedDictionary<AnyHashable, Any>,
-            is NSDictionary,
-            is Undefined:
-            return false
-        case nil:
-            return false
-        default:
+        }
+        if value is Bool
+            || value is Int || value is Int8 || value is Int16 || value is Int32 || value is Int64
+            || value is UInt || value is UInt8 || value is UInt16 || value is UInt32 || value is UInt64
+            || value is Float || value is Double
+            || value is Decimal
+            || value is Date
+        {
             return true
         }
+        #if os(macOS) && arch(arm64)
+            if #available(macOS 11, *) {
+                if value is Float16 { return true }
+            }
+        #elseif os(iOS) && !targetEnvironment(macCatalyst)
+            if #available(iOS 14, *) {
+                if value is Float16 { return true }
+            }
+        #elseif os(tvOS)
+            if #available(tvOS 14, *) {
+                if value is Float16 { return true }
+            }
+        #elseif os(watchOS)
+            if #available(watchOS 7, *) {
+                if value is Float16 { return true }
+            }
+        #endif
+        if let url = value as? URL {
+            return skipNulls ? !url.absoluteString.isEmpty : true
+        }
+
+        if value is Undefined {
+            return false
+        }
+
+        // For class-backed values, class casts are safe and avoid reflective type-name allocation.
+        if Swift.type(of: value) is AnyClass {
+            let object = value as AnyObject
+            if object is NSDictionary || object is NSArray { return false }
+            if object is NSNumber || object is NSDate { return true }
+            if let nsURL = object as? NSURL {
+                let urlString = nsURL.absoluteString ?? ""
+                return skipNulls ? !urlString.isEmpty : true
+            }
+            return true
+        }
+
+        // Fast path for common native container shapes used by the encoder.
+        if value is [Any]
+            || value is [Any?]
+            || value is [String: Any]
+            || value is [AnyHashable: Any]
+            || value is OrderedDictionary<String, Any>
+            || value is OrderedDictionary<AnyHashable, Any>
+        {
+            return false
+        }
+
+        // Fallback for uncommon generic container payloads without eager value bridging.
+        if isGenericContainerTypeByName(value) {
+            return false
+        }
+
+        return true
+    }
+
+    @inline(__always)
+    private static func isGenericContainerTypeByName(_ value: Any) -> Bool {
+        let runtimeType = Swift.type(of: value)
+        let cacheKey = ObjectIdentifier(runtimeType)
+
+        if let cached = genericContainerTypeNameCache.value(for: cacheKey) {
+            return cached
+        }
+
+        let typeName = String(reflecting: runtimeType)
+        let isGenericContainerType =
+            typeName.contains("Dictionary<")
+            || typeName.contains("OrderedDictionary<")
+            || typeName.contains("Array<")
+
+        genericContainerTypeNameCache.set(isGenericContainerType, for: cacheKey)
+        return isGenericContainerType
     }
 
     // MARK: - Is Empty Check
@@ -84,7 +177,7 @@ internal enum Utils {
 
         while let task = stack.popLast() {
             switch task {
-            case let .build(node, assign):
+            case .build(let node, let assign):
                 guard let node else {
                     assign(NSNull())
                     continue
@@ -141,10 +234,10 @@ internal enum Utils {
 
                 assign(node)
 
-            case let .commitDict(box, assign):
+            case .commitDict(let box, let assign):
                 assign(box.dict)
 
-            case let .commitArray(box, assign):
+            case .commitArray(let box, let assign):
                 assign(box.arr)
             }
         }
