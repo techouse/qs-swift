@@ -119,10 +119,20 @@ internal enum Utils {
         }
 
         let typeName = String(reflecting: runtimeType)
-        let isGenericContainerType =
-            typeName.contains("Dictionary<")
-            || typeName.contains("OrderedDictionary<")
-            || typeName.contains("Array<")
+        let isGenericContainerType: Bool = {
+            guard let genericStart = typeName.firstIndex(of: "<") else { return false }
+            let qualifiedTypeName = typeName[..<genericStart]
+            let typeBaseName: Substring
+            if let lastDot = qualifiedTypeName.lastIndex(of: ".") {
+                typeBaseName = qualifiedTypeName[qualifiedTypeName.index(after: lastDot)...]
+            } else {
+                typeBaseName = qualifiedTypeName
+            }
+
+            return typeBaseName == "Dictionary"
+                || typeBaseName == "OrderedDictionary"
+                || typeBaseName == "Array"
+        }()
 
         genericContainerTypeNameCache.set(isGenericContainerType, for: cacheKey)
         return isGenericContainerType
