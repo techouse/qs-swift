@@ -56,13 +56,15 @@ public func runCommand(
 
     let stdout = try FileHandle(forWritingTo: stdoutURL)
     let stderr = try FileHandle(forWritingTo: stderrURL)
+    defer {
+        try? stdout.close()
+        try? stderr.close()
+    }
     process.standardOutput = stdout
     process.standardError = stderr
 
     try process.run()
     process.waitUntilExit()
-    try stdout.close()
-    try stderr.close()
 
     let outData = try Data(contentsOf: stdoutURL)
     let errData = try Data(contentsOf: stderrURL)
