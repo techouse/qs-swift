@@ -1,3 +1,15 @@
+## 1.3.1
+
+- [PERF] refactor `Encoder` to a fully iterative traversal core with linked key-path caching (`KeyPathNode`), immutable per-traversal config (`EncodeConfig`), explicit traversal frames (`EncodeFrame`), and O(1) active-path cycle checks for class-backed containers.
+- [PERF] add a guarded deep linear-chain encode fast path for simple `encode=false` map payloads and optimize iterative single-key frame completion/segment reuse to reduce per-depth overhead at `2000/5000/12000`.
+- [PERF] reduce top-level `Qs.encode` overhead by hoisting encoder/date/list-format option derivations out of the per-key loop.
+- [PERF][ObjC] make encode bridging one-pass (`bridgeInputForEncode(_:bridgeUndefined:)`) so `QsBridge.encode` no longer performs two full-tree conversions before calling the Swift core.
+- [BENCH] add deep-encode snapshot mode to `QsSwiftBench` for parity matrix runs (`2000/5000/12000`, `20/20/8`, median-of-7) including ObjC bridge timings.
+- [BENCH] add `Bench/scripts/perf_compare.sh` JSON summary/delta workflow and commit `Bench/baselines/encode_deep_snapshot_baseline.json`.
+- [BENCH] refresh deep-encode baseline medians after encoder optimizations: Swift `0.321/0.799/2.344 ms/op`, ObjC bridge `2.261/5.518/12.924 ms/op` (`depth=2000/5000/12000`).
+- [TEST] add encoder-internal regression tests (key-path cache behavior + iterative mixed payload traversal) and opt-in Swift/ObjC performance guardrail tests (`QS_ENABLE_PERF_GUARDRAILS=1`).
+- [DOCS] document perf snapshot, compare, and guardrail commands in `Bench/README.md` and add Makefile helpers (`perf-snapshot`, `perf-compare`).
+
 ## 1.3.0
 
 - [FIX] harden deep encoding paths with iterative fallback to prevent stack overflows on very deep nested payloads, while preserving cycle detection and deterministic traversal behavior.
@@ -66,3 +78,6 @@
 ## 1.0.0
 
 - [CHORE] Initial release of the project.
+
+[ObjC]: https://developer.apple.com/documentation/objectivec
+[Linux]: https://www.kernel.org/

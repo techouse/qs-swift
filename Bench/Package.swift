@@ -16,7 +16,8 @@ let package = Package(
         .executableTarget(
             name: "QsSwiftBench",
             dependencies: [
-                .product(name: "QsSwift", package: "QsSwift")
+                .product(name: "QsSwift", package: "QsSwift"),
+                .product(name: "QsObjC", package: "QsSwift"),
             ]
         )
     ]
