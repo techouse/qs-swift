@@ -9,11 +9,11 @@
         //   - encodeOrNil:   returns nil on *error*; nil input is not an error → ""
         //   - encodeOrEmpty: returns "" on error (and on nil input)
         //
-        // Input is pre-bridged via `bridgeInputForEncode(_:)` to:
+        // Input is pre-bridged via `bridgeInputForEncode(_:bridgeUndefined:)` to:
         //   - convert Foundation containers (NSDictionary/NSArray/NSString) to Swift
         //   - produce OrderedDictionary<String, Any> for objects to preserve key order
+        //   - map `UndefinedObjC` → Swift `Undefined`
         //   - preserve identity on reference cycles (the encoder will report .cyclicObject)
-        // Then we translate `UndefinedObjC` → Swift `Undefined` while preserving order and cycles.
 
         /// Encode to a query string, returning `nil` only if encoding *throws*.
         ///
@@ -35,11 +35,9 @@
         /// - Bridges `UndefinedObjC` → Swift `Undefined`.
         @objc(encodeOrNil:options:)
         public static func encodeOrNil(_ data: Any?, options: EncodeOptionsObjC?) -> NSString? {
-            // 1) Convert to Swift containers (OrderedDictionary / [Any]), preserving cycles.
-            let ordered: Any? = data.map { QsBridge.bridgeInputForEncode($0) }
-            // 2) Bridge Undefined while preserving ordered shape and cycles.
-            let bridged = ordered.flatMap { QsBridge.bridgeUndefinedPreservingOrder($0) } ?? ordered
-            // 3) Encode (nil input is treated as empty → "")
+            // Convert + Undefined bridge in one pass while preserving order/cycle semantics.
+            let bridged: Any? = data.map { QsBridge.bridgeInputForEncode($0, bridgeUndefined: true) }
+            // Encode (nil input is treated as empty → "")
             let encoded = Qs.encodeOrNil(bridged, options: options?.swift ?? .init())
             return encoded.map(NSString.init)
         }
@@ -64,11 +62,9 @@
         /// - Bridges `UndefinedObjC` → Swift `Undefined`.
         @objc(encodeOrEmpty:options:)
         public static func encodeOrEmpty(_ data: Any?, options: EncodeOptionsObjC?) -> NSString {
-            // 1) Convert to Swift containers (OrderedDictionary / [Any]), preserving cycles.
-            let ordered: Any? = data.map { QsBridge.bridgeInputForEncode($0) }
-            // 2) Bridge Undefined while preserving ordered shape and cycles.
-            let bridged = ordered.flatMap { QsBridge.bridgeUndefinedPreservingOrder($0) } ?? ordered
-            // 3) Encode (nil input is treated as empty → "")
+            // Convert + Undefined bridge in one pass while preserving order/cycle semantics.
+            let bridged: Any? = data.map { QsBridge.bridgeInputForEncode($0, bridgeUndefined: true) }
+            // Encode (nil input is treated as empty → "")
             let encoded = Qs.encodeOrEmpty(bridged, options: options?.swift ?? .init())
             return encoded as NSString
         }
