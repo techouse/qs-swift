@@ -4,7 +4,13 @@ public struct PerfSummary: Decodable {
     public struct CaseRecord: Decodable {
         public let runtime: String
         public let depth: Int
-        public let ms_per_op_median: Double
+        public let msPerOpMedian: Double
+
+        private enum CodingKeys: String, CodingKey {
+            case runtime
+            case depth
+            case msPerOpMedian = "ms_per_op_median"
+        }
     }
 
     public let cases: [CaseRecord]
@@ -94,7 +100,7 @@ public func loadBaseline(runtime: String, root: URL = repoRootURL()) throws -> [
 
     return summary.cases.reduce(into: [Int: Double]()) { acc, entry in
         guard entry.runtime == runtime else { return }
-        acc[entry.depth] = entry.ms_per_op_median
+        acc[entry.depth] = entry.msPerOpMedian
     }
 }
 
