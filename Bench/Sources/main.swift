@@ -73,11 +73,11 @@ private func buildNestedSwift(depth: Int) -> [String: Any] {
 
 #if canImport(ObjectiveC)
     private func buildNestedObjC(depth: Int) -> NSDictionary {
-        var current: Any = NSDictionary(dictionary: ["leaf": "x"])
+        var current: NSDictionary = NSDictionary(dictionary: ["leaf": "x"])
         for _ in 0..<depth {
             current = NSDictionary(object: current, forKey: "a" as NSString)
         }
-        return current as! NSDictionary
+        return current
     }
 #endif
 
