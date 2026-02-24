@@ -28,6 +28,17 @@ public struct BenchCaseKey: Hashable {
 
 public let deepEncodePerfCases = [2000, 5000, 12000]
 
+private let benchOutputRegex: NSRegularExpression = {
+    do {
+        return try NSRegularExpression(
+            pattern: #"^\s*(swift|objc)\s+depth=\s*(\d+):\s*([0-9.]+)\s*ms/op"#,
+            options: []
+        )
+    } catch {
+        fatalError("Invalid bench output regex literal: \(error)")
+    }
+}()
+
 /// Resolves repo root by trimming `file -> TestSupport -> Tests -> repo root` from `#filePath`.
 /// This depends on this file remaining under `Tests/TestSupport`; if moved, update this function.
 public func repoRootURL() -> URL {
@@ -105,17 +116,12 @@ public func loadBaseline(runtime: String, root: URL = repoRootURL()) throws -> [
 }
 
 public func parseBenchOutput(_ output: String) throws -> [BenchCaseKey: Double] {
-    let regex = try NSRegularExpression(
-        pattern: #"^\s*(swift|objc)\s+depth=\s*(\d+):\s*([0-9.]+)\s*ms/op"#,
-        options: []
-    )
-
     var result: [BenchCaseKey: Double] = [:]
     for line in output.split(whereSeparator: \.isNewline) {
         let text = String(line)
         let range = NSRange(location: 0, length: text.utf16.count)
         guard
-            let match = regex.firstMatch(in: text, options: [], range: range),
+            let match = benchOutputRegex.firstMatch(in: text, options: [], range: range),
             match.numberOfRanges == 4,
             let runtimeRange = Range(match.range(at: 1), in: text),
             let depthRange = Range(match.range(at: 2), in: text),
