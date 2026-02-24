@@ -42,9 +42,13 @@ let package = Package(
                 .define("QS_OBJC_BRIDGE", .when(platforms: [.macOS, .iOS, .tvOS, .watchOS]))
             ]
         ),
+        .target(
+            name: "QsTestSupport",
+            path: "Tests/TestSupport"
+        ),
         .testTarget(
             name: "QsSwiftTests",
-            dependencies: ["QsSwift"],
+            dependencies: ["QsSwift", "QsTestSupport"],
             path: "Tests/QsSwiftTests"
         ),
         .testTarget(
@@ -52,6 +56,7 @@ let package = Package(
             dependencies: [
                 "QsSwift",
                 "QsObjC",
+                "QsTestSupport",
             ],
             path: "Tests/QsObjCTests"
         ),

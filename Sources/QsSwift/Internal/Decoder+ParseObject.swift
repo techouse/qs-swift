@@ -87,11 +87,11 @@ extension QsSwift.Decoder {
                     return root
                 }()
 
-                // Optionally decode "%2E" into "." for keys
+                // Optionally decode "%2E"/"%2e" into "." for keys.
+                // Use an ASCII scan to keep this hot-path check allocation-light.
                 let decodedRoot: String =
                     options.getDecodeDotInKeys
-                    ? cleanRoot.replacingOccurrences(
-                        of: "%2E", with: ".", options: .caseInsensitive)
+                    ? decodeDotEscapesInKey(cleanRoot)
                     : cleanRoot
 
                 // Parity: when list parsing is disabled or listLimit < 0,
@@ -122,5 +122,56 @@ extension QsSwift.Decoder {
         }
 
         return leaf
+    }
+
+    @inline(__always)
+    private static func decodeDotEscapesInKey(_ input: String) -> String {
+        let bytes = input.utf8
+        var i = bytes.startIndex
+        while i < bytes.endIndex {
+            if matchesPercent2E(bytes, at: i) {
+                var out: [UInt8] = []
+                out.reserveCapacity(bytes.count)
+
+                var j = bytes.startIndex
+                while j < bytes.endIndex {
+                    if matchesPercent2E(bytes, at: j),
+                        let j2 = bytes.index(j, offsetBy: 2, limitedBy: bytes.endIndex),
+                        j2 < bytes.endIndex
+                    {
+                        out.append(0x2E)  // "."
+                        j = bytes.index(after: j2)
+                        continue
+                    }
+
+                    out.append(bytes[j])
+                    j = bytes.index(after: j)
+                }
+
+                // swiftlint:disable:next optional_data_string_conversion
+                return String(decoding: out, as: UTF8.self)
+            }
+
+            i = bytes.index(after: i)
+        }
+
+        return input
+    }
+
+    @inline(__always)
+    private static func matchesPercent2E(_ bytes: String.UTF8View, at index: String.UTF8View.Index) -> Bool {
+        guard bytes[index] == 0x25 else { return false }  // "%"
+        guard
+            let i1 = bytes.index(index, offsetBy: 1, limitedBy: bytes.endIndex),
+            i1 < bytes.endIndex,
+            bytes[i1] == 0x32,  // "2"
+            let i2 = bytes.index(index, offsetBy: 2, limitedBy: bytes.endIndex),
+            i2 < bytes.endIndex
+        else {
+            return false
+        }
+
+        let third = bytes[i2]
+        return third == 0x45 || third == 0x65  // "E" | "e"
     }
 }

@@ -238,6 +238,57 @@
             }
         }
 
+        @Test("bridgeInputForEncode(one-pass): bridgeUndefined rewrites nested sentinels")
+        func encode_bridgeInputOnePass_undefinedRewrite() {
+            let payload: NSDictionary = [
+                "u": UndefinedObjC(),
+                "nested": [
+                    "x": UndefinedObjC(),
+                    "v": "1",
+                ],
+                "arr": [
+                    UndefinedObjC(),
+                    ["k": UndefinedObjC()],
+                ],
+            ]
+
+            let bridged = QsBridge.bridgeInputForEncode(payload, bridgeUndefined: true)
+            guard let out = bridged as? OrderedDictionary<String, Any> else {
+                Issue.record("Expected OrderedDictionary<String, Any>, got \(type(of: bridged))")
+                return
+            }
+
+            #expect(out["u"] is QsSwift.Undefined)
+
+            let nested = out["nested"] as? OrderedDictionary<String, Any>
+            #expect(nested?["x"] is QsSwift.Undefined)
+            #expect(nested?["v"] as? String == "1")
+
+            let arr = out["arr"] as? [Any]
+            #expect(arr?.first is QsSwift.Undefined)
+            let arrObj = arr?.dropFirst().first as? OrderedDictionary<String, Any>
+            #expect(arrObj?["k"] is QsSwift.Undefined)
+        }
+
+        @Test("bridgeInputForEncode(one-pass): preserves Foundation cycle identity")
+        func encode_bridgeInputOnePass_cycleIdentity() {
+            let dict = NSMutableDictionary()
+            dict["self"] = dict
+
+            let bridged = QsBridge.bridgeInputForEncode(dict, bridgeUndefined: true)
+            if let out = bridged as? OrderedDictionary<String, Any> {
+                #expect((out["self"] as AnyObject?) === dict)
+                return
+            }
+
+            if let out = bridged as? NSDictionary {
+                #expect((out["self"] as AnyObject?) === dict)
+                return
+            }
+
+            Issue.record("Unexpected bridged type: \(type(of: bridged))")
+        }
+
         @Test("bridgeInputForEncode: OrderedDictionary<NSString, Any> normalizes keys")
         func encode_orderedDictionaryNSString_keys() {
             let od = OrderedDictionary<NSString, Any>(uniqueKeysWithValues: [

@@ -1,0 +1,101 @@
+{
+  "cases": [
+    {
+      "depth": 2000,
+      "len": 6006,
+      "ms_per_op_median": 2.261,
+      "ms_per_op_values": [
+        2.204,
+        2.273,
+        2.234,
+        2.264,
+        2.26,
+        2.262,
+        2.261
+      ],
+      "runs": 7,
+      "runtime": "objc"
+    },
+    {
+      "depth": 5000,
+      "len": 15006,
+      "ms_per_op_median": 5.518,
+      "ms_per_op_values": [
+        5.337,
+        5.581,
+        5.374,
+        5.547,
+        5.518,
+        5.385,
+        5.562
+      ],
+      "runs": 7,
+      "runtime": "objc"
+    },
+    {
+      "depth": 12000,
+      "len": 36006,
+      "ms_per_op_median": 12.924,
+      "ms_per_op_values": [
+        12.9,
+        13.37,
+        12.862,
+        12.924,
+        12.897,
+        13.144,
+        13.529
+      ],
+      "runs": 7,
+      "runtime": "objc"
+    },
+    {
+      "depth": 2000,
+      "len": 6006,
+      "ms_per_op_median": 0.321,
+      "ms_per_op_values": [
+        0.327,
+        0.312,
+        0.328,
+        0.323,
+        0.321,
+        0.321,
+        0.315
+      ],
+      "runs": 7,
+      "runtime": "swift"
+    },
+    {
+      "depth": 5000,
+      "len": 15006,
+      "ms_per_op_median": 0.799,
+      "ms_per_op_values": [
+        1.003,
+        0.79,
+        0.81,
+        0.799,
+        0.796,
+        0.804,
+        0.798
+      ],
+      "runs": 7,
+      "runtime": "swift"
+    },
+    {
+      "depth": 12000,
+      "len": 36006,
+      "ms_per_op_median": 2.344,
+      "ms_per_op_values": [
+        2.28,
+        2.055,
+        2.448,
+        2.377,
+        2.344,
+        2.472,
+        2.156
+      ],
+      "runs": 7,
+      "runtime": "swift"
+    }
+  ],
+  "runs": 7
+}

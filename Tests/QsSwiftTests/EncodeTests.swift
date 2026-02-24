@@ -1510,6 +1510,19 @@ struct EncodeTests {
         )
     }
 
+    @Test("encode - IterableFilter keeps array indices type-strict")
+    func encode_iterableFilterArrayIndicesAreTypeStrict() async throws {
+        let result = try Qs.encode(
+            ["a": [1, 2, 3]],
+            options: EncodeOptions(
+                encode: false,
+                filter: IterableFilter(["a", "0", 2])
+            )
+        )
+
+        #expect(result == "a[2]=3")
+    }
+
     @Test("encode - supports custom representations when filter = FunctionFilter")
     func testFunctionFilterCustomRepresentations() async throws {
         var calls = 0
@@ -3055,6 +3068,24 @@ struct EncodeTests {
         #expect(out == "child[aPrim]=1&child[bPrim]=2&child[zContainer][k]=v")
     }
 
+    @Test(
+        "encode: OrderedDictionary<String,Any> nested depth partitions primitives before containers with encoder=nil (stable)"
+    )
+    func sort_orderedDict_string_keys_nestedPartition_encoderNilStable() throws {
+        let child: OrderedDictionary<String, Any> = [
+            "zContainer": ["k": "v"],
+            "bPrim": "2",
+            "aPrim": "1",
+            "yContainer": ["m": "n"],
+        ]
+        let root: OrderedDictionary<String, Any> = [
+            "child": child
+        ]
+
+        let out = try Qs.encode(root, options: .init(encode: false))
+        #expect(out == "child[bPrim]=2&child[aPrim]=1&child[zContainer][k]=v&child[yContainer][m]=n")
+    }
+
     @Test("encode: .comma + empty list returns no pairs (Undefined sentinel path)")
     func comma_empty_returns_no_pairs() throws {
         let opts = EncodeOptions(listFormat: .comma)
@@ -4000,7 +4031,7 @@ struct EncodeTests {
             addQueryPrefix: false,
             depth: 512
         )
-        #expect((nilResult as? [Any])?.map { String(describing: $0) } == ["a="])
+        #expect(nilResult as? String == "a=")
 
         let nullResult = try Encoder.encode(
             data: NSNull(),
@@ -4025,7 +4056,7 @@ struct EncodeTests {
             addQueryPrefix: false,
             depth: 512
         )
-        #expect((nullResult as? [Any])?.map { String(describing: $0) } == ["a="])
+        #expect(nullResult as? String == "a=")
     }
 
     @Test("Encoder.encode deep fallback NSNull path uses custom encoder")
@@ -4060,7 +4091,7 @@ struct EncodeTests {
             addQueryPrefix: false,
             depth: 512
         )
-        #expect((result as? [Any])?.map { String(describing: $0) } == ["k_a=k_"])
+        #expect(result as? String == "k_a=k_")
     }
 
     @Test("Encoder.encode deep fallback tracks NSArray roots for cycle identity")
@@ -4262,7 +4293,7 @@ struct EncodeTests {
             addQueryPrefix: false,
             depth: 512
         )
-        let dateString = (dateResult as? [Any])?.first as? String
+        let dateString = dateResult as? String
         #expect(dateString == "a=1970-01-01T00:00:00.000Z")
 
         let custom: ValueEncoder = { value, _, _ in
@@ -4291,7 +4322,7 @@ struct EncodeTests {
             addQueryPrefix: false,
             depth: 512
         )
-        #expect((customResult as? [Any])?.map { String(describing: $0) } == ["[a]=[7]"])
+        #expect(customResult as? String == "[a]=[7]")
     }
 
     @Test("Encoder.encode nested NSDictionary branch partitions primitive and container keys")
@@ -4505,6 +4536,42 @@ struct EncodeTests {
                 #expect(first == "flags[]=only")
             } else {
                 Issue.record("Unexpected type for comma round-trip branch: \(String(describing: result))")
+            }
+        }
+
+        @Test("Encoder.encode ignores commaRoundTrip when list format is not comma")
+        func encoder_nonCommaFormat_doesNotAppendRoundTripMarker() throws {
+            let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+            let result = try Encoder.encode(
+                data: ["only"],
+                undefined: false,
+                sideChannel: sideChannel,
+                prefix: "flags",
+                listFormat: .indices,
+                commaRoundTrip: true,
+                allowEmptyLists: false,
+                strictNullHandling: false,
+                skipNulls: false,
+                encodeDotInKeys: false,
+                encoder: nil,
+                serializeDate: nil,
+                sort: nil,
+                filter: nil,
+                allowDots: false,
+                format: .rfc3986,
+                formatter: nil,
+                encodeValuesOnly: false,
+                charset: .utf8,
+                addQueryPrefix: false,
+                depth: 0
+            )
+
+            if let string = result as? String {
+                #expect(string == "flags[0]=only")
+            } else if let parts = result as? [Any], let first = parts.first as? String {
+                #expect(first == "flags[0]=only")
+            } else {
+                Issue.record("Unexpected type for non-comma round-trip branch: \(String(describing: result))")
             }
         }
     #endif

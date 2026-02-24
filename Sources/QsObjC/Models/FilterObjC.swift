@@ -49,9 +49,8 @@
                     return value
                 }
                 guard let out else { return nil }
-                // Normalize Obj-C containers to the same Swift encode-side shapes used at entry.
-                let bridged = QsBridge.bridgeInputForEncode(out)
-                return QsBridge.bridgeUndefinedPreservingOrder(bridged) ?? bridged
+                // Normalize Obj-C containers and Undefined in one traversal.
+                return QsBridge.bridgeInputForEncode(out, bridgeUndefined: true)
             }
         }
     }
