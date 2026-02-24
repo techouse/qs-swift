@@ -126,7 +126,14 @@ public func parseBenchOutput(_ output: String) throws -> [BenchCaseKey: Double] 
 
 public func perfGuardrailsEnabled(extraFlag: String) -> Bool {
     let env = ProcessInfo.processInfo.environment
-    return env["QS_ENABLE_PERF_GUARDRAILS"] == "1" || env[extraFlag] == "1"
+    let enabledByFlag = env["QS_ENABLE_PERF_GUARDRAILS"] == "1" || env[extraFlag] == "1"
+    guard enabledByFlag else { return false }
+
+    #if DEBUG
+        return env["QS_PERF_ALLOW_DEBUG"] == "1"
+    #else
+        return true
+    #endif
 }
 
 public func perfTolerancePct() -> Double {
