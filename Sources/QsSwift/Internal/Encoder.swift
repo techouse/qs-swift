@@ -285,11 +285,10 @@ internal enum Encoder {
 
                 let pathForChildren = config.encodeDotInKeys ? frame.path.asDotEncoded() : frame.path
                 let shouldAppendRoundTripMarker =
-                    config.commaRoundTrip
+                    config.isCommaListFormat
+                    && config.commaRoundTrip
                     && seqList != nil
-                    && (config.isCommaListFormat && commaEffectiveLength != nil
-                        ? commaEffectiveLength == 1
-                        : (seqList?.count == 1))
+                    && (commaEffectiveLength ?? seqList?.count) == 1
                 let adjustedPath = shouldAppendRoundTripMarker ? pathForChildren.append("[]") : pathForChildren
 
                 if config.allowEmptyLists, let seqList, seqList.isEmpty {

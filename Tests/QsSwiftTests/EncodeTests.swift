@@ -4538,6 +4538,42 @@ struct EncodeTests {
                 Issue.record("Unexpected type for comma round-trip branch: \(String(describing: result))")
             }
         }
+
+        @Test("Encoder.encode ignores commaRoundTrip when list format is not comma")
+        func encoder_nonCommaFormat_doesNotAppendRoundTripMarker() throws {
+            let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
+            let result = try Encoder.encode(
+                data: ["only"],
+                undefined: false,
+                sideChannel: sideChannel,
+                prefix: "flags",
+                listFormat: .indices,
+                commaRoundTrip: true,
+                allowEmptyLists: false,
+                strictNullHandling: false,
+                skipNulls: false,
+                encodeDotInKeys: false,
+                encoder: nil,
+                serializeDate: nil,
+                sort: nil,
+                filter: nil,
+                allowDots: false,
+                format: .rfc3986,
+                formatter: nil,
+                encodeValuesOnly: false,
+                charset: .utf8,
+                addQueryPrefix: false,
+                depth: 0
+            )
+
+            if let string = result as? String {
+                #expect(string == "flags[0]=only")
+            } else if let parts = result as? [Any], let first = parts.first as? String {
+                #expect(first == "flags[0]=only")
+            } else {
+                Issue.record("Unexpected type for non-comma round-trip branch: \(String(describing: result))")
+            }
+        }
     #endif
 }
 
