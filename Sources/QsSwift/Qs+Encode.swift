@@ -162,8 +162,20 @@ extension Qs {
         }
         // else: preserve traversal order (or filter’s order) as-is
 
-        // Weak side-channel for cycle detection inside the recursive encoder.
+        // Side-channel is kept for Encoder API compatibility.
         let sideChannel = NSMapTable<AnyObject, AnyObject>.weakToWeakObjects()
+        let listFormat = options.getListFormat
+        let commaRoundTrip = (listFormat == .comma) && (options.commaRoundTrip == true)
+        let commaCompactNulls = (listFormat == .comma) && options.commaCompactNulls
+        let valueEncoder: ValueEncoder? =
+            options.encode
+            ? { @Sendable (value: Any?, charset: String.Encoding?, format: Format?) -> String in
+                options.getEncoder(value, charset: charset, format: format)
+            }
+            : nil
+        let dateSerializer: DateSerializer = { @Sendable (date: Date) -> String in
+            options.getDateSerializer(date)
+        }
 
         // Build key=value parts
         var parts: [Any] = []
@@ -183,30 +195,16 @@ extension Qs {
                     if value is NSNull { continue }
                 }
 
-                // Bridge the encoder/date-serializer configs; avoid capturing `options` repeatedly.
-                let valueEncoder: ValueEncoder? =
-                    options.encode
-                    ? { @Sendable (value: Any?, charset: String.Encoding?, format: Format?) -> String in
-                        options.getEncoder(value, charset: charset, format: format)
-                    }
-                    : nil
-
-                let dateSerializer: DateSerializer = { @Sendable (date: Date) -> String in
-                    options.getDateSerializer(date)
-                }
-
                 // Delegate to the lower-level encoder for nested traversal & formatting.
                 let encoded = try QsSwift.Encoder.encode(
                     data: value,
                     undefined: !containsKey,
                     sideChannel: sideChannel,
                     prefix: key,
-                    generateArrayPrefix: options.getListFormat.generator,
-                    listFormat: options.getListFormat,
-                    commaRoundTrip: (options.getListFormat == .comma)
-                        && (options.commaRoundTrip == true),
-                    commaCompactNulls: (options.getListFormat == .comma)
-                        && options.commaCompactNulls,
+                    generateArrayPrefix: nil,
+                    listFormat: listFormat,
+                    commaRoundTrip: commaRoundTrip,
+                    commaCompactNulls: commaCompactNulls,
                     allowEmptyLists: options.allowEmptyLists,
                     strictNullHandling: options.strictNullHandling,
                     skipNulls: options.skipNulls,
