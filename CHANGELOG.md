@@ -2,7 +2,7 @@
 
 - [PERF] optimize Swift deep `encode=false` linear-chain handling in `Encoder`: accumulate chain segments and materialize the final path once, replace `NSDictionary.allKeys.first` with `keyEnumerator().nextObject()`, and keep cycle detection / scalar semantics unchanged.
 - [TEST] add Swift linear-chain parity coverage for `[String: Any]`, `OrderedDictionary<String, Any>`, and `NSDictionary`, including cycle error propagation, terminal `nil`/`NSNull`/`Date`/`Data` behavior, and multi-key fallback assertions.
-- [PERF][ObjC] add a narrow direct-encode fast path in `QsBridge.encode` for eligible single-key `NSDictionary` chains (`encode=false` safe subset), bypassing full bridge materialization on deep nesting.
+- [PERF][ObjC] add a narrow direct-encode fast path in `QsBridge.encode` for eligible single-key `NSDictionary` chains (strict `encode=false` safe subset for non-`nil` options, plus `options=nil` defaults for deep-chain safety), bypassing full bridge materialization on deep nesting.
 - [PERF][ObjC] add a conservative sorted direct-encode bypass for `NSString`-keyed Foundation graphs when sorting is enabled and custom encoder/date/filter hooks are absent; fallback bridging remains unchanged for all ineligible graphs.
 - [PERF][ObjC] refactor `_bridgeInputForEncode` hot loops to manual `NSDictionary` / `NSArray` iteration (with reserved capacities) and add faster key stringification paths for `NSString` / `NSNumber`.
 - [PERF][ObjC] cache `EncodeOptionsObjC.swift` conversion with full dirty-bit invalidation across all mutable encode options to avoid repeated option materialization on repeated encode calls.
