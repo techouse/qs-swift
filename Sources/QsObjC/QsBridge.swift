@@ -65,12 +65,20 @@
             do {
                 let swiftOptions = options?.swift ?? QsSwift.EncodeOptions()
 
-                if let dictionary = object as? NSDictionary,
-                    _isNarrowObjCEncodeFastPathConfig(options),
-                    _isSingleKeyNSDictionaryScalarChainEligible(dictionary)
-                {
-                    let str = try Qs.encode(dictionary, options: swiftOptions)
-                    return str as NSString
+                if let dictionary = object as? NSDictionary {
+                    if _isNarrowObjCEncodeFastPathConfig(options),
+                        _isSingleKeyNSDictionaryScalarChainEligible(dictionary)
+                    {
+                        let str = try Qs.encode(dictionary, options: swiftOptions)
+                        return str as NSString
+                    }
+
+                    if _isSortedDirectEncodeConfigEligible(options),
+                        _isSortedNSStringFoundationGraphEligible(dictionary)
+                    {
+                        let str = try Qs.encode(dictionary, options: swiftOptions)
+                        return str as NSString
+                    }
                 }
 
                 // Convert and normalize in one traversal to avoid redundant full-tree walks.
@@ -209,7 +217,9 @@
                 let inserted = seen.insert(id).inserted
                 var out = OrderedDictionary<String, Any>()
                 out.reserveCapacity(dict.count)
-                dict.forEach { key, value in
+                let keys = dict.keyEnumerator()
+                while let key = keys.nextObject() {
+                    guard let value = dict.object(forKey: key) else { continue }
                     out[stringifyKey(key)] = _bridgeInputForEncode(
                         value,
                         seen: &seen,
@@ -223,8 +233,15 @@
                 let id = ObjectIdentifier(array)
                 if seen.contains(id) { return array }
                 let inserted = seen.insert(id).inserted
-                let mapped = array.map {
-                    _bridgeInputForEncode($0, seen: &seen, bridgeUndefined: bridgeUndefined)
+                var mapped: [Any] = []
+                mapped.reserveCapacity(array.count)
+                for index in 0..<array.count {
+                    mapped.append(
+                        _bridgeInputForEncode(
+                            array.object(at: index),
+                            seen: &seen,
+                            bridgeUndefined: bridgeUndefined
+                        ))
                 }
                 if inserted { seen.remove(id) }
                 return mapped
@@ -238,9 +255,12 @@
                 return out
 
             case let array as [Any]:
-                return array.map {
-                    _bridgeInputForEncode($0, seen: &seen, bridgeUndefined: bridgeUndefined)
+                var out: [Any] = []
+                out.reserveCapacity(array.count)
+                for value in array {
+                    out.append(_bridgeInputForEncode(value, seen: &seen, bridgeUndefined: bridgeUndefined))
                 }
+                return out
 
             default:
                 return input
@@ -326,8 +346,70 @@
         }
 
         @inline(__always)
+        internal static func _isSortedDirectEncodeConfigEligible(_ options: EncodeOptionsObjC?) -> Bool {
+            guard let options else { return false }
+            guard options.sortComparatorBlock != nil || options.sortKeysCaseInsensitively else {
+                return false
+            }
+            guard options.valueEncoderBlock == nil else { return false }
+            guard options.dateSerializerBlock == nil else { return false }
+            guard options.filter == nil else { return false }
+            return true
+        }
+
+        @inline(__always)
+        internal static func _isSortedNSStringFoundationGraphEligible(_ root: NSDictionary) -> Bool {
+            var stack: [Any] = [root]
+            var seen = Set<ObjectIdentifier>()
+
+            while let node = stack.popLast() {
+                if node is UndefinedObjC { return false }
+
+                if let dict = node as? NSDictionary {
+                    let id = ObjectIdentifier(dict)
+                    if seen.contains(id) { return false }
+                    seen.insert(id)
+
+                    let keys = dict.keyEnumerator()
+                    while let key = keys.nextObject() {
+                        guard key is NSString else { return false }
+                        guard let value = dict.object(forKey: key) else { return false }
+                        stack.append(value)
+                    }
+                    continue
+                }
+
+                if let array = node as? NSArray {
+                    let id = ObjectIdentifier(array)
+                    if seen.contains(id) { return false }
+                    seen.insert(id)
+
+                    for index in 0..<array.count {
+                        stack.append(array.object(at: index))
+                    }
+                    continue
+                }
+
+                if _isSortedDirectBypassDisallowedSwiftContainer(node) {
+                    return false
+                }
+            }
+
+            return true
+        }
+
+        @inline(__always)
         private static func _isNarrowFastPathContainer(_ value: Any) -> Bool {
             if value is NSDictionary || value is NSArray { return true }
+            if value is [String: Any] || value is [AnyHashable: Any] || value is [Any] { return true }
+            if value is OrderedDictionary<String, Any> { return true }
+            if value is OrderedDictionary<AnyHashable, Any> { return true }
+            if value is OrderedDictionary<NSString, Any> { return true }
+            return false
+        }
+
+        @inline(__always)
+        private static func _isSortedDirectBypassDisallowedSwiftContainer(_ value: Any) -> Bool {
             if value is [String: Any] || value is [AnyHashable: Any] || value is [Any] { return true }
             if value is OrderedDictionary<String, Any> { return true }
             if value is OrderedDictionary<AnyHashable, Any> { return true }
@@ -340,9 +422,12 @@
         /// Consistently stringify any dictionary key (Obj-C or Swift).
         @inline(__always)
         internal static func stringifyKey(_ key: Any) -> String {
+            if let key = key as? String { return key }
+            if let key = key as? NSString { return key as String }
+            if let key = key as? NSNumber { return key.stringValue }
             // We intentionally use `String(describing:)` so non-string keys (NSNumber, NSObject subclasses)
             // become a readable string and round-trip deterministically in the encoder.
-            String(describing: key)
+            return String(describing: key)
         }
     }
 #endif
