@@ -4325,6 +4325,88 @@ struct EncodeTests {
         #expect(customResult as? String == "[a]=[7]")
     }
 
+    @Test("encode linear-chain parity for [String: Any], OrderedDictionary, and NSDictionary")
+    func encode_linearChain_parity_supportedContainers() throws {
+        func expectedChain(depth: Int) -> String {
+            var out = "a"
+            if depth > 1 {
+                for _ in 1..<depth {
+                    out.append("[a]")
+                }
+            }
+            out.append("[leaf]=x")
+            return out
+        }
+
+        let depth = 24
+        let expected = expectedChain(depth: depth)
+        let options = EncodeOptions(encode: false)
+
+        var swiftChain: [String: Any] = ["leaf": "x"]
+        for _ in 0..<depth {
+            swiftChain = ["a": swiftChain]
+        }
+        let swiftOut = try Qs.encode(swiftChain, options: options)
+        #expect(swiftOut == expected)
+
+        var orderedChain = OrderedDictionary<String, Any>(uniqueKeysWithValues: [("leaf", "x")])
+        for _ in 0..<depth {
+            var next = OrderedDictionary<String, Any>()
+            next["a"] = orderedChain
+            orderedChain = next
+        }
+        let orderedOut = try Qs.encode(orderedChain, options: options)
+        #expect(orderedOut == expected)
+
+        var nsChain: NSDictionary = NSDictionary(dictionary: ["leaf": "x"])
+        for _ in 0..<depth {
+            nsChain = NSDictionary(object: nsChain, forKey: "a" as NSString)
+        }
+        let nsOut = try Qs.encode(nsChain, options: options)
+        #expect(nsOut == expected)
+    }
+
+    @Test("encode linear-chain terminal nil and NSNull preserve behavior")
+    func encode_linearChain_terminalNilAndNSNull() throws {
+        let nilLeaf: [String: Any] = ["a": ["leaf": Optional<String>.none as Any]]
+        let nilOut = try Qs.encode(nilLeaf, options: .init(encode: false))
+        #expect(nilOut == "a[leaf]=")
+
+        let nullLeaf: [String: Any] = ["a": ["leaf": NSNull()]]
+        let nullOut = try Qs.encode(nullLeaf, options: .init(encode: false))
+        #expect(nullOut == "a[leaf]=")
+    }
+
+    @Test("encode linear-chain terminal Date and Data preserve behavior")
+    func encode_linearChain_terminalDateAndData() throws {
+        let dateOut = try Qs.encode(
+            ["a": ["leaf": Date(timeIntervalSince1970: 0)]],
+            options: .init(
+                dateSerializer: { _ in "DATE_TOKEN" },
+                encode: false
+            )
+        )
+        #expect(dateOut == "a[leaf]=DATE_TOKEN")
+
+        let dataOut = try Qs.encode(
+            ["a": ["leaf": Data("abc".utf8)]],
+            options: .init(encode: false)
+        )
+        #expect(dataOut == "a[leaf]=abc")
+    }
+
+    #if canImport(Darwin)
+        @Test("encode linear-chain detects NSDictionary cycle")
+        func encode_linearChain_detectsNSDictionaryCycle() throws {
+            let cyclic = NSMutableDictionary()
+            cyclic["self"] = cyclic
+
+            #expect(throws: EncodeError.cyclicObject) {
+                _ = try Qs.encode(cyclic, options: .init(encode: false))
+            }
+        }
+    #endif
+
     @Test("Encoder.encode nested NSDictionary branch partitions primitive and container keys")
     func encoder_nsdictionaryPartition_withEncoder() throws {
         let sideChannel = NSMapTable<AnyObject, AnyObject>.strongToStrongObjects()
