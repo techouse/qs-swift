@@ -63,11 +63,21 @@
             _ object: Any, options: EncodeOptionsObjC? = nil, error outError: NSErrorPointer = nil
         ) -> NSString? {
             do {
+                let swiftOptions = options?.swift ?? QsSwift.EncodeOptions()
+
+                if let dictionary = object as? NSDictionary,
+                    _isNarrowObjCEncodeFastPathConfig(options),
+                    _isSingleKeyNSDictionaryScalarChainEligible(dictionary)
+                {
+                    let str = try Qs.encode(dictionary, options: swiftOptions)
+                    return str as NSString
+                }
+
                 // Convert and normalize in one traversal to avoid redundant full-tree walks.
                 let bridged = bridgeInputForEncode(object, bridgeUndefined: true)
 
                 // Let the core do its thing (and report EncodeError.cyclicObject if a cycle is present).
-                let str = try Qs.encode(bridged, options: options?.swift ?? QsSwift.EncodeOptions())
+                let str = try Qs.encode(bridged, options: swiftOptions)
                 return str as NSString
             } catch {
                 outError?.pointee = error as NSError
@@ -256,6 +266,73 @@
         ) -> Any? {
             guard let value else { return nil }
             return _bridgeInputForEncode(value, seen: &seen, bridgeUndefined: true)
+        }
+
+        // MARK: - Narrow ObjC encode fast path
+
+        @inline(__always)
+        internal static func _isNarrowObjCEncodeFastPathConfig(_ options: EncodeOptionsObjC?) -> Bool {
+            guard let options else { return false }
+            guard options.encode == false else { return false }
+            guard options.valueEncoderBlock == nil else { return false }
+            guard options.dateSerializerBlock == nil else { return false }
+            guard options.sortComparatorBlock == nil else { return false }
+            guard options.sortKeysCaseInsensitively == false else { return false }
+            guard options.filter == nil else { return false }
+            guard options.allowDots == false else { return false }
+            guard options.encodeDotInKeys == false else { return false }
+            guard options.encodeValuesOnly == false else { return false }
+            guard options.allowEmptyLists == false else { return false }
+            guard options.skipNulls == false else { return false }
+            guard options.strictNullHandling == false else { return false }
+            guard options.commaRoundTrip == false else { return false }
+            guard options.commaCompactNulls == false else { return false }
+
+            let effectiveListFormat: ListFormatObjC = {
+                if let listFormat = options.listFormat { return listFormat }
+                if let legacyIndices = options.indices {
+                    return legacyIndices.boolValue ? .indices : .repeatKey
+                }
+                return .indices
+            }()
+
+            return effectiveListFormat == .indices
+        }
+
+        @inline(__always)
+        internal static func _isSingleKeyNSDictionaryScalarChainEligible(_ root: NSDictionary) -> Bool {
+            var seen = Set<ObjectIdentifier>()
+            var cursor = root
+
+            while true {
+                let id = ObjectIdentifier(cursor)
+                if seen.contains(id) { return false }
+                seen.insert(id)
+
+                guard cursor.count == 1 else { return false }
+
+                let keys = cursor.keyEnumerator()
+                guard let key = keys.nextObject() else { return false }
+                guard let next = cursor.object(forKey: key) else { return false }
+                if next is UndefinedObjC { return false }
+
+                if let nextDict = next as? NSDictionary {
+                    cursor = nextDict
+                    continue
+                }
+
+                return !_isNarrowFastPathContainer(next)
+            }
+        }
+
+        @inline(__always)
+        private static func _isNarrowFastPathContainer(_ value: Any) -> Bool {
+            if value is NSDictionary || value is NSArray { return true }
+            if value is [String: Any] || value is [AnyHashable: Any] || value is [Any] { return true }
+            if value is OrderedDictionary<String, Any> { return true }
+            if value is OrderedDictionary<AnyHashable, Any> { return true }
+            if value is OrderedDictionary<NSString, Any> { return true }
+            return false
         }
 
         // MARK: - Small utils
