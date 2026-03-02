@@ -11,7 +11,7 @@
     /// Thread-safety: not thread-safe. Configure on one thread, then use.
     @objc(QsEncodeOptions)
     @objcMembers
-    public final class EncodeOptionsObjC: NSObject, @unchecked Sendable {
+    public final class EncodeOptionsObjC: NSObject {
 
         // MARK: - Custom encoders / sorters
 
