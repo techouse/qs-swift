@@ -66,11 +66,13 @@
                 let swiftOptions = options?.swift ?? QsSwift.EncodeOptions()
 
                 if let dictionary = object as? NSDictionary {
-                    if _isNarrowObjCEncodeFastPathConfig(options),
-                        _isSingleKeyNSDictionaryScalarChainEligible(dictionary)
-                    {
-                        let str = try Qs.encode(dictionary, options: swiftOptions)
-                        return str as NSString
+                    if _isSingleKeyNSDictionaryScalarChainEligible(dictionary) {
+                        // `options == nil` maps to default Swift options and is safe for this narrow
+                        // shape, while non-nil remains gated by the strict fast-path config.
+                        if options == nil || _isNarrowObjCEncodeFastPathConfig(options) {
+                            let str = try Qs.encode(dictionary, options: swiftOptions)
+                            return str as NSString
+                        }
                     }
 
                     if _isSortedDirectEncodeConfigEligible(options),
