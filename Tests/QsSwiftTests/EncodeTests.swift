@@ -4395,17 +4395,24 @@ struct EncodeTests {
         #expect(dataOut == "a[leaf]=abc")
     }
 
-    #if canImport(Darwin)
-        @Test("encode linear-chain detects NSDictionary cycle")
-        func encode_linearChain_detectsNSDictionaryCycle() throws {
+    @Test("encode linear-chain detects NSDictionary cycle")
+    func encode_linearChain_detectsNSDictionaryCycle() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault when constructing NSDictionary self-cycle"))
+            {
+                #expect(
+                    Bool(false),
+                    Comment("Cannot safely construct NSDictionary self-cycle on Linux; tracked as known issue."))
+            }
+        #else
             let cyclic = NSMutableDictionary()
             cyclic["self"] = cyclic
 
             #expect(throws: EncodeError.cyclicObject) {
                 _ = try Qs.encode(cyclic, options: .init(encode: false))
             }
-        }
-    #endif
+        #endif
+    }
 
     @Test("Encoder.encode nested NSDictionary branch partitions primitive and container keys")
     func encoder_nsdictionaryPartition_withEncoder() throws {
