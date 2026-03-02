@@ -11,7 +11,7 @@
     /// Thread-safety: not thread-safe. Configure on one thread, then use.
     @objc(QsEncodeOptions)
     @objcMembers
-    public final class EncodeOptionsObjC: NSObject, @unchecked Sendable {
+    public final class EncodeOptionsObjC: NSObject {
 
         // MARK: - Custom encoders / sorters
 
@@ -26,62 +26,92 @@
         /// Note: You do not need to normalize spaces here; the core applies the final
         /// space style (`%20` vs `+`) after your block runs.
         public typealias ValueEncoderBlock = (Any?, NSNumber?, NSNumber?) -> NSString
-        public var valueEncoderBlock: ValueEncoderBlock?
+        public var valueEncoderBlock: ValueEncoderBlock? {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// If set, converts `NSDate` to an **unencoded** string before the core percent-encodes it.
         public typealias DateSerializerBlock = (NSDate) -> NSString
-        public var dateSerializerBlock: DateSerializerBlock?
+        public var dateSerializerBlock: DateSerializerBlock? {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Deterministic key sorter. Must return **-1**, **0**, or **+1** (like `strcmp` or `NSComparisonResult.rawValue`).
         /// If provided, this takes precedence over `sortKeysCaseInsensitively`.
         public typealias SortComparatorBlock = (Any?, Any?) -> Int
-        public var sortComparatorBlock: SortComparatorBlock?
+        public var sortComparatorBlock: SortComparatorBlock? {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         // MARK: - Output formatting / behavior
 
         /// If true, prepend `'?'` to the encoded string (useful for building URLs).
-        public var addQueryPrefix: Bool = false
+        public var addQueryPrefix: Bool = false {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Accept dotted key paths (`a.b.c`) as if they were bracket paths (`a[b][c]`).
         /// For compatibility with other ports, this is OR’ed with `encodeDotInKeys` (either flag enables dots).
-        public var allowDots: Bool = false
+        public var allowDots: Bool = false {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// When true, include empty lists as `a[]` instead of omitting the key.
-        public var allowEmptyLists: Bool = false
+        public var allowEmptyLists: Bool = false {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Output character set for percent-encoding. Defaults to UTF-8.
-        public var charset: UInt = String.Encoding.utf8.rawValue
+        public var charset: UInt = String.Encoding.utf8.rawValue {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Include the `utf8=✓` sentinel (qs convention) when appropriate.
-        public var charsetSentinel: Bool = false
+        public var charsetSentinel: Bool = false {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Pair delimiter between `key=value` tokens (e.g. `&` or `;`).
-        public var delimiter: String = "&"
+        public var delimiter: String = "&" {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Master switch: when false, the encoder **does not percent-encode**—useful for tests
         /// that assert exact literal output.
-        public var encode: Bool = true
+        public var encode: Bool = true {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Deprecated spelling kept for parity with Swift/other ports.
         /// When true, dots in **keys** are parsed/treated as path separators.
         /// `allowDots || encodeDotInKeys` is passed to Swift as `allowDots`.
-        public var encodeDotInKeys: Bool = false
+        public var encodeDotInKeys: Bool = false {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// If true, `valueEncoderBlock` is **not** used for keys—only for values.
-        public var encodeValuesOnly: Bool = false
+        public var encodeValuesOnly: Bool = false {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// RFC formatting (3986 vs 1738).
-        public var format: FormatObjC = .rfc3986
+        public var format: FormatObjC = .rfc3986 {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Deprecated (mirrors Swift). Used only when `listFormat == nil`.
         /// `NSNumber(bool)`: `nil` = “unspecified”, `0` = false, `1` = true.
-        public var indices: NSNumber?
+        public var indices: NSNumber? {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// List/array style (e.g. `.brackets`, `.indices`, `.comma`). If `nil`, the legacy
         /// `indices` setting above is consulted.
         ///
         /// Swift-facing storage (optional enum). Not visible to Obj-C.
-        @nonobjc public var listFormat: ListFormatObjC?
+        @nonobjc public var listFormat: ListFormatObjC? {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         // Obj-C-facing boxed accessor under the same Obj-C name.
         // Obj-C will see: @property (nullable, nonatomic, strong) NSNumber *listFormat;
@@ -92,30 +122,55 @@
         }
 
         /// Drop `null` values instead of serializing them.
-        public var skipNulls: Bool = false
+        public var skipNulls: Bool = false {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// If true, a key without value encodes as `key` (and decodes as `NSNull`) rather than `key=`.
-        public var strictNullHandling: Bool = false
+        public var strictNullHandling: Bool = false {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Only meaningful with `.comma` list format: when a list has a single item, append `[]`
         /// to allow it to round-trip back to an array on decode.
-        public var commaRoundTrip: Bool = false
+        public var commaRoundTrip: Bool = false {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Only meaningful with `.comma` list format: when true, drop `null` entries before joining.
-        public var commaCompactNulls: Bool = false
+        public var commaCompactNulls: Bool = false {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Convenience: provide a predictable case-insensitive A→Z sort (ties broken case-sensitively
         /// so `"A"` sorts before `"a"`). Ignored if `sortComparatorBlock` is set.
-        public var sortKeysCaseInsensitively: Bool = false
+        public var sortKeysCaseInsensitively: Bool = false {
+            didSet { invalidateSwiftOptionsCache() }
+        }
 
         /// Bridges Swift’s filter options. To omit keys from Obj-C, return `UndefinedObjC`.
-        public var filter: FilterObjC?
+        public var filter: FilterObjC? {
+            didSet { invalidateSwiftOptionsCache() }
+        }
+
+        private var cachedSwiftOptions: QsSwift.EncodeOptions?
+        private var isSwiftOptionsCacheDirty = true
+
+        @inline(__always)
+        private func invalidateSwiftOptionsCache() {
+            isSwiftOptionsCacheDirty = true
+            cachedSwiftOptions = nil
+        }
 
         // MARK: - Bridge to Swift core
 
         /// Internal bridge that constructs the Swift `EncodeOptions` used by the core.
         /// We also normalize dot handling so **either** Obj-C flag enables dots.
         var swift: QsSwift.EncodeOptions {
+            if !isSwiftOptionsCacheDirty, let cachedSwiftOptions {
+                return cachedSwiftOptions
+            }
+
             let normalizedCharset: String.Encoding = {
                 let candidate = String.Encoding(rawValue: charset)
                 return (candidate == .utf8 || candidate == .isoLatin1) ? candidate : .utf8
@@ -159,7 +214,7 @@
                 return nil
             }()
 
-            return QsSwift.EncodeOptions(
+            let built = QsSwift.EncodeOptions(
                 encoder: swiftEncoder,
                 dateSerializer: swiftDateSerializer,
 
@@ -189,6 +244,10 @@
                 // Sorting
                 sort: swiftSorter
             )
+
+            cachedSwiftOptions = built
+            isSwiftOptionsCacheDirty = false
+            return built
         }
 
         // MARK: - Swift convenience

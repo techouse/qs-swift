@@ -63,11 +63,31 @@
             _ object: Any, options: EncodeOptionsObjC? = nil, error outError: NSErrorPointer = nil
         ) -> NSString? {
             do {
+                let swiftOptions = options?.swift ?? QsSwift.EncodeOptions()
+
+                if let dictionary = object as? NSDictionary {
+                    if _isSingleKeyNSDictionaryScalarChainEligible(dictionary) {
+                        // `options == nil` maps to default Swift options and is safe for this narrow
+                        // shape, while non-nil remains gated by the strict fast-path config.
+                        if options == nil || _isNarrowObjCEncodeFastPathConfig(options) {
+                            let str = try Qs.encode(dictionary, options: swiftOptions)
+                            return str as NSString
+                        }
+                    }
+
+                    if _isSortedDirectEncodeConfigEligible(options),
+                        _isSortedNSStringFoundationGraphEligible(dictionary)
+                    {
+                        let str = try Qs.encode(dictionary, options: swiftOptions)
+                        return str as NSString
+                    }
+                }
+
                 // Convert and normalize in one traversal to avoid redundant full-tree walks.
                 let bridged = bridgeInputForEncode(object, bridgeUndefined: true)
 
                 // Let the core do its thing (and report EncodeError.cyclicObject if a cycle is present).
-                let str = try Qs.encode(bridged, options: options?.swift ?? QsSwift.EncodeOptions())
+                let str = try Qs.encode(bridged, options: swiftOptions)
                 return str as NSString
             } catch {
                 outError?.pointee = error as NSError
@@ -199,7 +219,9 @@
                 let inserted = seen.insert(id).inserted
                 var out = OrderedDictionary<String, Any>()
                 out.reserveCapacity(dict.count)
-                dict.forEach { key, value in
+                let keys = dict.keyEnumerator()
+                while let key = keys.nextObject() {
+                    guard let value = dict.object(forKey: key) else { continue }
                     out[stringifyKey(key)] = _bridgeInputForEncode(
                         value,
                         seen: &seen,
@@ -213,8 +235,15 @@
                 let id = ObjectIdentifier(array)
                 if seen.contains(id) { return array }
                 let inserted = seen.insert(id).inserted
-                let mapped = array.map {
-                    _bridgeInputForEncode($0, seen: &seen, bridgeUndefined: bridgeUndefined)
+                var mapped: [Any] = []
+                mapped.reserveCapacity(array.count)
+                for index in 0..<array.count {
+                    mapped.append(
+                        _bridgeInputForEncode(
+                            array.object(at: index),
+                            seen: &seen,
+                            bridgeUndefined: bridgeUndefined
+                        ))
                 }
                 if inserted { seen.remove(id) }
                 return mapped
@@ -228,9 +257,12 @@
                 return out
 
             case let array as [Any]:
-                return array.map {
-                    _bridgeInputForEncode($0, seen: &seen, bridgeUndefined: bridgeUndefined)
+                var out: [Any] = []
+                out.reserveCapacity(array.count)
+                for value in array {
+                    out.append(_bridgeInputForEncode(value, seen: &seen, bridgeUndefined: bridgeUndefined))
                 }
+                return out
 
             default:
                 return input
@@ -258,14 +290,146 @@
             return _bridgeInputForEncode(value, seen: &seen, bridgeUndefined: true)
         }
 
+        // MARK: - Narrow ObjC encode fast path
+
+        @inline(__always)
+        internal static func _isNarrowObjCEncodeFastPathConfig(_ options: EncodeOptionsObjC?) -> Bool {
+            guard let options else { return false }
+            guard options.encode == false else { return false }
+            guard options.valueEncoderBlock == nil else { return false }
+            guard options.dateSerializerBlock == nil else { return false }
+            guard options.sortComparatorBlock == nil else { return false }
+            guard options.sortKeysCaseInsensitively == false else { return false }
+            guard options.filter == nil else { return false }
+            guard options.allowDots == false else { return false }
+            guard options.encodeDotInKeys == false else { return false }
+            guard options.encodeValuesOnly == false else { return false }
+            guard options.allowEmptyLists == false else { return false }
+            guard options.skipNulls == false else { return false }
+            guard options.strictNullHandling == false else { return false }
+            guard options.commaRoundTrip == false else { return false }
+            guard options.commaCompactNulls == false else { return false }
+
+            let effectiveListFormat: ListFormatObjC = {
+                if let listFormat = options.listFormat { return listFormat }
+                if let legacyIndices = options.indices {
+                    return legacyIndices.boolValue ? .indices : .repeatKey
+                }
+                return .indices
+            }()
+
+            return effectiveListFormat == .indices
+        }
+
+        @inline(__always)
+        internal static func _isSingleKeyNSDictionaryScalarChainEligible(_ root: NSDictionary) -> Bool {
+            var seen = Set<ObjectIdentifier>()
+            var cursor = root
+
+            while true {
+                let id = ObjectIdentifier(cursor)
+                if seen.contains(id) { return false }
+                seen.insert(id)
+
+                guard cursor.count == 1 else { return false }
+
+                let keys = cursor.keyEnumerator()
+                guard let key = keys.nextObject() else { return false }
+                guard let next = cursor.object(forKey: key) else { return false }
+                if next is UndefinedObjC { return false }
+
+                if let nextDict = next as? NSDictionary {
+                    cursor = nextDict
+                    continue
+                }
+
+                return !_isNarrowFastPathContainer(next)
+            }
+        }
+
+        @inline(__always)
+        internal static func _isSortedDirectEncodeConfigEligible(_ options: EncodeOptionsObjC?) -> Bool {
+            guard let options else { return false }
+            guard options.sortComparatorBlock != nil || options.sortKeysCaseInsensitively else {
+                return false
+            }
+            guard options.valueEncoderBlock == nil else { return false }
+            guard options.dateSerializerBlock == nil else { return false }
+            guard options.filter == nil else { return false }
+            return true
+        }
+
+        @inline(__always)
+        internal static func _isSortedNSStringFoundationGraphEligible(_ root: NSDictionary) -> Bool {
+            var stack: [Any] = [root]
+            var seen = Set<ObjectIdentifier>()
+
+            while let node = stack.popLast() {
+                if node is UndefinedObjC { return false }
+
+                if let dict = node as? NSDictionary {
+                    let id = ObjectIdentifier(dict)
+                    if seen.contains(id) { return false }
+                    seen.insert(id)
+
+                    let keys = dict.keyEnumerator()
+                    while let key = keys.nextObject() {
+                        guard key is NSString else { return false }
+                        guard let value = dict.object(forKey: key) else { return false }
+                        stack.append(value)
+                    }
+                    continue
+                }
+
+                if let array = node as? NSArray {
+                    let id = ObjectIdentifier(array)
+                    if seen.contains(id) { return false }
+                    seen.insert(id)
+
+                    for index in 0..<array.count {
+                        stack.append(array.object(at: index))
+                    }
+                    continue
+                }
+
+                if _isSortedDirectBypassDisallowedSwiftContainer(node) {
+                    return false
+                }
+            }
+
+            return true
+        }
+
+        @inline(__always)
+        private static func _isNarrowFastPathContainer(_ value: Any) -> Bool {
+            if value is NSDictionary || value is NSArray { return true }
+            if value is [String: Any] || value is [AnyHashable: Any] || value is [Any] { return true }
+            if value is OrderedDictionary<String, Any> { return true }
+            if value is OrderedDictionary<AnyHashable, Any> { return true }
+            if value is OrderedDictionary<NSString, Any> { return true }
+            return false
+        }
+
+        @inline(__always)
+        private static func _isSortedDirectBypassDisallowedSwiftContainer(_ value: Any) -> Bool {
+            if value is [String: Any] || value is [AnyHashable: Any] || value is [Any] { return true }
+            if value is OrderedDictionary<String, Any> { return true }
+            if value is OrderedDictionary<AnyHashable, Any> { return true }
+            if value is OrderedDictionary<NSString, Any> { return true }
+            return false
+        }
+
         // MARK: - Small utils
 
         /// Consistently stringify any dictionary key (Obj-C or Swift).
         @inline(__always)
         internal static func stringifyKey(_ key: Any) -> String {
+            if let key = key as? String { return key }
+            if let key = key as? NSString { return key as String }
+            if let key = key as? NSNumber { return key.stringValue }
             // We intentionally use `String(describing:)` so non-string keys (NSNumber, NSObject subclasses)
             // become a readable string and round-trip deterministically in the encoder.
-            String(describing: key)
+            return String(describing: key)
         }
     }
 #endif

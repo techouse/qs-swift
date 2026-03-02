@@ -113,4 +113,44 @@ struct EncoderInternalsTests {
 
         #expect(out == "root.a.leaf=x")
     }
+
+    @Test("Encoder linear-chain fast path falls back when a node has multiple keys")
+    func encoder_linearChainFastPath_fallback_multiKeyNode() throws {
+        var nested = OrderedDictionary<String, Any>()
+        nested["leaf"] = "x"
+
+        var payload = OrderedDictionary<String, Any>()
+        payload["a"] = nested
+        payload["b"] = "y"
+
+        let any = try Encoder.encode(
+            data: payload,
+            undefined: false,
+            sideChannel: NSMapTable<AnyObject, AnyObject>.weakToWeakObjects(),
+            prefix: "root",
+            listFormat: .indices,
+            commaRoundTrip: false,
+            allowEmptyLists: false,
+            strictNullHandling: false,
+            skipNulls: false,
+            encodeDotInKeys: false,
+            encoder: nil,
+            serializeDate: nil,
+            sort: nil,
+            filter: nil,
+            allowDots: false,
+            format: .rfc3986,
+            formatter: nil,
+            encodeValuesOnly: false,
+            charset: .utf8,
+            addQueryPrefix: false,
+            depth: 0
+        )
+
+        let out =
+            (any as? [Any])?.map { String(describing: $0) }.joined(separator: "&")
+            ?? String(describing: any)
+
+        #expect(out == "root[a][leaf]=x&root[b]=y")
+    }
 }

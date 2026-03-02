@@ -451,11 +451,27 @@ extension QsSwift.Encoder {
         guard config.listFormat == .indices else { return nil }
 
         var current: Any? = data
-        var path = prefix
+        var chainKeys: [String] = []
+        chainKeys.reserveCapacity(16)
+        var suffixReserve = 0
         var seen = Set<ObjectIdentifier>()
+
+        @inline(__always)
+        func materializePath() -> String {
+            var path = String()
+            path.reserveCapacity(prefix.count + suffixReserve)
+            path.append(prefix)
+            for key in chainKeys {
+                path.append("[")
+                path.append(key)
+                path.append("]")
+            }
+            return path
+        }
 
         while true {
             if current == nil {
+                let path = materializePath()
                 return "\(config.formatter.apply(path))="
             }
 
@@ -464,58 +480,97 @@ extension QsSwift.Encoder {
                 continue
             }
 
+            let isClassObject: Bool
             if let object = current, type(of: object) is AnyClass {
+                isClassObject = true
                 if object is NSNull {
+                    let path = materializePath()
                     return "\(config.formatter.apply(path))="
                 }
 
                 if let dict = object as? NSDictionary {
-                    let id = ObjectIdentifier(dict)
-                    if seen.contains(id) {
-                        throw EncodeError.cyclicObject
-                    }
-                    seen.insert(id)
+                    var cursor = dict
+                    while true {
+                        let id = ObjectIdentifier(cursor)
+                        if seen.contains(id) {
+                            throw EncodeError.cyclicObject
+                        }
+                        seen.insert(id)
 
-                    guard dict.count == 1 else { return nil }
-                    guard let key = dict.allKeys.first else { return nil }
-                    path.append("[")
-                    path.append(String(describing: key))
-                    path.append("]")
-                    current = dict[key]
+                        guard cursor.count == 1 else { return nil }
+                        let enumerator = cursor.keyEnumerator()
+                        guard let keyObject = enumerator.nextObject() else { return nil }
+                        let key = String(describing: keyObject)
+                        chainKeys.append(key)
+                        suffixReserve += key.count + 2
+
+                        let next = cursor.object(forKey: keyObject)
+                        if let nextDict = next as? NSDictionary {
+                            cursor = nextDict
+                            continue
+                        }
+
+                        current = next
+                        break
+                    }
+                    continue
+                }
+            } else {
+                isClassObject = false
+            }
+
+            if !isClassObject {
+                if let map = current as? [String: Any] {
+                    var cursor = map
+                    while true {
+                        guard cursor.count == 1, let (key, next) = cursor.first else { return nil }
+                        chainKeys.append(key)
+                        suffixReserve += key.count + 2
+
+                        if let nextMap = next as? [String: Any] {
+                            cursor = nextMap
+                            continue
+                        }
+
+                        current = next
+                        break
+                    }
+                    continue
+                }
+
+                if let ordered = current as? OrderedDictionary<String, Any> {
+                    var cursor = ordered
+                    while true {
+                        guard cursor.count == 1, let key = cursor.keys.first, let next = cursor[key] else {
+                            return nil
+                        }
+                        chainKeys.append(key)
+                        suffixReserve += key.count + 2
+
+                        if let nextOrdered = next as? OrderedDictionary<String, Any> {
+                            cursor = nextOrdered
+                            continue
+                        }
+
+                        current = next
+                        break
+                    }
                     continue
                 }
             }
 
-            switch current {
-            case let map as [String: Any]:
-                guard map.count == 1, let (key, next) = map.first else { return nil }
-                path.append("[")
-                path.append(key)
-                path.append("]")
-                current = next
+            let normalizedScalar: Any? = {
+                guard let some = current else { return nil }
+                return unwrapOptional(some) ?? some
+            }()
 
-            case let ordered as OrderedDictionary<String, Any>:
-                guard ordered.count == 1, let key = ordered.keys.first, let next = ordered[key] else {
-                    return nil
-                }
-                path.append("[")
-                path.append(key)
-                path.append("]")
-                current = next
-
-            default:
-                let normalizedScalar: Any? = {
-                    guard let some = current else { return nil }
-                    return unwrapOptional(some) ?? some
-                }()
-
-                if Utils.isNonNullishPrimitive(normalizedScalar) || normalizedScalar is Data {
-                    return
-                        "\(config.formatter.apply(path))=\(config.formatter.apply(describe(normalizedScalar, charset: config.charset)))"
-                }
-
-                return nil
+            if Utils.isNonNullishPrimitive(normalizedScalar) || normalizedScalar is Data {
+                let path = materializePath()
+                return
+                    "\(config.formatter.apply(path))=\(config.formatter.apply(describe(normalizedScalar, charset: config.charset)))"
             }
+
+            return nil
         }
     }
 

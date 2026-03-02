@@ -350,6 +350,58 @@
             #expect(opts.swift.charset == .utf8)
         }
 
+        @Test("EncodeOptionsObjC swift cache invalidates for scalar mutations")
+        func encodeOptionsSwiftCacheInvalidates_scalarMutation() {
+            let opts = EncodeOptionsObjC()
+            #expect(opts.swift.delimiter == "&")
+            #expect(opts.swift.addQueryPrefix == false)
+
+            opts.delimiter = ";"
+            opts.addQueryPrefix = true
+
+            let rebuilt = opts.swift
+            #expect(rebuilt.delimiter == ";")
+            #expect(rebuilt.addQueryPrefix == true)
+        }
+
+        @Test("EncodeOptionsObjC swift cache invalidates for valueEncoderBlock replacement")
+        func encodeOptionsSwiftCacheInvalidates_valueEncoderReplacement() {
+            let opts = EncodeOptionsObjC()
+            opts.valueEncoderBlock = { _, _, _ in "first" }
+            #expect(opts.swift.getEncoder("x") == "first")
+
+            opts.valueEncoderBlock = { _, _, _ in "second" }
+            #expect(opts.swift.getEncoder("x") == "second")
+        }
+
+        @Test("EncodeOptionsObjC swift cache invalidates through listFormatBoxed updates")
+        func encodeOptionsSwiftCacheInvalidates_listFormatBoxedMutation() {
+            let opts = EncodeOptionsObjC()
+            opts.listFormatBoxed = NSNumber(value: ListFormatObjC.repeatKey.rawValue)
+            #expect(opts.swift.getListFormat == .repeatKey)
+
+            opts.listFormatBoxed = NSNumber(value: ListFormatObjC.comma.rawValue)
+            #expect(opts.swift.getListFormat == .comma)
+        }
+
+        @Test("EncodeOptionsObjC swift cache invalidates for sorter toggles")
+        func encodeOptionsSwiftCacheInvalidates_sorterToggles() {
+            let opts = EncodeOptionsObjC()
+            #expect(opts.swift.sort == nil)
+
+            opts.sortKeysCaseInsensitively = true
+            #expect(opts.swift.sort != nil)
+
+            opts.sortKeysCaseInsensitively = false
+            #expect(opts.swift.sort == nil)
+
+            opts.sortComparatorBlock = { _, _ in 0 }
+            #expect(opts.swift.sort != nil)
+
+            opts.sortComparatorBlock = nil
+            #expect(opts.swift.sort == nil)
+        }
+
         @Test("FilterObjC factories wrap Swift filters")
         func filterObjCFactories() {
             let functionFilter = FilterObjC.function(
