@@ -209,6 +209,122 @@
             }
         }
 
+        @Test("sorted direct encode config: eligible only with sorter and no custom blocks/filter")
+        func sortedDirectEncodeConfigEligibility() {
+            #expect(QsBridge._isSortedDirectEncodeConfigEligible(nil) == false)
+
+            let noSorter = EncodeOptionsObjC()
+            #expect(QsBridge._isSortedDirectEncodeConfigEligible(noSorter) == false)
+
+            let caseInsensitive = EncodeOptionsObjC()
+            caseInsensitive.sortKeysCaseInsensitively = true
+            #expect(QsBridge._isSortedDirectEncodeConfigEligible(caseInsensitive))
+
+            let comparator = EncodeOptionsObjC()
+            comparator.sortComparatorBlock = { _, _ in 0 }
+            #expect(QsBridge._isSortedDirectEncodeConfigEligible(comparator))
+
+            let withValueEncoder = EncodeOptionsObjC()
+            withValueEncoder.sortKeysCaseInsensitively = true
+            withValueEncoder.valueEncoderBlock = { _, _, _ in "x" }
+            #expect(QsBridge._isSortedDirectEncodeConfigEligible(withValueEncoder) == false)
+
+            let withDateSerializer = EncodeOptionsObjC()
+            withDateSerializer.sortKeysCaseInsensitively = true
+            withDateSerializer.dateSerializerBlock = { _ in "x" }
+            #expect(QsBridge._isSortedDirectEncodeConfigEligible(withDateSerializer) == false)
+
+            let withFilter = EncodeOptionsObjC()
+            withFilter.sortKeysCaseInsensitively = true
+            withFilter.filter = FilterObjC.keys(["a"])
+            #expect(QsBridge._isSortedDirectEncodeConfigEligible(withFilter) == false)
+        }
+
+        @Test("sorted foundation graph: eligibility and rejection rules")
+        func sortedFoundationGraphEligibilityRules() {
+            let eligibleNested: NSDictionary = [
+                "a": [
+                    "b": [
+                        "c": "d",
+                        "e": "f",
+                    ],
+                    "arr": [
+                        ["k": "v"],
+                        "x",
+                    ],
+                ]
+            ]
+            #expect(QsBridge._isSortedNSStringFoundationGraphEligible(eligibleNested))
+
+            let nonNSStringKeyInner = NSMutableDictionary()
+            nonNSStringKeyInner[NSNumber(value: 1)] = "v"
+            let nonNSStringKeyPayload: NSDictionary = ["a": nonNSStringKeyInner]
+            #expect(QsBridge._isSortedNSStringFoundationGraphEligible(nonNSStringKeyPayload) == false)
+
+            let undefinedPayload: NSDictionary = ["a": ["b": UndefinedObjC()]]
+            #expect(QsBridge._isSortedNSStringFoundationGraphEligible(undefinedPayload) == false)
+
+            let swiftOrdered = OrderedDictionary<String, Any>(uniqueKeysWithValues: [("k", "v")])
+            let swiftContainerPayload = NSDictionary(object: swiftOrdered, forKey: "a" as NSString)
+            #expect(QsBridge._isSortedNSStringFoundationGraphEligible(swiftContainerPayload) == false)
+
+            let cycleRoot = NSMutableDictionary()
+            let cycleArray = NSMutableArray()
+            cycleRoot["a"] = cycleArray
+            cycleArray.add(cycleRoot)
+            #expect(QsBridge._isSortedNSStringFoundationGraphEligible(cycleRoot) == false)
+        }
+
+        @Test("encode: sorted nested multi-key NSDictionary parity")
+        func encode_sortedNestedMultiKeyNSDictionary_parity() {
+            let payload: NSDictionary = [
+                "a": [
+                    "b": [
+                        "e": "f",
+                        "c": "d",
+                    ]
+                ]
+            ]
+
+            let options = EncodeOptionsObjC()
+            options.encode = false
+            options.sortKeysCaseInsensitively = true
+
+            let s = QsBridge.encode(payload, options: options, error: nil) as String?
+            #expect(s == "a[b][c]=d&a[b][e]=f")
+        }
+
+        @Test("encode: nested non-string key payload still encodes via fallback")
+        func encode_sortedBypassRejected_nonStringNestedKey_stillEncodes() {
+            let nested = NSMutableDictionary()
+            nested[NSNumber(value: 2)] = "two"
+            nested[NSNumber(value: 1)] = "one"
+            let payload: NSDictionary = ["a": nested]
+
+            let options = EncodeOptionsObjC()
+            options.encode = false
+            options.sortComparatorBlock = { lhs, rhs in
+                let left = Int(String(describing: lhs ?? "")) ?? 0
+                let right = Int(String(describing: rhs ?? "")) ?? 0
+                return left == right ? 0 : (left < right ? -1 : 1)
+            }
+
+            let s = QsBridge.encode(payload, options: options, error: nil) as String?
+            #expect(s == "a[1]=one&a[2]=two")
+        }
+
+        @Test("encode: sorted graph with UndefinedObjC still omitted via fallback")
+        func encode_sortedBypassRejected_undefinedStillOmitted() {
+            let payload: NSDictionary = ["a": ["b": UndefinedObjC()]]
+
+            let options = EncodeOptionsObjC()
+            options.encode = false
+            options.sortKeysCaseInsensitively = true
+
+            let s = QsBridge.encode(payload, options: options, error: nil) as String?
+            #expect(s == "")
+        }
+
         // MARK: - bridgeInputForDecode
 
         @Test("bridgeInputForDecode: NSString → Swift.String")
