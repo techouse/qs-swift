@@ -7,6 +7,15 @@
     @testable import QsSwift
 
     struct ObjCBridgeTests {
+        private func makeSingleKeyNSDictionaryChain(depth: Int, leaf: Any) -> NSDictionary {
+            precondition(depth > 0, "depth must be > 0")
+            var current: Any = leaf
+            for _ in 0..<depth {
+                current = NSDictionary(object: current, forKey: "a" as NSString)
+            }
+            return current as! NSDictionary
+        }
+
         @Test("encode → decode round-trip (flat)")
         func roundtripFlat() throws {
             let input: NSDictionary = [
@@ -61,6 +70,143 @@
             #expect(((list?[0] as? String) ?? "") == "1")
             #expect(((list?[1] as? String) ?? "") == "2")
             #expect(((list?[2] as? String) ?? "") == "3")
+        }
+
+        // MARK: - Narrow ObjC encode fast path
+
+        @Test("narrow fast path config: eligible only for encode=false defaults")
+        func narrowFastPath_config_eligibleDefaults() {
+            let options = EncodeOptionsObjC()
+            options.encode = false
+
+            #expect(QsBridge._isNarrowObjCEncodeFastPathConfig(options))
+            #expect(QsBridge._isNarrowObjCEncodeFastPathConfig(nil) == false)
+        }
+
+        @Test("narrow fast path config: blocked by custom options")
+        func narrowFastPath_config_blockedOptions() {
+            let cases: [(String, (EncodeOptionsObjC) -> Void)] = [
+                ("valueEncoderBlock", { $0.valueEncoderBlock = { _, _, _ in "x" } }),
+                (
+                    "dateSerializerBlock",
+                    {
+                        $0.dateSerializerBlock = { _ in "x" }
+                    }
+                ),
+                ("sortComparatorBlock", { $0.sortComparatorBlock = { _, _ in 0 } }),
+                ("sortKeysCaseInsensitively", { $0.sortKeysCaseInsensitively = true }),
+                ("filter", { $0.filter = FilterObjC.keys(["a"]) }),
+                ("allowDots", { $0.allowDots = true }),
+                ("encodeDotInKeys", { $0.encodeDotInKeys = true }),
+                ("encodeValuesOnly", { $0.encodeValuesOnly = true }),
+                ("allowEmptyLists", { $0.allowEmptyLists = true }),
+                ("skipNulls", { $0.skipNulls = true }),
+                ("strictNullHandling", { $0.strictNullHandling = true }),
+                ("commaRoundTrip", { $0.commaRoundTrip = true }),
+                ("commaCompactNulls", { $0.commaCompactNulls = true }),
+                ("listFormat=brackets", { $0.listFormat = .brackets }),
+                (
+                    "legacy indices=false",
+                    {
+                        $0.listFormat = nil
+                        $0.indices = NSNumber(value: false)
+                    }
+                ),
+            ]
+
+            for (name, apply) in cases {
+                let options = EncodeOptionsObjC()
+                options.encode = false
+                apply(options)
+                #expect(
+                    QsBridge._isNarrowObjCEncodeFastPathConfig(options) == false,
+                    "\(name) should disable narrow fast path"
+                )
+            }
+        }
+
+        @Test("narrow fast path chain: eligible for single-key NSDictionary scalar leaf")
+        func narrowFastPath_chain_eligible() {
+            let payload = makeSingleKeyNSDictionaryChain(depth: 12, leaf: "x")
+            #expect(QsBridge._isSingleKeyNSDictionaryScalarChainEligible(payload))
+        }
+
+        @Test("narrow fast path chain: ineligible when any node has multiple keys")
+        func narrowFastPath_chain_ineligibleMultiKeyNode() {
+            let leaf: NSDictionary = ["a": "x", "b": "y"]
+            let payload: NSDictionary = ["a": leaf]
+            #expect(QsBridge._isSingleKeyNSDictionaryScalarChainEligible(payload) == false)
+        }
+
+        @Test("narrow fast path chain: ineligible on cycle")
+        func narrowFastPath_chain_ineligibleCycle() {
+            let root = NSMutableDictionary()
+            root["a"] = root
+            #expect(QsBridge._isSingleKeyNSDictionaryScalarChainEligible(root) == false)
+        }
+
+        @Test("narrow fast path chain: ineligible when UndefinedObjC appears")
+        func narrowFastPath_chain_ineligibleUndefined() {
+            let payload = makeSingleKeyNSDictionaryChain(depth: 4, leaf: UndefinedObjC())
+            #expect(QsBridge._isSingleKeyNSDictionaryScalarChainEligible(payload) == false)
+        }
+
+        @Test("narrow fast path chain: ineligible on terminal container leaf")
+        func narrowFastPath_chain_ineligibleContainerLeaf() {
+            let arrayPayload = makeSingleKeyNSDictionaryChain(depth: 4, leaf: NSArray(array: ["x"]))
+            #expect(QsBridge._isSingleKeyNSDictionaryScalarChainEligible(arrayPayload) == false)
+
+            let dictPayload = makeSingleKeyNSDictionaryChain(depth: 2, leaf: NSDictionary())
+            #expect(QsBridge._isSingleKeyNSDictionaryScalarChainEligible(dictPayload) == false)
+
+            let orderedLeaf = OrderedDictionary<String, Any>(uniqueKeysWithValues: [("k", "v")])
+            let orderedPayload = makeSingleKeyNSDictionaryChain(depth: 3, leaf: orderedLeaf)
+            #expect(QsBridge._isSingleKeyNSDictionaryScalarChainEligible(orderedPayload) == false)
+        }
+
+        @Test("encode: deep single-key NSDictionary chain parity (encode=false)")
+        func encode_narrowFastPathCandidate_deepChainParity() throws {
+            let depth = 8
+            let payload = makeSingleKeyNSDictionaryChain(depth: depth, leaf: "x")
+            let options = EncodeOptionsObjC()
+            options.encode = false
+
+            var err: NSError?
+            let s = QsBridge.encode(payload, options: options, error: &err)
+            #expect(err == nil)
+
+            let expectedKey = "a" + String(repeating: "[a]", count: max(0, depth - 1))
+            #expect(s as String? == "\(expectedKey)=x")
+        }
+
+        @Test("encode: deep chain with UndefinedObjC still omitted (fallback parity)")
+        func encode_narrowFastPathCandidate_undefinedStillOmitted() {
+            let payload = makeSingleKeyNSDictionaryChain(depth: 6, leaf: UndefinedObjC())
+            let options = EncodeOptionsObjC()
+            options.encode = false
+
+            var err: NSError?
+            let s = QsBridge.encode(payload, options: options, error: &err)
+            #expect(err == nil)
+            #expect(s as String? == "")
+        }
+
+        @Test("encode: deep chain cycle still maps to cyclicObject (fallback parity)")
+        func encode_narrowFastPathCandidate_cycleStillErrors() {
+            let root = NSMutableDictionary()
+            root["a"] = root
+
+            let options = EncodeOptionsObjC()
+            options.encode = false
+
+            var err: NSError?
+            let s = QsBridge.encode(root, options: options, error: &err)
+            #expect(s == nil)
+            #expect(err != nil)
+            #expect(err?.domain == EncodeErrorInfoObjC.domain)
+            if let err {
+                #expect(EncodeErrorObjC.kind(from: err) == .cyclicObject)
+            }
         }
 
         // MARK: - bridgeInputForDecode
