@@ -1,4 +1,4 @@
-## 1.3.2-wip
+## 1.3.2
 
 - [PERF] optimize Swift deep `encode=false` linear-chain handling in `Encoder`: accumulate chain segments and materialize the final path once, replace `NSDictionary.allKeys.first` with `keyEnumerator().nextObject()`, and keep cycle detection / scalar semantics unchanged.
 - [TEST] add Swift linear-chain parity coverage for `[String: Any]`, `OrderedDictionary<String, Any>`, and `NSDictionary`, including cycle error propagation, terminal `nil`/`NSNull`/`Date`/`Data` behavior, and multi-key fallback assertions.
