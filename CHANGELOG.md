@@ -1,3 +1,12 @@
+## 1.3.3-wip
+
+- [PERF] rewrite the decode hot path for flat query strings: add a byte-oriented fast path with structured-key scanning, allocation-light delimiter/token collection, cheaper scalar/comma-list decoding, and a fast flat finalize path; the ObjC bridge inherits the same shared-core decode speedups.
+- [FIX] tighten decode parity and safety: empty-key segments still count for parameter/list-limit gating, empty string delimiters now throw `DecodeError.emptyDelimiter`, non-single-byte string delimiters and legacy decoders correctly bypass the fast path, encoded `[]`/dot structured-key cases stay on the fallback path, and comma/list-limit accounting is overflow-safe (including `Int.min`).
+- [BENCH] add decode snapshot benchmarking (`perf-decode`) for C1/C2/C3, committed decode baselines, JSON compare support, and opt-in Swift/ObjC decode performance guardrail tests.
+- [TEST] expand Swift + ObjC decode coverage for flat fast-path parity, mixed flat/structured collisions, sentinel and parameter-limit behavior, delimiter gating, list-limit overflow branches, async decode errors, and bridge helper edge cases.
+- [DOCS] document the decode snapshot / compare workflow in `Bench/README.md`.
+- [CHORE] update the JS comparison fixture to `qs@6.15.0`.
+
 ## 1.3.2
 
 - [PERF] optimize Swift deep `encode=false` linear-chain handling in `Encoder`: accumulate chain segments and materialize the final path once, replace `NSDictionary.allKeys.first` with `keyEnumerator().nextObject()`, and keep cycle detection / scalar semantics unchanged.
