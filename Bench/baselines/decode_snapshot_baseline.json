@@ -1,0 +1,65 @@
+{
+  "cases": [
+    {
+      "kind": "decode",
+      "comma": false,
+      "count": 100,
+      "len": 8,
+      "ms_per_op_median": 0.245,
+      "name": "C1",
+      "runtime": "objc",
+      "utf8": false
+    },
+    {
+      "kind": "decode",
+      "comma": false,
+      "count": 1000,
+      "len": 40,
+      "ms_per_op_median": 4.886,
+      "name": "C2",
+      "runtime": "objc",
+      "utf8": false
+    },
+    {
+      "kind": "decode",
+      "comma": true,
+      "count": 1000,
+      "len": 40,
+      "ms_per_op_median": 5.671,
+      "name": "C3",
+      "runtime": "objc",
+      "utf8": true
+    },
+    {
+      "kind": "decode",
+      "comma": false,
+      "count": 100,
+      "len": 8,
+      "ms_per_op_median": 0.244,
+      "name": "C1",
+      "runtime": "swift",
+      "utf8": false
+    },
+    {
+      "kind": "decode",
+      "comma": false,
+      "count": 1000,
+      "len": 40,
+      "ms_per_op_median": 4.936,
+      "name": "C2",
+      "runtime": "swift",
+      "utf8": false
+    },
+    {
+      "kind": "decode",
+      "comma": true,
+      "count": 1000,
+      "len": 40,
+      "ms_per_op_median": 5.638,
+      "name": "C3",
+      "runtime": "swift",
+      "utf8": true
+    }
+  ],
+  "runs": 7
+}
