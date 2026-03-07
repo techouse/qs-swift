@@ -318,6 +318,84 @@ struct DecodeTests {
         }
     }
 
+    @Test("comma: Int.min listLimit throws without overflow when throwOnLimitExceeded is enabled")
+    func testComma_ListLimit_IntMin_Throws() throws {
+        let opts = DecodeOptions(listLimit: .min, comma: true, throwOnLimitExceeded: true)
+        #expect(throws: DecodeError.listLimitExceeded(limit: .min)) {
+            _ = try Qs.decode("a=seed&a=b,c", options: opts)
+        }
+    }
+
+    @Test("comma helper: listLimit 0 throws before scalar append")
+    func testParseListValue_ZeroLimitThrowsImmediately() {
+        #expect(throws: DecodeError.listLimitExceeded(limit: 0)) {
+            _ = try Decoder.parseListValue(
+                "value",
+                options: .init(listLimit: 0, throwOnLimitExceeded: true),
+                currentListLength: 0,
+                isFirstOccurrence: true
+            )
+        }
+    }
+
+    @Test("comma helper: throwing path handles negative limits, remaining capacity, and success")
+    func testParseListValue_ThrowingCommaBranches() throws {
+        #expect(throws: DecodeError.listLimitExceeded(limit: -1)) {
+            _ = try Decoder.parseListValue(
+                "a,b",
+                options: .init(listLimit: -1, comma: true, throwOnLimitExceeded: true),
+                currentListLength: 0,
+                isFirstOccurrence: true
+            )
+        }
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 2)) {
+            _ = try Decoder.parseListValue(
+                "a,b",
+                options: .init(listLimit: 2, comma: true, throwOnLimitExceeded: true),
+                currentListLength: 1,
+                isFirstOccurrence: true
+            )
+        }
+
+        let parsed = try Decoder.parseListValue(
+            "a,b",
+            options: .init(listLimit: 3, comma: true, throwOnLimitExceeded: true),
+            currentListLength: 1,
+            isFirstOccurrence: true
+        )
+
+        let list = parsed as? [String]
+        #expect(list == ["a", "b"])
+    }
+
+    @Test("comma helper: non-throwing negative limit falls back to overflow map")
+    func testParseListValue_NonThrowingNegativeLimitFallsBackToOverflowMap() throws {
+        let parsed = try Decoder.parseListValue(
+            "a,b",
+            options: .init(listLimit: -1, comma: true, throwOnLimitExceeded: false),
+            currentListLength: 0,
+            isFirstOccurrence: true
+        )
+
+        let overflow = try #require(parsed as? [AnyHashable: Any])
+        #expect(Utils.isOverflow(overflow))
+        #expect(overflow[0] as? String == "a")
+        #expect(overflow[1] as? String == "b")
+    }
+
+    @Test("comma helper: throwing scalar append uses current list length gate")
+    func testParseListValue_ThrowingScalarAppendUsesCurrentLength() {
+        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+            _ = try Decoder.parseListValue(
+                "value",
+                options: .init(listLimit: 1, throwOnLimitExceeded: true),
+                currentListLength: 1,
+                isFirstOccurrence: false
+            )
+        }
+    }
+
     @Test("comma: non-throwing overflow falls back to indexed map (qs 6.14.2 parity)")
     func testComma_ListLimit_NonThrowingOverflowFallsBackToMap() throws {
         let opts = DecodeOptions(listLimit: 1, comma: true, throwOnLimitExceeded: false)
@@ -1334,6 +1412,17 @@ struct DecodeTests {
         #expect(isNSNullValue(user?["email"]))
     }
 
+    @Test("decode - preserves direct map inputs with nil placeholders")
+    func testDecode_MapVariants() throws {
+        let optionalMap = try Qs._decodeSyncCore(["a": nil, "b": "two"] as [String: Any?])
+        #expect(optionalMap["a"] is NSNull)
+        #expect(optionalMap["b"] as? String == "two")
+
+        let anyMap = try Qs._decodeSyncCore(["a": "one", "b": 2] as [String: Any])
+        #expect(anyMap["a"] as? String == "one")
+        #expect(anyMap["b"] as? Int == 2)
+    }
+
     @Test("decode - AnyHashable key collisions are deterministic (String wins)")
     func testDecode_AnyHashableKeyCollision_StringWins() throws {
         // Different literal orders, same outcome.
@@ -1951,6 +2040,20 @@ struct DataDateRegexTests {
     func testDecodeAsync_Background() async throws {
         let m = try await Qs.decodeAsync("a[b][c]=1&x=2").value
         #expect((m["a"] as? [String: Any])?["b"] != nil)
+    }
+
+    @Test("async decode propagates invalid input errors")
+    func testDecodeAsync_ErrorBranches() async {
+        await #expect(throws: Error.self) {
+            _ = try await Qs.decodeAsync(123)
+        }
+
+        await #expect(throws: Error.self) {
+            _ = try await Qs.decodeAsyncBoxed(
+                _UnsafeSendable(123),
+                options: _UnsafeSendable(.init())
+            )
+        }
     }
 
     @MainActor

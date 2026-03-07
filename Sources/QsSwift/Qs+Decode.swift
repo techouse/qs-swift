@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import OrderedCollections
 
@@ -158,6 +159,12 @@ extension Qs {
         if let mapStringAny = input as? [String: Any], mapStringAny.isEmpty { return [:] }
         if let mapStringOptionalAny = input as? [String: Any?], mapStringOptionalAny.isEmpty { return [:] }
 
+        if let string = input as? String,
+            let fastFlat = try QsSwift.Decoder.decodeFlatQueryStringFast(string, options: options)
+        {
+            return finalizeFlatDecodedObject(fastFlat, options: options, dropDepth: options.depth)
+        }
+
         // Build an ordered key/value view of the input
         let tmp: OrderedDictionary<String, Any> = try {
             switch input {
@@ -207,6 +214,22 @@ extension Qs {
             finalOptions = options.copy(parseLists: false)
         }
 
+        let decodeFromString = (input is String)
+        let structuredScan: StructuredKeyScan = {
+            guard decodeFromString else { return .empty }
+            return QsSwift.Decoder.scanStructuredKeys(tmp, options: finalOptions)
+        }()
+
+        if decodeFromString, !structuredScan.hasAnyStructuredSyntax {
+            var flatObj: [String: Any] = [:]
+            flatObj.reserveCapacity(tmp.count)
+            for (key, value) in tmp {
+                if key.isEmpty { continue }
+                flatObj[key] = value
+            }
+            return finalizeFlatDecodedObject(flatObj, options: finalOptions, dropDepth: options.depth)
+        }
+
         // Merge each parsed key structure into the final object, preserving order
         var obj: [String: Any] = [:]
         if !tmp.isEmpty {
@@ -224,11 +247,26 @@ extension Qs {
             }
 
             for (key, value) in tmp {
+                if key.isEmpty { continue }
+                if decodeFromString
+                    && !structuredScan.containsStructuredKey(key)
+                    && !structuredScan.containsStructuredRoot(key)
+                {
+                    if let existing = obj[key] {
+                        obj[key] =
+                            Utils.merge(target: existing, source: value, options: finalOptions)
+                            ?? existing
+                    } else {
+                        obj[key] = value
+                    }
+                    continue
+                }
+
                 let parsed = try QsSwift.Decoder.parseKeys(
                     givenKey: key,
                     value: value,
                     options: finalOptions,
-                    valuesParsed: (input is String)
+                    valuesParsed: decodeFromString
                 )
 
                 // (a) If the first parsed thing is a map, adopt it wholesale (fast path)
@@ -288,13 +326,63 @@ extension Qs {
             }
         }
 
+        return finalizeDecodedObject(obj, options: finalOptions, dropDepth: options.depth)
+    }
+
+    @usableFromInline
+    internal static func finalizeFlatDecodedObject(
+        _ object: [String: Any],
+        options: DecodeOptions,
+        dropDepth: Int
+    ) -> [String: Any] {
+        if canSkipFinalizeForFlatObject(object) {
+            return object
+        }
+        return finalizeDecodedObject(object, options: options, dropDepth: dropDepth)
+    }
+
+    @inline(__always)
+    private static func canSkipFinalizeForFlatObject(_ object: [String: Any]) -> Bool {
+        if object.isEmpty { return true }
+
+        var stack: [Any] = []
+        stack.reserveCapacity(object.count)
+        stack.append(contentsOf: object.values)
+
+        while let node = stack.popLast() {
+            if node is Undefined { return false }
+            if Mirror(reflecting: node).displayStyle == .optional { return false }
+
+            if let arr = node as? [Any] {
+                stack.append(contentsOf: arr)
+                continue
+            }
+
+            if let dict = node as? [String: Any] {
+                stack.append(contentsOf: dict.values)
+                continue
+            }
+
+            if node is [AnyHashable: Any] { return false }
+            if node is [AnyHashable: Any?] { return false }
+        }
+
+        return true
+    }
+
+    @usableFromInline
+    internal static func finalizeDecodedObject(
+        _ object: [String: Any],
+        options: DecodeOptions,
+        dropDepth: Int
+    ) -> [String: Any] {
         // Work on optionals for Utils.compact
-        var tmpOpt: [String: Any?] = obj.mapValues { $0 }
+        var tmpOpt: [String: Any?] = object.mapValues { $0 }
 
         // Only compact if we actually saw Undefined anywhere
         let compactedOpt: [String: Any?] = {
             if Utils.containsUndefined(tmpOpt) {
-                return Utils.compact(&tmpOpt, allowSparseLists: finalOptions.allowSparseLists)
+                return Utils.compact(&tmpOpt, allowSparseLists: options.allowSparseLists)
             } else {
                 return tmpOpt
             }
@@ -308,7 +396,7 @@ extension Qs {
         }
 
         // Heuristic: schedule temp graph drop on main to avoid deep destructor recursion
-        if options.depth >= MAIN_DROP_THRESHOLD
+        if dropDepth >= MAIN_DROP_THRESHOLD
             || Utils.needsMainDrop(compactedOpt, threshold: MAIN_DROP_THRESHOLD)
         {
             Utils.dropOnMainThread(compactedOpt)

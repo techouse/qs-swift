@@ -70,6 +70,7 @@ public struct DecodeOptions: @unchecked Sendable {
         message: "Use `decoder` (ScalarDecoder); this will be removed in a future major release."
     )
     @usableFromInline internal let legacyDecoder: LegacyDecoder?
+    @usableFromInline internal let hasLegacyDecoder: Bool
 
     /// When `true`, encoded dot sequences (`%2E`/`%2e`) **inside key segments** are treated as
     /// literal dots for the purposes of naming (after splitting). This option **implies**
@@ -196,6 +197,7 @@ public struct DecodeOptions: @unchecked Sendable {
         self.allowDots = allowDots
         self.decoder = decoder
         self.legacyDecoder = legacyDecoder
+        self.hasLegacyDecoder = legacyDecoder != nil
         self.decodeDotInKeys = decodeDotInKeys
         self.allowEmptyLists = allowEmptyLists
         self.allowSparseLists = allowSparseLists

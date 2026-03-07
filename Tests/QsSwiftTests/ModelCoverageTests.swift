@@ -56,11 +56,13 @@ struct ModelCoverageTests {
     @Test("DecodeError bridged metadata matches expectations")
     func decodeError_bridging() {
         let notPositive = DecodeError.parameterLimitNotPositive
+        let emptyDelimiter = DecodeError.emptyDelimiter
         let exceeding = DecodeError.parameterLimitExceeded(limit: 2)
         let listLimit = DecodeError.listLimitExceeded(limit: 1)
         let depthExceeded = DecodeError.depthExceeded(maxDepth: 3)
 
         #expect(notPositive.description.contains("Parameter limit"))
+        #expect(emptyDelimiter.description.contains("Delimiter"))
         #expect(exceeding.description.contains("Only 2 parameter"))
         #expect(listLimit.description.contains("List limit"))
         #expect(depthExceeded.description.contains("strictDepth"))
@@ -80,6 +82,12 @@ struct ModelCoverageTests {
         let cases: [(DecodeError, (NSError) -> Void)] = [
             (
                 .parameterLimitNotPositive,
+                { error in
+                    #expect(error.userInfo.isEmpty)
+                }
+            ),
+            (
+                .emptyDelimiter,
                 { error in
                     #expect(error.userInfo.isEmpty)
                 }

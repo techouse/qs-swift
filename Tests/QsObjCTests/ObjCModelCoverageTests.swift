@@ -123,6 +123,7 @@
             #expect(DecodeErrorCodeObjC.parameterLimitExceeded.description == "parameterLimitExceeded")
             #expect(DecodeErrorCodeObjC.listLimitExceeded.description == "listLimitExceeded")
             #expect(DecodeErrorCodeObjC.depthExceeded.description == "depthExceeded")
+            #expect(DecodeErrorCodeObjC.emptyDelimiter.description == "emptyDelimiter")
         }
 
         @Test("EncodeErrorCodeObjC description mirrors Swift case")
