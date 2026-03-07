@@ -412,6 +412,18 @@
             #expect(outNull is NSNull)
         }
 
+        // MARK: - Small utils
+
+        @Test("stringifyKey falls back to String(describing:) for non-string non-number keys")
+        func stringifyKey_fallsBackToDescription() {
+            struct CustomKey: CustomStringConvertible {
+                let raw: Int
+                var description: String { "custom-\(raw)" }
+            }
+
+            #expect(QsBridge.stringifyKey(CustomKey(raw: 7)) == "custom-7")
+        }
+
         // MARK: - bridgeInputForEncode
 
         @Test("bridgeInputForEncode: NSString → Swift.String")

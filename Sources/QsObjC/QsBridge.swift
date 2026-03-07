@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 #if canImport(ObjectiveC) && QS_OBJC_BRIDGE
     import Foundation
     import OrderedCollections

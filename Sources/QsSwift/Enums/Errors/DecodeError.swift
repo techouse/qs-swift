@@ -2,6 +2,8 @@
 public enum DecodeError: Error, Equatable, CustomStringConvertible {
     /// The `parameterLimit` option was set to `<= 0`.
     case parameterLimitNotPositive
+    /// The configured string delimiter was empty.
+    case emptyDelimiter
     /// The number of key/value pairs exceeded `parameterLimit` and `throwOnLimitExceeded` is `true`.
     case parameterLimitExceeded(limit: Int)
     /// The number of list elements exceeded `listLimit` and `throwOnLimitExceeded` is `true`.
@@ -14,6 +16,8 @@ public enum DecodeError: Error, Equatable, CustomStringConvertible {
         switch self {
         case .parameterLimitNotPositive:
             return "Parameter limit must be a positive integer."
+        case .emptyDelimiter:
+            return "Delimiter must not be empty."
         case .parameterLimitExceeded(let limit):
             return
                 "Parameter limit exceeded. Only \(limit) parameter\(limit == 1 ? "" : "s") allowed."
