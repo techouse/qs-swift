@@ -6,7 +6,7 @@ import PackageDescription
 var deps: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
     .package(url: "https://github.com/apple/swift-collections.git", from: "1.2.1"),
-    .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.1.0"),
+    .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.6"),
     .package(url: "https://github.com/apple/swift-testing.git", from: "0.9.0"),
 ]
 var targetDeps: [Target.Dependency] = [
@@ -47,13 +47,23 @@ let package = Package(
                 .define("QS_OBJC_BRIDGE", .when(platforms: [.macOS, .iOS, .tvOS, .watchOS]))
             ]
         ),
+        .target(
+            name: "QsTestSupport",
+            path: "Tests/TestSupport"
+        ),
         .testTarget(
             name: "QsSwiftTests",
             dependencies: [
                 "QsSwift",
+                "QsTestSupport",
                 .product(name: "Testing", package: "swift-testing"),
             ],
             path: "Tests/QsSwiftTests",
+            exclude: [
+                "DecodePerfHelpersTests.swift",
+                "DecodePerformanceGuardrailTests.swift",
+                "EncodePerformanceGuardrailTests.swift",
+            ],
             swiftSettings: [
                 .unsafeFlags(["-strict-concurrency=complete"], .when(configuration: .debug)),
                 .unsafeFlags(["-enable-actor-data-race-checks"], .when(configuration: .debug)),
@@ -64,9 +74,14 @@ let package = Package(
             dependencies: [
                 "QsSwift",
                 "QsObjC",
+                "QsTestSupport",
                 .product(name: "Testing", package: "swift-testing"),
             ],
-            path: "Tests/QsObjCTests"
+            path: "Tests/QsObjCTests",
+            exclude: [
+                "ObjCDecodePerformanceGuardrailTests.swift",
+                "ObjCEncodePerformanceGuardrailTests.swift",
+            ]
         ),
         .executableTarget(
             name: "QsSwiftComparison",
