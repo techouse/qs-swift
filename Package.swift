@@ -1,12 +1,12 @@
-// swift-tools-version: 6.1
+// swift-tools-version: 6.0
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
 
 var deps: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
-    .package(url: "https://github.com/apple/swift-collections.git", from: "1.2.1"),
-    .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.1.0"),
+    .package(url: "https://github.com/apple/swift-collections.git", from: "1.4.0"),
+    .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.6"),
 ]
 var targetDeps: [Target.Dependency] = [
     .product(name: "Algorithms", package: "swift-algorithms"),

@@ -66,6 +66,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - runner: macos-14
+            xcode: '15.4'
+            swift: '5.10'
+            experimental: true
+          - runner: macos-15
+            xcode: '16.2'
+            swift: '6.0'
+            experimental: false
           - runner: macos-15
             xcode: '16.4'
             swift: '6.1'
@@ -98,11 +106,12 @@ jobs:
       - name: Compute Package.resolved hash
         run: echo "PACKAGE_RESOLVED_HASH=$(git hash-object Package.resolved 2>/dev/null || echo none)" >> "$GITHUB_ENV"
 
-      - name: Experimental macOS 26 notice
+      - name: Experimental matrix lane notice
         if: ${{ matrix.experimental }}
-        run: echo "::warning::Using macos-26 runner (public preview). This job is marked experimental and allowed to fail."
+        run: echo "::warning::Using experimental CI lane on ${{ matrix.runner }} with Xcode ${{ env.XCODE_VERSION }} / Swift ${{ env.SWIFT_VERSION }}. This job is allowed to fail."
 
       - name: Cache SwiftPM artifacts
+        if: ${{ matrix.swift != '5.10' }}
         uses: actions/cache@v5
         with:
           path: |
@@ -114,10 +123,19 @@ jobs:
             spm-${{ runner.os }}-swift-${{ env.SWIFT_VERSION }}-
 
       - name: Run tests with coverage
+        if: ${{ matrix.swift != '5.10' }}
         env:
           SKIP_EXPENSIVE_TESTS: 1
           SWIFT_DETERMINISTIC_HASHING: 1
         run: bash scripts/coverage.sh
+
+      - name: Build tests only (Swift 5.10 compatibility smoke check)
+        if: ${{ matrix.swift == '5.10' }}
+        env:
+          SWIFT_DETERMINISTIC_HASHING: 1
+        run: |
+          set -euxo pipefail
+          swift build -c debug --build-tests
 
       - name: Run deep Swift encode regression with Address Sanitizer
         if: ${{ !matrix.experimental }}
@@ -140,6 +158,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload coverage to Codecov
+        if: ${{ matrix.swift != '5.10' }}
         uses: codecov/codecov-action@v5
         with:
           files: coverage/info.lcov
@@ -317,6 +336,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - swift: '6.0'
+            experimental: false
           - swift: '6.1'
             experimental: false
           - swift: '6.2'

@@ -88,7 +88,7 @@ internal enum Encoder {
                 undefined: undefined,
                 path: KeyPathNode.fromMaterialized(rootPrefix),
                 config: rootConfig,
-                depth: depth,
+                depth: depth
             )
         ]
 
