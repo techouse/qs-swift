@@ -1,4 +1,4 @@
-## 1.3.4-wip
+## 1.3.4
 
 - [CHORE] broaden toolchain compatibility: lower `Package.swift` to `swift-tools-version: 6.0`, update `swift-collections` to `1.4.0` and `swift-docc-plugin` to `1.4.6`, and align `Package@swift-5.10.swift` with `QsTestSupport` plus 5.10-specific test target exclusions for perf guardrail files.
 - [CI] expand compatibility coverage across macOS and Linux with Swift `5.10`/`6.0`/`6.1`/`6.2`; add a real Xcode `16.2` / Swift `6.0` lane, keep Swift `5.10` as an experimental build-only smoke check, and skip coverage upload on that lane.
