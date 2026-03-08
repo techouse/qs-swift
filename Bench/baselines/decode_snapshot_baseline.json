@@ -1,0 +1,131 @@
+{
+  "cases": [
+    {
+      "comma": false,
+      "count": 100,
+      "keys": 100,
+      "kind": "decode",
+      "len": 8,
+      "ms_per_op_median": 0.037,
+      "ms_per_op_values": [
+        0.038,
+        0.037,
+        0.037,
+        0.036,
+        0.037,
+        0.038,
+        0.038
+      ],
+      "name": "C1",
+      "runs": 7,
+      "runtime": "objc",
+      "utf8": false
+    },
+    {
+      "comma": false,
+      "count": 1000,
+      "keys": 1000,
+      "kind": "decode",
+      "len": 40,
+      "ms_per_op_median": 0.463,
+      "ms_per_op_values": [
+        0.462,
+        0.466,
+        0.463,
+        0.474,
+        0.459,
+        0.461,
+        0.466
+      ],
+      "name": "C2",
+      "runs": 7,
+      "runtime": "objc",
+      "utf8": false
+    },
+    {
+      "comma": true,
+      "count": 1000,
+      "keys": 1000,
+      "kind": "decode",
+      "len": 40,
+      "ms_per_op_median": 0.544,
+      "ms_per_op_values": [
+        0.544,
+        0.551,
+        0.542,
+        0.541,
+        0.541,
+        0.545,
+        0.548
+      ],
+      "name": "C3",
+      "runs": 7,
+      "runtime": "objc",
+      "utf8": true
+    },
+    {
+      "comma": false,
+      "count": 100,
+      "keys": 100,
+      "kind": "decode",
+      "len": 8,
+      "ms_per_op_median": 0.038,
+      "ms_per_op_values": [
+        0.041,
+        0.039,
+        0.037,
+        0.039,
+        0.038,
+        0.038,
+        0.036
+      ],
+      "name": "C1",
+      "runs": 7,
+      "runtime": "swift",
+      "utf8": false
+    },
+    {
+      "comma": false,
+      "count": 1000,
+      "keys": 1000,
+      "kind": "decode",
+      "len": 40,
+      "ms_per_op_median": 0.471,
+      "ms_per_op_values": [
+        0.478,
+        0.474,
+        0.471,
+        0.471,
+        0.47,
+        0.464,
+        0.461
+      ],
+      "name": "C2",
+      "runs": 7,
+      "runtime": "swift",
+      "utf8": false
+    },
+    {
+      "comma": true,
+      "count": 1000,
+      "keys": 1000,
+      "kind": "decode",
+      "len": 40,
+      "ms_per_op_median": 0.54,
+      "ms_per_op_values": [
+        0.541,
+        0.538,
+        0.547,
+        0.538,
+        0.54,
+        0.54,
+        0.548
+      ],
+      "name": "C3",
+      "runs": 7,
+      "runtime": "swift",
+      "utf8": true
+    }
+  ],
+  "runs": 7
+}
