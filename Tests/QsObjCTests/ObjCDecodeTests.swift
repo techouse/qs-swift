@@ -122,6 +122,18 @@
             #expect(err != nil)
         }
 
+        @Test("objc-decode: comma Int.min listLimit throws without overflow")
+        func commaLimitIntMinThrow() throws {
+            let err = decodeExpectingError("a=seed&a=b,c") { o in
+                o.comma = true
+                o.listLimit = .min
+                o.throwOnLimitExceeded = true
+            }
+            let error = try #require(err)
+            #expect(DecodeErrorObjC.kind(from: error) == .listLimitExceeded)
+            #expect(DecodeErrorObjC.limit(from: error) == .min)
+        }
+
         @Test("objc-decode: comma non-throw overflow falls back to indexed map")
         func commaLimitNonThrowFallback() throws {
             let r = decode("a=b,c") { o in
@@ -142,9 +154,22 @@
                 o.throwOnLimitExceeded = false
             }
             let a = r["a"] as? [Any]
-            let first = a?.first as? [Any]
+            let firstStrings = a?.first as? [String]
             #expect(a?.count == 1)
-            #expect(first?.compactMap { $0 as? String } == ["b", "c"])
+            #expect(firstStrings == ["b", "c"])
+        }
+
+        @Test("objc-decode: mixed encoded [] suffix keeps list-of-lists shape")
+        func commaMixedEncodedEmptyArraySuffixKeepsListShape() throws {
+            for query in ["a%5B]=b,c", "a[%5D=b,c", "a%5B%5D=b,c"] {
+                let r = decode(query) { o in
+                    o.comma = true
+                }
+                let a = r["a"] as? [Any]
+                let first = a?.first as? [Any]
+                #expect(a?.count == 1, "query=\(query)")
+                #expect(first?.compactMap { $0 as? String } == ["b", "c"], "query=\(query)")
+            }
         }
 
         @Test("objc-decode: comma negative list limit still falls back to indexed map")

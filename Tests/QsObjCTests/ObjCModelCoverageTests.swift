@@ -123,6 +123,18 @@
             #expect(DecodeErrorCodeObjC.parameterLimitExceeded.description == "parameterLimitExceeded")
             #expect(DecodeErrorCodeObjC.listLimitExceeded.description == "listLimitExceeded")
             #expect(DecodeErrorCodeObjC.depthExceeded.description == "depthExceeded")
+            #expect(DecodeErrorCodeObjC.emptyDelimiter.description == "emptyDelimiter")
+
+            let opts = DecodeOptionsObjC().with {
+                $0.delimiter = DelimiterObjC(string: "")
+            }
+            var err: NSError?
+            let output = QsBridge.decode("a=1" as NSString, options: opts, error: &err)
+            #expect(output == nil)
+            #expect(err != nil)
+            if let error = err {
+                #expect(DecodeErrorObjC.kind(from: error) == .emptyDelimiter)
+            }
         }
 
         @Test("EncodeErrorCodeObjC description mirrors Swift case")

@@ -38,6 +38,8 @@
         case listLimitExceeded = 3
         /// Nested depth exceeded `depth` (or `strictDepth` failed).
         case depthExceeded = 4
+        /// The configured string delimiter was empty.
+        case emptyDelimiter = 5
     }
 
     // Nice string for logs / debugging parity with Swift.
@@ -48,6 +50,7 @@
             case .parameterLimitExceeded: return "parameterLimitExceeded"
             case .listLimitExceeded: return "listLimitExceeded"
             case .depthExceeded: return "depthExceeded"
+            case .emptyDelimiter: return "emptyDelimiter"
             }
         }
     }
