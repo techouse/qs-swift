@@ -1,4 +1,4 @@
-## 1.3.3-wip
+## 1.3.3
 
 - [PERF] rewrite the decode hot path for flat query strings: add a byte-oriented fast path with structured-key scanning, allocation-light delimiter/token collection, cheaper scalar/comma-list decoding, and a fast flat finalize path; the ObjC bridge inherits the same shared-core decode speedups.
 - [FIX] tighten decode parity and safety: empty-key segments still count for parameter/list-limit gating, empty string delimiters now throw `DecodeError.emptyDelimiter`, non-single-byte string delimiters and legacy decoders correctly bypass the fast path, encoded `[]`/dot structured-key cases stay on the fallback path, and comma/list-limit accounting is overflow-safe (including `Int.min`).
