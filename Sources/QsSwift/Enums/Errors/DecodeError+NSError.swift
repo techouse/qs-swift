@@ -17,12 +17,15 @@ extension DecodeError: LocalizedError, CustomNSError {
         case .parameterLimitExceeded: return 2
         case .listLimitExceeded: return 3
         case .depthExceeded: return 4
+        case .emptyDelimiter: return 5
         }
     }
 
     public var errorUserInfo: [String: Any] {
         switch self {
         case .parameterLimitNotPositive:
+            return [:]
+        case .emptyDelimiter:
             return [:]
 
         case .parameterLimitExceeded(let limit),

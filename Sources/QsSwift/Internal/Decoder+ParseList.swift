@@ -33,13 +33,48 @@ extension QsSwift.Decoder {
             throw DecodeError.listLimitExceeded(limit: options.listLimit)
         }
         if let stringVal = value as? String, !stringVal.isEmpty, options.comma, stringVal.contains(",") {
-            let splitVal = stringVal.split(separator: ",", omittingEmptySubsequences: false).map(
-                String.init)
-            if options.throwOnLimitExceeded,
-                (currentListLength + splitVal.count) > options.listLimit
-            {
-                throw DecodeError.listLimitExceeded(limit: options.listLimit)
+            if options.throwOnLimitExceeded {
+                if options.listLimit <= 0 {
+                    throw DecodeError.listLimitExceeded(limit: options.listLimit)
+                }
+
+                let (remaining, overflowed) = options.listLimit.subtractingReportingOverflow(
+                    currentListLength
+                )
+                if overflowed || remaining < 0 {
+                    throw DecodeError.listLimitExceeded(limit: options.listLimit)
+                }
+
+                let maxParts: Int? = {
+                    let (value, overflowed) = remaining.addingReportingOverflow(1)
+                    return overflowed ? nil : value
+                }()
+                let splitVal = splitCommaValue(stringVal, maxParts: maxParts)
+                if splitVal.count > remaining {
+                    throw DecodeError.listLimitExceeded(limit: options.listLimit)
+                }
+                return splitVal
             }
+
+            if isFirstOccurrence, options.listLimit >= 0 {
+                let maxParts: Int? = {
+                    let (value, overflowed) = options.listLimit.addingReportingOverflow(1)
+                    return overflowed ? nil : value
+                }()
+                let preview = splitCommaValue(stringVal, maxParts: maxParts)
+                if preview.count > options.listLimit {
+                    let full = splitCommaValue(stringVal, maxParts: nil)
+                    var overflow: [AnyHashable: Any] = [:]
+                    overflow.reserveCapacity(full.count + 1)
+                    for (index, element) in full.enumerated() {
+                        overflow[index] = element
+                    }
+                    return Utils.markOverflow(overflow, maxIndex: full.count - 1)
+                }
+                return preview
+            }
+
+            let splitVal = splitCommaValue(stringVal, maxParts: nil)
 
             // qs@6.14.2 parity:
             // If comma splitting alone overflows and we are not throwing, the first occurrence
@@ -64,5 +99,28 @@ extension QsSwift.Decoder {
         }
 
         return value
+    }
+
+    /// Splits a comma-separated scalar preserving empty segments.
+    private static func splitCommaValue(_ value: String, maxParts: Int?) -> [String] {
+        if let maxParts, maxParts <= 0 { return [] }
+
+        var parts: [String] = []
+        let reserveHint = min(maxParts ?? 8, min(value.utf8.count, 7) + 1)
+        parts.reserveCapacity(reserveHint)
+
+        var start = value.startIndex
+        while true {
+            if let maxParts, parts.count >= maxParts { break }
+
+            let comma = value[start...].firstIndex(of: ",")
+            let end = comma ?? value.endIndex
+            parts.append(String(value[start..<end]))
+
+            guard let comma else { break }
+            start = value.index(after: comma)
+        }
+
+        return parts
     }
 }

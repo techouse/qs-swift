@@ -13,9 +13,14 @@ extension QsSwift.Utils {
     static func decode(_ str: String?, charset: String.Encoding = .utf8) -> String? {
         guard let str = str else { return nil }
 
-        let strWithoutPlus = str.replacingOccurrences(of: "+", with: " ")
+        let hasPlus = str.contains("+")
+        let hasPercent = str.contains("%")
+        if !hasPlus, !hasPercent { return str }
+
+        let strWithoutPlus = hasPlus ? str.replacingOccurrences(of: "+", with: " ") : str
 
         if charset == .isoLatin1 {
+            if !hasPercent { return strWithoutPlus }
             let regex = isoPercentByteRegex
             let range = NSRange(strWithoutPlus.startIndex..., in: strWithoutPlus)
 
@@ -35,6 +40,7 @@ extension QsSwift.Utils {
             return String(result)
         }
 
+        if !hasPercent { return strWithoutPlus }
         return strWithoutPlus.removingPercentEncoding
     }
 

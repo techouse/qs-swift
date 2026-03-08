@@ -16,6 +16,32 @@ public struct PerfSummary: Decodable {
     public let cases: [CaseRecord]
 }
 
+public struct DecodePerfSummary: Decodable {
+    public struct CaseRecord: Decodable {
+        public let runtime: String
+        public let name: String
+        public let count: Int
+        public let comma: Bool
+        public let utf8: Bool
+        public let len: Int
+        public let keys: Int
+        public let msPerOpMedian: Double
+
+        private enum CodingKeys: String, CodingKey {
+            case runtime
+            case name
+            case count
+            case comma
+            case utf8
+            case len
+            case keys
+            case msPerOpMedian = "ms_per_op_median"
+        }
+    }
+
+    public let cases: [CaseRecord]
+}
+
 public struct BenchCaseKey: Hashable {
     public let runtime: String
     public let depth: Int
@@ -26,7 +52,58 @@ public struct BenchCaseKey: Hashable {
     }
 }
 
+public struct DecodeBenchCaseKey: Hashable {
+    public let runtime: String
+    public let name: String
+    public let count: Int
+    public let comma: Bool
+    public let utf8: Bool
+    public let len: Int
+    public let keys: Int
+
+    public init(
+        runtime: String,
+        name: String,
+        count: Int,
+        comma: Bool,
+        utf8: Bool,
+        len: Int,
+        keys: Int
+    ) {
+        self.runtime = runtime
+        self.name = name
+        self.count = count
+        self.comma = comma
+        self.utf8 = utf8
+        self.len = len
+        self.keys = keys
+    }
+}
+
+public struct DecodePerfCaseSpec: Sendable {
+    public let name: String
+    public let count: Int
+    public let comma: Bool
+    public let utf8: Bool
+    public let len: Int
+    public let keys: Int
+
+    public init(name: String, count: Int, comma: Bool, utf8: Bool, len: Int, keys: Int) {
+        self.name = name
+        self.count = count
+        self.comma = comma
+        self.utf8 = utf8
+        self.len = len
+        self.keys = keys
+    }
+}
+
 public let deepEncodePerfCases = [2000, 5000, 12000]
+public let decodePerfCases: [DecodePerfCaseSpec] = [
+    .init(name: "C1", count: 100, comma: false, utf8: false, len: 8, keys: 100),
+    .init(name: "C2", count: 1000, comma: false, utf8: false, len: 40, keys: 1000),
+    .init(name: "C3", count: 1000, comma: true, utf8: true, len: 40, keys: 1000),
+]
 
 private let benchOutputRegex: NSRegularExpression = {
     do {
@@ -36,6 +113,18 @@ private let benchOutputRegex: NSRegularExpression = {
         )
     } catch {
         fatalError("Invalid bench output regex literal: \(error)")
+    }
+}()
+
+private let decodeBenchOutputRegex: NSRegularExpression = {
+    do {
+        return try NSRegularExpression(
+            pattern:
+                #"^\s*(swift|objc)-decode\s+(C[0-9]+)\s+count=(\d+)\s+comma=(true|false)\s+utf8=(true|false)\s+len=(\d+):\s*([0-9.]+)\s*ms/op\s*\|\s*keys=(\d+)\s*$"#,
+            options: []
+        )
+    } catch {
+        fatalError("Invalid decode bench output regex literal: \(error)")
     }
 }()
 
@@ -115,6 +204,31 @@ public func loadBaseline(runtime: String, root: URL = repoRootURL()) throws -> [
     }
 }
 
+public func loadDecodeBaseline(
+    runtime: String,
+    root: URL = repoRootURL()
+) throws -> [DecodeBenchCaseKey: Double] {
+    let baselineURL = root.appendingPathComponent(
+        "Bench/baselines/decode_snapshot_baseline.json"
+    )
+    let data = try Data(contentsOf: baselineURL)
+    let summary = try JSONDecoder().decode(DecodePerfSummary.self, from: data)
+
+    return summary.cases.reduce(into: [DecodeBenchCaseKey: Double]()) { acc, entry in
+        guard entry.runtime == runtime else { return }
+        let key = DecodeBenchCaseKey(
+            runtime: entry.runtime,
+            name: entry.name,
+            count: entry.count,
+            comma: entry.comma,
+            utf8: entry.utf8,
+            len: entry.len,
+            keys: entry.keys
+        )
+        acc[key] = entry.msPerOpMedian
+    }
+}
+
 public func parseBenchOutput(_ output: String) throws -> [BenchCaseKey: Double] {
     var result: [BenchCaseKey: Double] = [:]
     for line in output.split(whereSeparator: \.isNewline) {
@@ -133,6 +247,45 @@ public func parseBenchOutput(_ output: String) throws -> [BenchCaseKey: Double] 
         }
 
         result[BenchCaseKey(runtime: String(text[runtimeRange]), depth: depth)] = ms
+    }
+
+    return result
+}
+
+public func parseDecodeBenchOutput(_ output: String) throws -> [DecodeBenchCaseKey: Double] {
+    var result: [DecodeBenchCaseKey: Double] = [:]
+    for line in output.split(whereSeparator: \.isNewline) {
+        let text = String(line)
+        let range = NSRange(location: 0, length: text.utf16.count)
+        guard
+            let match = decodeBenchOutputRegex.firstMatch(in: text, options: [], range: range),
+            match.numberOfRanges == 9,
+            let runtimeRange = Range(match.range(at: 1), in: text),
+            let nameRange = Range(match.range(at: 2), in: text),
+            let countRange = Range(match.range(at: 3), in: text),
+            let commaRange = Range(match.range(at: 4), in: text),
+            let utf8Range = Range(match.range(at: 5), in: text),
+            let lenRange = Range(match.range(at: 6), in: text),
+            let msRange = Range(match.range(at: 7), in: text),
+            let keysRange = Range(match.range(at: 8), in: text),
+            let count = Int(text[countRange]),
+            let len = Int(text[lenRange]),
+            let keys = Int(text[keysRange]),
+            let ms = Double(text[msRange])
+        else {
+            continue
+        }
+
+        let key = DecodeBenchCaseKey(
+            runtime: String(text[runtimeRange]),
+            name: String(text[nameRange]),
+            count: count,
+            comma: String(text[commaRange]) == "true",
+            utf8: String(text[utf8Range]) == "true",
+            len: len,
+            keys: keys
+        )
+        result[key] = ms
     }
 
     return result

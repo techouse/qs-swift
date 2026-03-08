@@ -7,6 +7,7 @@ Standalone benchmark harness for `QsSwift` / `QsObjC`.
 - `list`: large comma-list decode payload.
 - `deep`: deep decode key path payload (`foo[p][p]...`).
 - `perf`: encode deep snapshot parity matrix (Swift + ObjC bridge).
+- `perf-decode`: decode C1/C2/C3 snapshot parity matrix (Swift + ObjC bridge).
 
 `perf` uses:
 - depths: `2000`, `5000`, `12000`
@@ -25,6 +26,9 @@ N=5000 .build/release/QsSwiftBench deep
 
 # Encode deep snapshot (Swift + ObjC bridge)
 .build/release/QsSwiftBench perf
+
+# Decode snapshot (C1/C2/C3, Swift + ObjC bridge)
+.build/release/QsSwiftBench perf-decode
 ```
 
 ## Snapshot compare workflow
@@ -32,20 +36,29 @@ N=5000 .build/release/QsSwiftBench deep
 Run repeated snapshots and emit a JSON summary:
 
 ```bash
-Bench/scripts/perf_compare.sh --runs 3 --output /tmp/qs_swift_perf.json
+./scripts/perf_compare.sh --scenario encode --runs 3 --output /tmp/qs_swift_perf_encode.json
+./scripts/perf_compare.sh --scenario decode --runs 3 --output /tmp/qs_swift_perf_decode.json
 ```
 
 Compare against committed baseline:
 
 ```bash
-Bench/scripts/perf_compare.sh \
+./scripts/perf_compare.sh \
+  --scenario encode \
   --runs 3 \
-  --output /tmp/qs_swift_perf.json \
-  --compare Bench/baselines/encode_deep_snapshot_baseline.json
+  --output /tmp/qs_swift_perf_encode.json \
+  --compare ./baselines/encode_deep_snapshot_baseline.json
+
+./scripts/perf_compare.sh \
+  --scenario decode \
+  --runs 3 \
+  --output /tmp/qs_swift_perf_decode.json \
+  --compare ./baselines/decode_snapshot_baseline.json
 ```
 
 Baseline file:
-- `Bench/baselines/encode_deep_snapshot_baseline.json`
+- `./baselines/encode_deep_snapshot_baseline.json`
+- `./baselines/decode_snapshot_baseline.json`
 
 ## Optional perf guardrail tests
 
