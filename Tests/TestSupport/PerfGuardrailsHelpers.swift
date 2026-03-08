@@ -24,7 +24,7 @@ public struct DecodePerfSummary: Decodable {
         public let comma: Bool
         public let utf8: Bool
         public let len: Int
-        public let keys: Int?
+        public let keys: Int
         public let msPerOpMedian: Double
 
         private enum CodingKeys: String, CodingKey {
@@ -223,7 +223,7 @@ public func loadDecodeBaseline(
             comma: entry.comma,
             utf8: entry.utf8,
             len: entry.len,
-            keys: entry.keys ?? -1
+            keys: entry.keys
         )
         acc[key] = entry.msPerOpMedian
     }
