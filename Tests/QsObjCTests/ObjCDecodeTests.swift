@@ -166,9 +166,9 @@
                     o.comma = true
                 }
                 let a = r["a"] as? [Any]
-                let first = a?.first as? [Any]
+                let first = a?.first as? [String]
                 #expect(a?.count == 1, "query=\(query)")
-                #expect(first?.compactMap { $0 as? String } == ["b", "c"], "query=\(query)")
+                #expect(first == ["b", "c"], "query=\(query)")
             }
         }
 
