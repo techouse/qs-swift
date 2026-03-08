@@ -1,3 +1,9 @@
+## 1.3.4-wip
+
+- [CHORE] broaden toolchain compatibility: lower `Package.swift` to `swift-tools-version: 6.0`, update `swift-collections` to `1.4.0` and `swift-docc-plugin` to `1.4.6`, and align `Package@swift-5.10.swift` with `QsTestSupport` plus 5.10-specific test target exclusions for perf guardrail files.
+- [CI] expand compatibility coverage across macOS and Linux with Swift `5.10`/`6.0`/`6.1`/`6.2`; add a real Xcode `16.2` / Swift `6.0` lane, keep Swift `5.10` as an experimental build-only smoke check, and skip coverage upload on that lane.
+- [FIX] restore Swift `6.0` compiler compatibility by removing a trailing comma in `Encoder` that newer toolchains accepted but Swift `6.0` rejected.
+
 ## 1.3.3
 
 - [PERF] rewrite the decode hot path for flat query strings: add a byte-oriented fast path with structured-key scanning, allocation-light delimiter/token collection, cheaper scalar/comma-list decoding, and a fast flat finalize path; the ObjC bridge inherits the same shared-core decode speedups.
