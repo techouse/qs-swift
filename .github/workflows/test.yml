@@ -111,6 +111,7 @@ jobs:
         run: echo "::warning::Using experimental CI lane on ${{ matrix.runner }} with Xcode ${{ env.XCODE_VERSION }} / Swift ${{ env.SWIFT_VERSION }}. This job is allowed to fail."
 
       - name: Cache SwiftPM artifacts
+        if: ${{ matrix.swift != '5.10' }}
         uses: actions/cache@v5
         with:
           path: |
