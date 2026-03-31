@@ -159,7 +159,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: ${{ matrix.swift != '5.10' }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: coverage/info.lcov
           flags: swift,${{ matrix.runner }},xcode-${{ env.XCODE_VERSION }},swift-${{ env.SWIFT_VERSION }}
@@ -292,7 +292,7 @@ jobs:
           xcrun xccov view --report --json ObjC-Tests.xcresult > objc-coverage.json
 
       - name: Upload Objective-C coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: |
             ${{ github.workspace }}/ObjC-Tests.xcresult.zip
