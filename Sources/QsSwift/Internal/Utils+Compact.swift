@@ -169,20 +169,13 @@ extension Utils {
             out.reserveCapacity(arr.count)
 
             for el in arr {
-                switch el {
-                case is Undefined:
+                if el is Undefined {
                     if allowSparseLists { out.append(NSNull()) }
-                // else: drop it
-                case let dict as [String: Any?]:
-                    out.append(compactToAny(dict, allowSparseLists: allowSparseLists))
-                case let arrayOpt as [Any?]:
-                    out.append(normalizeArray(arrayOpt))
-                case .some(let value):
-                    out.append(value)
-                case .none:
-                    // explicit nil → NSNull so we can keep `[Any]`
-                    out.append(NSNull())
+                    continue
                 }
+
+                guard let normalized = normalizeValue(el) else { continue }
+                out.append(normalized)
             }
             return out
         }
