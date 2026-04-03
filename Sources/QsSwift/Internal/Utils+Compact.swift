@@ -15,6 +15,34 @@ extension Utils {
             // Drop Undefined entirely
             if value is Undefined { return nil }
 
+            if let object = value, Swift.type(of: object) is AnyClass {
+                if let dict = object as? NSDictionary {
+                    var out: [String: Any?] = [:]
+                    out.reserveCapacity(dict.count)
+                    for (rawKey, rawValue) in dict {
+                        if let keyHash = rawKey as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
+                        let key = String(describing: rawKey)
+                        if let cv = compactValue(rawValue, allowSparse: allowSparse) {
+                            out[key] = cv
+                        }
+                    }
+                    return out
+                }
+
+                if let array = object as? NSArray {
+                    var out: [Any] = []
+                    out.reserveCapacity(array.count)
+                    for element in array {
+                        if let cv = compactValue(element, allowSparse: allowSparse) {
+                            out.append(cv)
+                        } else if allowSparse {
+                            out.append(NSNull())
+                        }
+                    }
+                    return out
+                }
+            }
+
             // Dictionary branch
             if let dict = value as? [String: Any?] {
                 var out: [String: Any?] = [:]
@@ -24,6 +52,32 @@ extension Utils {
                         out[key] = cv
                     }
                     // else: value was Undefined → remove the key
+                }
+                return out
+            }
+
+            if let dict = value as? [AnyHashable: Any?] {
+                var out: [String: Any?] = [:]
+                out.reserveCapacity(dict.count)
+                for (rawKey, val) in dict {
+                    if Utils.isOverflowKey(rawKey) { continue }
+                    let key = String(describing: rawKey)
+                    if let cv = compactValue(val, allowSparse: allowSparse) {
+                        out[key] = cv
+                    }
+                }
+                return out
+            }
+
+            if let dict = value as? [AnyHashable: Any] {
+                var out: [String: Any?] = [:]
+                out.reserveCapacity(dict.count)
+                for (rawKey, val) in dict {
+                    if Utils.isOverflowKey(rawKey) { continue }
+                    let key = String(describing: rawKey)
+                    if let cv = compactValue(val, allowSparse: allowSparse) {
+                        out[key] = cv
+                    }
                 }
                 return out
             }
@@ -133,23 +187,59 @@ extension Utils {
             return out
         }
 
+        func normalizeValue(_ value: Any?) -> Any? {
+            switch value {
+            case is Undefined:
+                return nil
+            case let dict as [String: Any?]:
+                return compactToAny(dict, allowSparseLists: allowSparseLists)
+            case let dict as [AnyHashable: Any?]:
+                var bridged: [String: Any?] = [:]
+                bridged.reserveCapacity(dict.count)
+                for (key, child) in dict {
+                    if Utils.isOverflowKey(key) { continue }
+                    bridged[String(describing: key)] = child
+                }
+                return compactToAny(bridged, allowSparseLists: allowSparseLists)
+            case let dict as [AnyHashable: Any]:
+                var bridged: [String: Any?] = [:]
+                bridged.reserveCapacity(dict.count)
+                for (key, child) in dict {
+                    if Utils.isOverflowKey(key) { continue }
+                    bridged[String(describing: key)] = child
+                }
+                return compactToAny(bridged, allowSparseLists: allowSparseLists)
+            case let arrayOpt as [Any?]:
+                return normalizeArray(arrayOpt)
+            case let array as [Any]:
+                return normalizeArray(array.map(Optional.some))
+            case let object? where Swift.type(of: object) is AnyClass:
+                if let dict = object as? NSDictionary {
+                    var bridged: [String: Any?] = [:]
+                    bridged.reserveCapacity(dict.count)
+                    for (rawKey, child) in dict {
+                        if let keyHash = rawKey as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
+                        bridged[String(describing: rawKey)] = child
+                    }
+                    return compactToAny(bridged, allowSparseLists: allowSparseLists)
+                }
+                if let array = object as? NSArray {
+                    return normalizeArray(array.map(Optional.some))
+                }
+                return object
+            case .some(let value):
+                return value
+            case .none:
+                return NSNull()
+            }
+        }
+
         var out: [String: Any] = [:]
         out.reserveCapacity(root.count)
 
         for (key, value) in root {
-            switch value {
-            case is Undefined:
-                // drop
-                continue
-            case let dict as [String: Any?]:
-                out[key] = compactToAny(dict, allowSparseLists: allowSparseLists)
-            case let arrayOpt as [Any?]:
-                out[key] = normalizeArray(arrayOpt)
-            case .some(let value):
-                out[key] = value
-            case .none:
-                out[key] = NSNull()
-            }
+            guard let normalized = normalizeValue(value) else { continue }
+            out[key] = normalized
         }
         return out
     }

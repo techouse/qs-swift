@@ -149,6 +149,8 @@ internal enum Utils {
         case anyHashableOptional([AnyHashable: Any?])
         case arrayAny([Any])
         case arrayOptional([Any?])
+        case foundationDictionary(NSDictionary)
+        case foundationArray(NSArray)
     }
 
     @inline(__always)
@@ -182,6 +184,12 @@ internal enum Utils {
         }
         if let array = exactCast([Any?].self) {
             return .arrayOptional(array)
+        }
+        if valueType is AnyClass, let dict = value as? NSDictionary {
+            return .foundationDictionary(dict)
+        }
+        if valueType is AnyClass, let array = value as? NSArray {
+            return .foundationArray(array)
         }
 
         return nil
@@ -289,6 +297,22 @@ internal enum Utils {
                         stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
                     }
                     continue
+                case .foundationDictionary(let dict):
+                    let box = DictBox()
+                    stack.append(.commitDict(box, assign))
+                    for (key, child) in dict {
+                        if let keyHash = key as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
+                        let keyString = String(describing: key)
+                        stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
+                    }
+                    continue
+                case .foundationArray(let array):
+                    let box = ArrayBox(array.count)
+                    stack.append(.commitArray(box, assign))
+                    for (index, child) in array.enumerated() {
+                        stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
+                    }
+                    continue
                 case nil:
                     break
                 }
@@ -332,6 +356,12 @@ internal enum Utils {
             case .arrayAny(let array):
                 stack.reserveCapacity(stack.count + array.count)
                 for child in array { stack.append(child) }
+            case .foundationDictionary(let dict):
+                stack.reserveCapacity(stack.count + dict.count)
+                for (_, child) in dict { stack.append(child) }
+            case .foundationArray(let array):
+                stack.reserveCapacity(stack.count + array.count)
+                for child in array { stack.append(child) }
             case nil:
                 break
             }
@@ -362,7 +392,10 @@ internal enum Utils {
             case .anyHashableAny(let dict):
                 guard dict.count == 1, let next = dict.first?.value else { return depth }
                 current = next
-            case .arrayAny, .arrayOptional, nil:
+            case .foundationDictionary(let dict):
+                guard dict.count == 1, let next = dict.objectEnumerator().nextObject() else { return depth }
+                current = next
+            case .arrayAny, .arrayOptional, .foundationArray, nil:
                 return depth
             }
             depth += 1
