@@ -8,6 +8,8 @@ import OrderedCollections
     #error("The swift-testing package is required to build tests on Swift 5.x")
 #endif
 
+private let deterministicHashing = ProcessInfo.processInfo.environment["SWIFT_DETERMINISTIC_HASHING"] == "1"
+
 struct UtilsTests {
     // MARK: - Utils.encode tests
 
@@ -1750,6 +1752,24 @@ struct UtilsTests {
         #expect(Utils.containsUndefined(payload))
     }
 
+    @Test("Utils.containsUndefined tolerates Foundation self-cycles")
+    func utils_containsUndefined_foundationSelfCycles() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
+                #expect(
+                    Bool(false),
+                    Comment("Skipped: cannot safely build a cyclic Foundation container on Linux"))
+            }
+        #else
+            let cyclic = NSMutableDictionary()
+            cyclic["self"] = cyclic
+            #expect(!Utils.containsUndefined(cyclic))
+
+            cyclic["sentinel"] = Undefined.instance
+            #expect(Utils.containsUndefined(cyclic))
+        #endif
+    }
+
     @Test("Utils.containsUndefined inspects typed Swift containers")
     func utils_containsUndefined_typedSwiftContainers() {
         let payload: [Int: [String: Undefined]] = [
@@ -2033,6 +2053,63 @@ struct UtilsTests {
         let dict = bridged as? [String: Any]
         #expect(dict?["1"] as? String == "x")
         #expect((dict?["nested"] as? [Any])?.first as? String == "y")
+    }
+
+    @Test(
+        "Utils.deepBridgeToAnyIterative preserves OrderedDictionary entry order",
+        .enabled(if: deterministicHashing, "requires SWIFT_DETERMINISTIC_HASHING=1 for stable dictionary iteration")
+    )
+    func utils_deepBridge_preservesOrderedDictionaryOrder() {
+        let entries: [(AnyHashable, Any)] = [
+            (AnyHashable("first"), 1),
+            (AnyHashable(2), "two"),
+            (AnyHashable("third"), 3),
+        ]
+        let ordered = OrderedDictionary<AnyHashable, Any>(uniqueKeysWithValues: entries)
+
+        let bridged = Utils.deepBridgeToAnyIterative(ordered)
+        if let dict = bridged as? [String: Any] {
+            #expect(Array(dict.keys) == ["first", "2", "third"])
+            #expect(dict["2"] as? String == "two")
+        } else {
+            Issue.record("Expected bridged ordered dictionary, got: \(type(of: bridged))")
+        }
+    }
+
+    @Test("Utils.deepBridgeToAnyIterative tolerates Foundation self-cycles")
+    func utils_deepBridge_foundationSelfCycles() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
+                #expect(
+                    Bool(false),
+                    Comment("Skipped: cannot safely build a cyclic Foundation container on Linux"))
+            }
+        #else
+            let cyclicDict = NSMutableDictionary()
+            cyclicDict["self"] = cyclicDict
+            cyclicDict["leaf"] = "x"
+
+            let bridgedDict = Utils.deepBridgeToAnyIterative(cyclicDict)
+            if let dict = bridgedDict as? [String: Any] {
+                #expect(dict["leaf"] as? String == "x")
+                #expect(dict["self"] is NSNull)
+            } else {
+                Issue.record("Expected bridged cyclic dictionary, got: \(type(of: bridgedDict))")
+            }
+
+            let cyclicArray = NSMutableArray()
+            cyclicArray.add(cyclicArray)
+            cyclicArray.add("y")
+
+            let bridgedArray = Utils.deepBridgeToAnyIterative(cyclicArray)
+            if let array = bridgedArray as? [Any] {
+                #expect(array.count == 2)
+                #expect(array[0] is NSNull)
+                #expect(array[1] as? String == "y")
+            } else {
+                Issue.record("Expected bridged cyclic array, got: \(type(of: bridgedArray))")
+            }
+        #endif
     }
 
     @Test("Utils.deepBridgeToAnyIterative bridges typed Swift containers")
