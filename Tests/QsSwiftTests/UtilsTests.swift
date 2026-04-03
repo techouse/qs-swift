@@ -1859,10 +1859,24 @@ struct UtilsTests {
         #expect(Utils.containsUndefined(payload))
     }
 
+    @Test("Utils.containsUndefined detects boxed optional sentinels in Swift [Any]")
+    func utils_containsUndefined_boxedOptionalSwiftArrayRoot() {
+        let payload: [Any] = [Optional<Undefined>.some(Undefined.instance) as Any, "value"]
+        #expect(Utils.containsUndefined(payload))
+    }
+
     @Test("Utils.containsUndefined inspects Foundation containers")
     func utils_containsUndefined_foundationContainers() {
         let payload = NSDictionary(dictionary: [
             "array": NSArray(array: [Undefined.instance, "x"])
+        ])
+        #expect(Utils.containsUndefined(payload))
+    }
+
+    @Test("Utils.containsUndefined detects boxed optional sentinels in Foundation containers")
+    func utils_containsUndefined_boxedOptionalFoundationContainers() {
+        let payload = NSDictionary(dictionary: [
+            "array": NSArray(array: [Optional<Undefined>.some(Undefined.instance) as Any, "x"])
         ])
         #expect(Utils.containsUndefined(payload))
     }
