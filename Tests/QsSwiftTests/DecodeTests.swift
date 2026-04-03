@@ -1205,30 +1205,30 @@ struct DecodeTests {
         // a[1][b][2][c]=1 -> ["a": [ { "b": [ { "c": "1" } ] } ]]
         do {
             let r = try Qs.decode("a[1][b][2][c]=1", options: DecodeOptions(listLimit: 20))
-            let a = r["a"] as? [Any]
-            let level1 = a?.first as? [String: Any]
-            let bArr = level1?["b"] as? [Any]
-            let firstMap = bArr?.first as? [String: Any]
+            let a = arrayElements(r["a"])
+            let level1 = a.flatMap { asDictString($0[0]) }
+            let bArr = arrayElements(level1?["b"])
+            let firstMap = bArr.flatMap { asDictString($0[0]) }
             #expect((firstMap?["c"] as? String) == "1")
         }
 
         // a[1][2][3][c]=1 -> ["a": [[[ { "c": "1" } ]]]]
         do {
             let r = try Qs.decode("a[1][2][3][c]=1", options: DecodeOptions(listLimit: 20))
-            let a = r["a"] as? [Any]
-            let l1 = a?.first as? [Any]
-            let l2 = l1?.first as? [Any]
-            let l3 = l2?.first as? [String: Any]
+            let a = arrayElements(r["a"])
+            let l1 = a.flatMap { arrayElements($0[0]) }
+            let l2 = l1.flatMap { arrayElements($0[0]) }
+            let l3 = l2.flatMap { asDictString($0[0]) }
             #expect((l3?["c"] as? String) == "1")
         }
 
         // a[1][2][3][c][1]=1 -> ["a": [[[ { "c": ["1"] } ]]]]
         do {
             let r = try Qs.decode("a[1][2][3][c][1]=1", options: DecodeOptions(listLimit: 20))
-            let a = r["a"] as? [Any]
-            let l1 = a?.first as? [Any]
-            let l2 = l1?.first as? [Any]
-            let l3 = l2?.first as? [String: Any]
+            let a = arrayElements(r["a"])
+            let l1 = a.flatMap { arrayElements($0[0]) }
+            let l2 = l1.flatMap { arrayElements($0[0]) }
+            let l3 = l2.flatMap { asDictString($0[0]) }
             #expect(asStrings(l3?["c"]) == ["1"])
         }
     }
@@ -4297,12 +4297,31 @@ private func unwrapOptional(_ any: Any) -> Any? {
     return m.children.first?.value
 }
 
+private func arrayElements(_ value: Any?) -> [Any]? {
+    guard let value = value.flatMap(unwrapOptional) else { return nil }
+    if let array = value as? [Any] {
+        return array
+    }
+    if let array = value as? [Any?] {
+        return array.map { element in
+            if let element {
+                return unwrapOptional(element) ?? NSNull()
+            }
+            return NSNull()
+        }
+    }
+    if let array = value as? NSArray {
+        return array.map { unwrapOptional($0) ?? NSNull() }
+    }
+    return nil
+}
+
 private func as2DStrings(_ value: Any?) -> [[String]]? {
-    guard let outer = value as? [Any] else { return nil }
+    guard let outer = arrayElements(value) else { return nil }
     var out: [[String]] = []
     out.reserveCapacity(outer.count)
     for innerAny in outer {
-        guard let inner = innerAny as? [Any] else { return nil }
+        guard let inner = arrayElements(innerAny) else { return nil }
         let row = inner.compactMap { unwrapOptional($0) as? String }
         out.append(row)
     }
@@ -4351,7 +4370,7 @@ func parseQuery_interpretsNumericEntities() throws {
 private func isNSNullValue(_ v: Any?) -> Bool { v is NSNull }
 
 private func asStrings(_ v: Any?) -> [String]? {
-    (v as? [Any])?.compactMap { $0 as? String }
+    arrayElements(v)?.compactMap { unwrapOptional($0) as? String }
 }
 
 private func flatStrings(_ v: Any?) -> [String]? {
