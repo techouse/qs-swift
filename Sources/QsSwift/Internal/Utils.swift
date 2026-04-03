@@ -235,6 +235,12 @@ internal enum Utils {
     }
 
     @inline(__always)
+    static func eraseOptionalElement(_ value: Any?) -> Any? {
+        guard let value else { return nil }
+        return eraseOptionalLike(value)
+    }
+
+    @inline(__always)
     private static func mergeStringifiedEntry(
         _ keyString: String,
         rank: Int,

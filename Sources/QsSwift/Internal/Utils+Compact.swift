@@ -1,6 +1,18 @@
 import Foundation
 
 extension Utils {
+    @inline(__always)
+    private static func foundationContainerID(_ value: Any) -> ObjectIdentifier? {
+        guard Swift.type(of: value) is AnyClass else { return nil }
+        if let dict = value as? NSDictionary {
+            return ObjectIdentifier(dict)
+        }
+        if let array = value as? NSArray {
+            return ObjectIdentifier(array)
+        }
+        return nil
+    }
+
     /// Compact a nested structure by removing all `Undefined` values.
     /// - Note: `NSNull()` is preserved (represents an explicit `null`).
     /// - If `allowSparseLists` is `false` (default), array holes are *removed* (indexes shift).
@@ -10,6 +22,8 @@ extension Utils {
         _ root: inout [String: Any?],
         allowSparseLists: Bool = false
     ) -> [String: Any?] {
+        var activeFoundationContainers: Set<ObjectIdentifier> = []
+
         @inline(__always)
         func compactEntries(
             _ entries: [(String, Any?)],
@@ -34,7 +48,7 @@ extension Utils {
             var out: [Any] = []
             out.reserveCapacity(count)
             visit { rawElement in
-                let element = Utils.eraseOptionalLike(rawElement)
+                let element = Utils.eraseOptionalElement(rawElement)
                 if element is Undefined {
                     if allowSparse { out.append(NSNull()) }
                     return
@@ -57,6 +71,18 @@ extension Utils {
             // Drop Undefined entirely
             if value is Undefined { return nil }
             guard let value else { return nil }
+
+            let foundationID = Utils.foundationContainerID(value)
+            if let foundationID {
+                guard activeFoundationContainers.insert(foundationID).inserted else {
+                    return NSNull()
+                }
+            }
+            defer {
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                }
+            }
 
             if let compacted = Utils.withExactStringifiedEntries(
                 value,
@@ -98,13 +124,16 @@ extension Utils {
         _ root: [String: Any?],
         allowSparseLists: Bool
     ) -> [String: Any] {
+        var activeFoundationContainers: Set<ObjectIdentifier> = []
+
         func normalizeEntries(_ entries: [(String, Any?)]) -> [String: Any] {
-            var bridged: [String: Any?] = [:]
-            bridged.reserveCapacity(entries.count)
+            var out: [String: Any] = [:]
+            out.reserveCapacity(entries.count)
             for (key, child) in entries {
-                bridged[key] = child
+                guard let normalized = normalizeValue(child) else { continue }
+                out[key] = normalized
             }
-            return compactToAny(bridged, allowSparseLists: allowSparseLists)
+            return out
         }
 
         func normalizeArray(
@@ -115,7 +144,7 @@ extension Utils {
             out.reserveCapacity(count)
 
             visit { rawElement in
-                let element = Utils.eraseOptionalLike(rawElement)
+                let element = Utils.eraseOptionalElement(rawElement)
                 if element is Undefined {
                     if allowSparseLists { out.append(NSNull()) }
                     return
@@ -134,6 +163,18 @@ extension Utils {
             case is Undefined:
                 return nil
             case let value?:
+                let foundationID = Utils.foundationContainerID(value)
+                if let foundationID {
+                    guard activeFoundationContainers.insert(foundationID).inserted else {
+                        return NSNull()
+                    }
+                }
+                defer {
+                    if let foundationID {
+                        activeFoundationContainers.remove(foundationID)
+                    }
+                }
+
                 if let normalized = Utils.withExactStringifiedEntries(
                     value,
                     { entries in
