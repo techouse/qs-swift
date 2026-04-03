@@ -682,42 +682,52 @@ internal enum Utils {
         @inline(__always)
     #endif
     internal static func containsUndefined(_ root: Any?) -> Bool {
-        var stack: [Any?] = [root]
+        var stack: [Any?] = [eraseOptionalLike(root)]
         var visitedFoundationContainers: Set<ObjectIdentifier> = []
+
+        @inline(__always)
+        func push(_ child: Any?) {
+            stack.append(eraseOptionalLike(child))
+        }
+
         while let node = stack.popLast() {
+            let node = eraseOptionalLike(node)
             if node is Undefined { return true }
             guard let node else { continue }
 
             switch exactContainer(node) {
             case .stringOptional(let dict):
-                stack.append(contentsOf: dict.values)
+                stack.reserveCapacity(stack.count + dict.count)
+                for child in dict.values { push(child) }
             case .stringAny(let dict):
                 stack.reserveCapacity(stack.count + dict.count)
-                for child in dict.values { stack.append(child) }
+                for child in dict.values { push(child) }
             case .anyHashableOptional(let dict):
-                stack.append(contentsOf: dict.values)
+                stack.reserveCapacity(stack.count + dict.count)
+                for child in dict.values { push(child) }
             case .anyHashableAny(let dict):
                 stack.reserveCapacity(stack.count + dict.count)
-                for child in dict.values { stack.append(child) }
+                for child in dict.values { push(child) }
             case .arrayOptional(let array):
-                stack.append(contentsOf: array)
+                stack.reserveCapacity(stack.count + array.count)
+                for child in array { push(child) }
             case .arrayAny(let array):
                 stack.reserveCapacity(stack.count + array.count)
-                for child in array { stack.append(child) }
+                for child in array { push(child) }
             case .foundationDictionary(let dict):
                 guard visitedFoundationContainers.insert(ObjectIdentifier(dict)).inserted else { continue }
                 stack.reserveCapacity(stack.count + dict.count)
-                for (_, child) in dict { stack.append(child) }
+                for (_, child) in dict { push(child) }
             case .foundationArray(let array):
                 guard visitedFoundationContainers.insert(ObjectIdentifier(array)).inserted else { continue }
                 stack.reserveCapacity(stack.count + array.count)
-                for child in array { stack.append(child) }
+                for child in array { push(child) }
             case .genericDictionary(let dict):
                 stack.reserveCapacity(stack.count + dict._qsCount)
-                dict._qsForEachEntry { _, child in stack.append(child) }
+                dict._qsForEachEntry { _, child in push(child) }
             case .genericArray(let array):
                 stack.reserveCapacity(stack.count + array._qsCount)
-                array._qsForEachElement { _, child in stack.append(child) }
+                array._qsForEachElement { _, child in push(child) }
             case nil:
                 break
             }
