@@ -375,6 +375,80 @@ internal enum Utils {
         return nil
     }
 
+    @inline(__always)
+    internal static func withExactStringifiedEntries<R>(
+        _ value: Any,
+        _ body: ([(String, Any?)]) -> R
+    ) -> R? {
+        switch exactContainer(value) {
+        case .stringOptional(let dict):
+            var entries: [(String, Any?)] = []
+            entries.reserveCapacity(dict.count)
+            for (key, child) in dict {
+                entries.append((key, eraseOptionalLike(child)))
+            }
+            return body(entries)
+        case .stringAny(let dict):
+            var entries: [(String, Any?)] = []
+            entries.reserveCapacity(dict.count)
+            for (key, child) in dict {
+                entries.append((key, eraseOptionalLike(child)))
+            }
+            return body(entries)
+        case .anyHashableOptional(let dict):
+            return body(stringifiedEntriesPreservingStringKeyPrecedence(dict))
+        case .anyHashableAny(let dict):
+            return body(stringifiedEntriesPreservingStringKeyPrecedence(dict))
+        case .foundationDictionary(let dict):
+            return body(stringifiedEntriesPreservingStringKeyPrecedence(dict))
+        case .genericDictionary(let dict):
+            var rawEntries: [(AnyHashable, Any?)] = []
+            rawEntries.reserveCapacity(dict._qsCount)
+            dict._qsForEachEntry { keyHash, child in
+                rawEntries.append((keyHash, child))
+            }
+            return body(stringifiedEntriesPreservingStringKeyPrecedence(rawEntries))
+        case .arrayAny, .arrayOptional, .foundationArray, .genericArray, nil:
+            return nil
+        }
+    }
+
+    @inline(__always)
+    internal static func withExactArrayElements<R>(
+        _ value: Any,
+        _ body: (_ count: Int, _ visit: (@escaping (Any?) -> Void) -> Void) -> R
+    ) -> R? {
+        switch exactContainer(value) {
+        case .arrayAny(let array):
+            return body(array.count) { visit in
+                for element in array {
+                    visit(eraseOptionalLike(element))
+                }
+            }
+        case .arrayOptional(let array):
+            return body(array.count) { visit in
+                for element in array {
+                    visit(eraseOptionalLike(element))
+                }
+            }
+        case .foundationArray(let array):
+            return body(array.count) { visit in
+                for element in array {
+                    visit(eraseOptionalLike(element))
+                }
+            }
+        case .genericArray(let array):
+            return body(array._qsCount) { visit in
+                array._qsForEachElement { _, child in
+                    visit(child)
+                }
+            }
+        case .stringAny, .stringOptional, .anyHashableAny, .anyHashableOptional,
+            .foundationDictionary, .genericDictionary, nil:
+            return nil
+        }
+    }
+
     // MARK: - Is Empty Check
 
     /// Checks if a value is empty. A value is considered empty if it is nil, Undefined, an empty

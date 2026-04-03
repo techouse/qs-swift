@@ -11,132 +11,69 @@ extension Utils {
         allowSparseLists: Bool = false
     ) -> [String: Any?] {
         @inline(__always)
-        func compactValue(_ value: Any?, allowSparse: Bool) -> Any? {
+        func compactEntries(
+            _ entries: [(String, Any?)],
+            allowSparse: Bool
+        ) -> [String: Any?] {
+            var out: [String: Any?] = [:]
+            out.reserveCapacity(entries.count)
+            for (key, rawValue) in entries {
+                if let compacted = compactValue(rawValue, allowSparse: allowSparse) {
+                    out[key] = compacted
+                }
+            }
+            return out
+        }
+
+        @inline(__always)
+        func compactElements(
+            count: Int,
+            allowSparse: Bool,
+            _ visit: (@escaping (Any?) -> Void) -> Void
+        ) -> [Any] {
+            var out: [Any] = []
+            out.reserveCapacity(count)
+            visit { rawElement in
+                let element = Utils.eraseOptionalLike(rawElement)
+                if element is Undefined {
+                    if allowSparse { out.append(NSNull()) }
+                    return
+                }
+                guard let element else {
+                    out.append(NSNull())
+                    return
+                }
+                if let compacted = compactValue(element, allowSparse: allowSparse) {
+                    out.append(compacted)
+                }
+            }
+            return out
+        }
+
+        @inline(__always)
+        func compactValue(_ rawValue: Any?, allowSparse: Bool) -> Any? {
+            let value = Utils.eraseOptionalLike(rawValue)
+
             // Drop Undefined entirely
             if value is Undefined { return nil }
+            guard let value else { return nil }
 
-            if let object = value, Swift.type(of: object) is AnyClass {
-                if let dict = object as? NSDictionary {
-                    var out: [String: Any?] = [:]
-                    let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
-                    out.reserveCapacity(entries.count)
-                    for (key, rawValue) in entries {
-                        if let cv = compactValue(rawValue, allowSparse: allowSparse) {
-                            out[key] = cv
-                        }
-                    }
-                    return out
-                }
-
-                if let array = object as? NSArray {
-                    var out: [Any] = []
-                    out.reserveCapacity(array.count)
-                    for element in array {
-                        if let cv = compactValue(element, allowSparse: allowSparse) {
-                            out.append(cv)
-                        } else if allowSparse {
-                            out.append(NSNull())
-                        }
-                    }
-                    return out
-                }
+            if let compacted = Utils.withExactStringifiedEntries(
+                value,
+                { entries in
+                    compactEntries(entries, allowSparse: allowSparse)
+                })
+            {
+                return compacted
             }
 
-            // Dictionary branch
-            if let dict = value as? [String: Any?] {
-                var out: [String: Any?] = [:]
-                out.reserveCapacity(dict.count)
-                for (key, val) in dict {
-                    if let cv = compactValue(val, allowSparse: allowSparse) {
-                        out[key] = cv
-                    }
-                    // else: value was Undefined → remove the key
-                }
-                return out
-            }
-
-            if let dict = value as? [AnyHashable: Any?] {
-                var out: [String: Any?] = [:]
-                let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
-                out.reserveCapacity(entries.count)
-                for (key, val) in entries {
-                    if let cv = compactValue(val, allowSparse: allowSparse) {
-                        out[key] = cv
-                    }
-                }
-                return out
-            }
-
-            if let dict = value as? [AnyHashable: Any] {
-                var out: [String: Any?] = [:]
-                let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
-                out.reserveCapacity(entries.count)
-                for (key, val) in entries {
-                    if let cv = compactValue(val, allowSparse: allowSparse) {
-                        out[key] = cv
-                    }
-                }
-                return out
-            }
-
-            // Array branches – tolerate both [Any] and [Any?] shapes.
-            if let arrOpt = value as? [Any?] {
-                var out: [Any] = []
-                out.reserveCapacity(arrOpt.count)
-                for element in arrOpt {
-                    guard let unwrapped = element else {
-                        out.append(NSNull())
-                        continue
-                    }
-                    if unwrapped is Undefined {
-                        if allowSparse { out.append(NSNull()) }
-                        continue
-                    }
-                    if let subDict = unwrapped as? [String: Any?] {
-                        if let cv = compactValue(subDict, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else if let subArr = unwrapped as? [Any] {
-                        if let cv = compactValue(subArr, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else if let subArrOpt2 = unwrapped as? [Any?] {
-                        if let cv = compactValue(subArrOpt2, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else {
-                        out.append(unwrapped)
-                    }
-                }
-                return out
-            }
-
-            if let arr = value as? [Any] {
-                var out: [Any] = []
-                out.reserveCapacity(arr.count)
-                for element in arr {
-                    if element is Undefined {
-                        if allowSparse { out.append(NSNull()) }
-                        // else: drop it
-                        continue
-                    }
-                    if let subDict = element as? [String: Any?] {
-                        if let cv = compactValue(subDict, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else if let subArr = element as? [Any] {
-                        if let cv = compactValue(subArr, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else if let subArrOpt = element as? [Any?] {
-                        if let cv = compactValue(subArrOpt, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else {
-                        out.append(element)
-                    }
-                }
-                return out
+            if let compacted = Utils.withExactArrayElements(
+                value,
+                { count, visit in
+                    compactElements(count: count, allowSparse: allowSparse, visit)
+                })
+            {
+                return compacted
             }
 
             // Primitive (String/Number/Bool/Date/URL/NSNull/etc)
@@ -161,63 +98,60 @@ extension Utils {
         _ root: [String: Any?],
         allowSparseLists: Bool
     ) -> [String: Any] {
-        func normalizeArray(_ arr: [Any?]) -> [Any] {
-            var out: [Any] = []
-            out.reserveCapacity(arr.count)
+        func normalizeEntries(_ entries: [(String, Any?)]) -> [String: Any] {
+            var bridged: [String: Any?] = [:]
+            bridged.reserveCapacity(entries.count)
+            for (key, child) in entries {
+                bridged[key] = child
+            }
+            return compactToAny(bridged, allowSparseLists: allowSparseLists)
+        }
 
-            for el in arr {
-                if el is Undefined {
+        func normalizeArray(
+            count: Int,
+            _ visit: (@escaping (Any?) -> Void) -> Void
+        ) -> [Any] {
+            var out: [Any] = []
+            out.reserveCapacity(count)
+
+            visit { rawElement in
+                let element = Utils.eraseOptionalLike(rawElement)
+                if element is Undefined {
                     if allowSparseLists { out.append(NSNull()) }
-                    continue
+                    return
                 }
 
-                guard let normalized = normalizeValue(el) else { continue }
+                guard let normalized = normalizeValue(element) else { return }
                 out.append(normalized)
             }
             return out
         }
 
-        func normalizeValue(_ value: Any?) -> Any? {
+        func normalizeValue(_ rawValue: Any?) -> Any? {
+            let value = Utils.eraseOptionalLike(rawValue)
+
             switch value {
             case is Undefined:
                 return nil
-            case let dict as [String: Any?]:
-                return compactToAny(dict, allowSparseLists: allowSparseLists)
-            case let dict as [AnyHashable: Any?]:
-                var bridged: [String: Any?] = [:]
-                let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
-                bridged.reserveCapacity(entries.count)
-                for (key, child) in entries {
-                    bridged[key] = child
+            case let value?:
+                if let normalized = Utils.withExactStringifiedEntries(
+                    value,
+                    { entries in
+                        normalizeEntries(entries)
+                    })
+                {
+                    return normalized
                 }
-                return compactToAny(bridged, allowSparseLists: allowSparseLists)
-            case let dict as [AnyHashable: Any]:
-                var bridged: [String: Any?] = [:]
-                let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
-                bridged.reserveCapacity(entries.count)
-                for (key, child) in entries {
-                    bridged[key] = child
+
+                if let normalized = Utils.withExactArrayElements(
+                    value,
+                    { count, visit in
+                        normalizeArray(count: count, visit)
+                    })
+                {
+                    return normalized
                 }
-                return compactToAny(bridged, allowSparseLists: allowSparseLists)
-            case let arrayOpt as [Any?]:
-                return normalizeArray(arrayOpt)
-            case let array as [Any]:
-                return normalizeArray(array.map(Optional.some))
-            case let object? where Swift.type(of: object) is AnyClass:
-                if let dict = object as? NSDictionary {
-                    var bridged: [String: Any?] = [:]
-                    let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
-                    bridged.reserveCapacity(entries.count)
-                    for (key, child) in entries {
-                        bridged[key] = child
-                    }
-                    return compactToAny(bridged, allowSparseLists: allowSparseLists)
-                }
-                if let array = object as? NSArray {
-                    return normalizeArray(array.map(Optional.some))
-                }
-                return object
-            case .some(let value):
+
                 return value
             case .none:
                 return NSNull()
