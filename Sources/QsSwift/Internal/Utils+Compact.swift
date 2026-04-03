@@ -18,10 +18,9 @@ extension Utils {
             if let object = value, Swift.type(of: object) is AnyClass {
                 if let dict = object as? NSDictionary {
                     var out: [String: Any?] = [:]
-                    out.reserveCapacity(dict.count)
-                    for (rawKey, rawValue) in dict {
-                        if let keyHash = rawKey as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
-                        let key = String(describing: rawKey)
+                    let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
+                    out.reserveCapacity(entries.count)
+                    for (key, rawValue) in entries {
                         if let cv = compactValue(rawValue, allowSparse: allowSparse) {
                             out[key] = cv
                         }
@@ -58,10 +57,9 @@ extension Utils {
 
             if let dict = value as? [AnyHashable: Any?] {
                 var out: [String: Any?] = [:]
-                out.reserveCapacity(dict.count)
-                for (rawKey, val) in dict {
-                    if Utils.isOverflowKey(rawKey) { continue }
-                    let key = String(describing: rawKey)
+                let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
+                out.reserveCapacity(entries.count)
+                for (key, val) in entries {
                     if let cv = compactValue(val, allowSparse: allowSparse) {
                         out[key] = cv
                     }
@@ -71,10 +69,9 @@ extension Utils {
 
             if let dict = value as? [AnyHashable: Any] {
                 var out: [String: Any?] = [:]
-                out.reserveCapacity(dict.count)
-                for (rawKey, val) in dict {
-                    if Utils.isOverflowKey(rawKey) { continue }
-                    let key = String(describing: rawKey)
+                let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
+                out.reserveCapacity(entries.count)
+                for (key, val) in entries {
                     if let cv = compactValue(val, allowSparse: allowSparse) {
                         out[key] = cv
                     }
@@ -188,18 +185,18 @@ extension Utils {
                 return compactToAny(dict, allowSparseLists: allowSparseLists)
             case let dict as [AnyHashable: Any?]:
                 var bridged: [String: Any?] = [:]
-                bridged.reserveCapacity(dict.count)
-                for (key, child) in dict {
-                    if Utils.isOverflowKey(key) { continue }
-                    bridged[String(describing: key)] = child
+                let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
+                bridged.reserveCapacity(entries.count)
+                for (key, child) in entries {
+                    bridged[key] = child
                 }
                 return compactToAny(bridged, allowSparseLists: allowSparseLists)
             case let dict as [AnyHashable: Any]:
                 var bridged: [String: Any?] = [:]
-                bridged.reserveCapacity(dict.count)
-                for (key, child) in dict {
-                    if Utils.isOverflowKey(key) { continue }
-                    bridged[String(describing: key)] = child
+                let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
+                bridged.reserveCapacity(entries.count)
+                for (key, child) in entries {
+                    bridged[key] = child
                 }
                 return compactToAny(bridged, allowSparseLists: allowSparseLists)
             case let arrayOpt as [Any?]:
@@ -209,10 +206,10 @@ extension Utils {
             case let object? where Swift.type(of: object) is AnyClass:
                 if let dict = object as? NSDictionary {
                     var bridged: [String: Any?] = [:]
-                    bridged.reserveCapacity(dict.count)
-                    for (rawKey, child) in dict {
-                        if let keyHash = rawKey as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
-                        bridged[String(describing: rawKey)] = child
+                    let entries = Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict)
+                    bridged.reserveCapacity(entries.count)
+                    for (key, child) in entries {
+                        bridged[key] = child
                     }
                     return compactToAny(bridged, allowSparseLists: allowSparseLists)
                 }

@@ -234,6 +234,99 @@ internal enum Utils {
     }
 
     @inline(__always)
+    private static func mergeStringifiedEntry(
+        _ keyString: String,
+        rank: Int,
+        value: Any?,
+        entries: inout [(String, Any?)],
+        indexByKey: inout [String: Int],
+        ranksByKey: inout [String: Int]
+    ) {
+        if let existingIndex = indexByKey[keyString] {
+            guard let existingRank = ranksByKey[keyString], rank >= existingRank else { return }
+            entries[existingIndex] = (keyString, value)
+            ranksByKey[keyString] = rank
+            return
+        }
+
+        indexByKey[keyString] = entries.count
+        ranksByKey[keyString] = rank
+        entries.append((keyString, value))
+    }
+
+    @inline(__always)
+    internal static func stringifiedEntriesPreservingStringKeyPrecedence<Value>(
+        _ dict: [AnyHashable: Value]
+    ) -> [(String, Any?)] {
+        var entries: [(String, Any?)] = []
+        entries.reserveCapacity(dict.count)
+        var indexByKey: [String: Int] = [:]
+        var ranksByKey: [String: Int] = [:]
+
+        for (keyHash, child) in dict {
+            if Utils.isOverflowKey(keyHash) { continue }
+            mergeStringifiedEntry(
+                String(describing: keyHash),
+                rank: keyHash.base is String ? 2 : 1,
+                value: eraseOptionalLike(child),
+                entries: &entries,
+                indexByKey: &indexByKey,
+                ranksByKey: &ranksByKey
+            )
+        }
+
+        return entries
+    }
+
+    @inline(__always)
+    internal static func stringifiedEntriesPreservingStringKeyPrecedence(
+        _ entriesByKey: [(AnyHashable, Any?)]
+    ) -> [(String, Any?)] {
+        var entries: [(String, Any?)] = []
+        entries.reserveCapacity(entriesByKey.count)
+        var indexByKey: [String: Int] = [:]
+        var ranksByKey: [String: Int] = [:]
+
+        for (keyHash, child) in entriesByKey {
+            if Utils.isOverflowKey(keyHash) { continue }
+            mergeStringifiedEntry(
+                String(describing: keyHash),
+                rank: keyHash.base is String ? 2 : 1,
+                value: child,
+                entries: &entries,
+                indexByKey: &indexByKey,
+                ranksByKey: &ranksByKey
+            )
+        }
+
+        return entries
+    }
+
+    @inline(__always)
+    internal static func stringifiedEntriesPreservingStringKeyPrecedence(
+        _ dict: NSDictionary
+    ) -> [(String, Any?)] {
+        var entries: [(String, Any?)] = []
+        entries.reserveCapacity(dict.count)
+        var indexByKey: [String: Int] = [:]
+        var ranksByKey: [String: Int] = [:]
+
+        for (rawKey, child) in dict {
+            if let keyHash = rawKey as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
+            mergeStringifiedEntry(
+                String(describing: rawKey),
+                rank: rawKey is String ? 2 : 1,
+                value: child,
+                entries: &entries,
+                indexByKey: &indexByKey,
+                ranksByKey: &ranksByKey
+            )
+        }
+
+        return entries
+    }
+
+    @inline(__always)
     private static func exactContainer(_ value: Any) -> ExactContainer? {
         let valueType = Swift.type(of: value)
 
@@ -367,13 +460,10 @@ internal enum Utils {
             _ dict: [AnyHashable: Value],
             assign: @escaping Assign
         ) {
-            var entries: [(String, Any?)] = []
-            entries.reserveCapacity(dict.count)
-            for (keyHash, child) in dict {
-                if Utils.isOverflowKey(keyHash) { continue }
-                entries.append((String(describing: keyHash), Utils.eraseOptionalLike(child)))
-            }
-            scheduleDictionaryEntries(entries, assign: assign)
+            scheduleDictionaryEntries(
+                Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict),
+                assign: assign
+            )
         }
 
         @inline(__always)
@@ -391,13 +481,11 @@ internal enum Utils {
                 return
             }
 
-            var entries: [(String, Any?)] = []
-            entries.reserveCapacity(dict.count)
-            for (key, child) in dict {
-                if let keyHash = key as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
-                entries.append((String(describing: key), child))
-            }
-            scheduleDictionaryEntries(entries, assign: assign, foundationID: foundationID)
+            scheduleDictionaryEntries(
+                Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict),
+                assign: assign,
+                foundationID: foundationID
+            )
         }
 
         @inline(__always)
@@ -464,13 +552,15 @@ internal enum Utils {
                     scheduleFoundationArray(array, assign: assign)
                     continue
                 case .genericDictionary(let dict):
-                    var entries: [(String, Any?)] = []
-                    entries.reserveCapacity(dict._qsCount)
+                    var rawEntries: [(AnyHashable, Any?)] = []
+                    rawEntries.reserveCapacity(dict._qsCount)
                     dict._qsForEachEntry { keyHash, child in
-                        if Utils.isOverflowKey(keyHash) { return }
-                        entries.append((String(describing: keyHash), child))
+                        rawEntries.append((keyHash, child))
                     }
-                    scheduleDictionaryEntries(entries, assign: assign)
+                    scheduleDictionaryEntries(
+                        Utils.stringifiedEntriesPreservingStringKeyPrecedence(rawEntries),
+                        assign: assign
+                    )
                     continue
                 case .genericArray(let array):
                     let box = ArrayBox(array._qsCount)
