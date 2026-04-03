@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import OrderedCollections
 
@@ -138,6 +139,54 @@ internal enum Utils {
         return isGenericContainerType
     }
 
+    // Avoid downcasting between `[String: Any]` and `[String: Any?]` (and the array/hashable
+    // equivalents) while traversing deep graphs. Swift 6.3 can recursively walk the entire
+    // subtree for those conversions, which overflows worker-thread stacks on long chains.
+    private enum ExactContainer {
+        case stringAny([String: Any])
+        case stringOptional([String: Any?])
+        case anyHashableAny([AnyHashable: Any])
+        case anyHashableOptional([AnyHashable: Any?])
+        case arrayAny([Any])
+        case arrayOptional([Any?])
+    }
+
+    @inline(__always)
+    private static func exactContainer(_ value: Any) -> ExactContainer? {
+        let valueType = Swift.type(of: value)
+
+        @inline(__always)
+        func exactCast<T>(_ type: T.Type) -> T? {
+            guard valueType == type else { return nil }
+            guard let typed = value as? T else {
+                assertionFailure("Exact cast failed for runtime type \(valueType)")
+                return nil
+            }
+            return typed
+        }
+
+        if let dict = exactCast([String: Any].self) {
+            return .stringAny(dict)
+        }
+        if let dict = exactCast([String: Any?].self) {
+            return .stringOptional(dict)
+        }
+        if let dict = exactCast([AnyHashable: Any].self) {
+            return .anyHashableAny(dict)
+        }
+        if let dict = exactCast([AnyHashable: Any?].self) {
+            return .anyHashableOptional(dict)
+        }
+        if let array = exactCast([Any].self) {
+            return .arrayAny(array)
+        }
+        if let array = exactCast([Any?].self) {
+            return .arrayOptional(array)
+        }
+
+        return nil
+    }
+
     // MARK: - Is Empty Check
 
     /// Checks if a value is empty. A value is considered empty if it is nil, Undefined, an empty
@@ -193,16 +242,22 @@ internal enum Utils {
                     continue
                 }
 
-                if let dict = node as? [String: Any?] {
+                switch exactContainer(node) {
+                case .stringOptional(let dict):
                     let box = DictBox()
                     stack.append(.commitDict(box, assign))
                     for (key, child) in dict {
                         stack.append(.build(node: child, assign: { value in box.dict[key] = value }))
                     }
                     continue
-                }
-
-                if let dictAHOpt = node as? [AnyHashable: Any?] {
+                case .stringAny(let dict):
+                    let box = DictBox()
+                    stack.append(.commitDict(box, assign))
+                    for (key, child) in dict {
+                        stack.append(.build(node: child, assign: { value in box.dict[key] = value }))
+                    }
+                    continue
+                case .anyHashableOptional(let dictAHOpt):
                     let box = DictBox()
                     stack.append(.commitDict(box, assign))
                     for (keyHash, child) in dictAHOpt {
@@ -211,9 +266,7 @@ internal enum Utils {
                         stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
                     }
                     continue
-                }
-
-                if let dictAH = node as? [AnyHashable: Any] {
+                case .anyHashableAny(let dictAH):
                     let box = DictBox()
                     stack.append(.commitDict(box, assign))
                     for (keyHash, child) in dictAH {
@@ -222,24 +275,22 @@ internal enum Utils {
                         stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
                     }
                     continue
-                }
-
-                if let arr = node as? [Any] {
+                case .arrayAny(let arr):
                     let box = ArrayBox(arr.count)
                     stack.append(.commitArray(box, assign))
                     for (index, child) in arr.enumerated() {
                         stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
                     }
                     continue
-                }
-
-                if let arrOpt = node as? [Any?] {
+                case .arrayOptional(let arrOpt):
                     let box = ArrayBox(arrOpt.count)
                     stack.append(.commitArray(box, assign))
                     for (index, child) in arrOpt.enumerated() {
                         stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
                     }
                     continue
+                case nil:
+                    break
                 }
 
                 assign(node)
@@ -263,15 +314,26 @@ internal enum Utils {
         var stack: [Any?] = [root]
         while let node = stack.popLast() {
             if node is Undefined { return true }
+            guard let node else { continue }
 
-            if let dict = node as? [String: Any?] {
-                stack.append(contentsOf: dict.values)  // values are Any?
-            } else if let dict = node as? [AnyHashable: Any] {
-                stack.append(contentsOf: dict.values.map { Optional($0) })  // wrap Any → Any?
-            } else if let array = node as? [Any?] {
-                stack.append(contentsOf: array)  // already Any?
-            } else if let array = node as? [Any] {
-                stack.append(contentsOf: array.map { Optional($0) })  // wrap Any → Any?
+            switch exactContainer(node) {
+            case .stringOptional(let dict):
+                stack.append(contentsOf: dict.values)
+            case .stringAny(let dict):
+                stack.reserveCapacity(stack.count + dict.count)
+                for child in dict.values { stack.append(child) }
+            case .anyHashableOptional(let dict):
+                stack.append(contentsOf: dict.values)
+            case .anyHashableAny(let dict):
+                stack.reserveCapacity(stack.count + dict.count)
+                for child in dict.values { stack.append(child) }
+            case .arrayOptional(let array):
+                stack.append(contentsOf: array)
+            case .arrayAny(let array):
+                stack.reserveCapacity(stack.count + array.count)
+                for child in array { stack.append(child) }
+            case nil:
+                break
             }
         }
         return false
@@ -285,22 +347,25 @@ internal enum Utils {
         var depth = 0
         var current = value
         while depth < cap {
-            if let dict = current as? [String: Any?], dict.count == 1, let next = dict.first?.value {
+            guard let currentValue = current else { return depth }
+
+            switch exactContainer(currentValue) {
+            case .stringOptional(let dict):
+                guard dict.count == 1, let entry = dict.first else { return depth }
+                current = entry.value
+            case .stringAny(let dict):
+                guard dict.count == 1, let next = dict.first?.value else { return depth }
                 current = next
-                depth += 1
-                continue
-            }
-            if let dict = current as? [AnyHashable: Any?], dict.count == 1, let next = dict.first?.value {
+            case .anyHashableOptional(let dict):
+                guard dict.count == 1, let entry = dict.first else { return depth }
+                current = entry.value
+            case .anyHashableAny(let dict):
+                guard dict.count == 1, let next = dict.first?.value else { return depth }
                 current = next
-                depth += 1
-                continue
+            case .arrayAny, .arrayOptional, nil:
+                return depth
             }
-            if let dict = current as? [AnyHashable: Any], dict.count == 1, let next = dict.first?.value {
-                current = next
-                depth += 1
-                continue
-            }
-            return depth
+            depth += 1
         }
         return depth
     }
