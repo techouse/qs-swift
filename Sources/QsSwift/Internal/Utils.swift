@@ -328,6 +328,18 @@ internal enum Utils {
         var result: Any = NSNull()
         var stack: [Task] = [.build(node: root, assign: { result = $0 })]
 
+        @inline(__always)
+        func scheduleStringDictionary<Value>(
+            _ dict: [String: Value],
+            assign: @escaping Assign
+        ) {
+            let box = DictBox()
+            stack.append(.commitDict(box, assign))
+            for (key, child) in dict {
+                stack.append(.build(node: child, assign: { value in box.dict[key] = value }))
+            }
+        }
+
         while let task = stack.popLast() {
             switch task {
             case .build(let node, let assign):
@@ -338,18 +350,10 @@ internal enum Utils {
 
                 switch exactContainer(node) {
                 case .stringOptional(let dict):
-                    let box = DictBox()
-                    stack.append(.commitDict(box, assign))
-                    for (key, child) in dict {
-                        stack.append(.build(node: child, assign: { value in box.dict[key] = value }))
-                    }
+                    scheduleStringDictionary(dict, assign: assign)
                     continue
                 case .stringAny(let dict):
-                    let box = DictBox()
-                    stack.append(.commitDict(box, assign))
-                    for (key, child) in dict {
-                        stack.append(.build(node: child, assign: { value in box.dict[key] = value }))
-                    }
+                    scheduleStringDictionary(dict, assign: assign)
                     continue
                 case .anyHashableOptional(let dictAHOpt):
                     let box = DictBox()
