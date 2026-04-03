@@ -2055,6 +2055,49 @@ struct UtilsTests {
         #expect((dict?["nested"] as? [Any])?.first as? String == "y")
     }
 
+    @Test("Utils.deepBridgeToAnyIterative unwraps boxed optionals in raw array containers")
+    func utils_deepBridge_unwrapsBoxedOptionalsInRawArrays() {
+        func expectNormalizedArray(_ bridged: Any, expectedValues: [Any?], label: String) {
+            guard let array = bridged as? [Any] else {
+                Issue.record("Expected bridged array for \(label), got: \(type(of: bridged))")
+                return
+            }
+
+            #expect(array.count == expectedValues.count)
+            for (index, expected) in expectedValues.enumerated() {
+                let actual = array[index]
+                if let expected {
+                    switch expected {
+                    case let string as String:
+                        #expect(actual as? String == string)
+                    case let int as Int:
+                        #expect(actual as? Int == int)
+                    default:
+                        Issue.record("Unhandled expected value for \(label) at index \(index): \(expected)")
+                    }
+                } else {
+                    #expect(actual is NSNull)
+                }
+            }
+        }
+
+        let boxedNil: Any = Optional<String>.none as Any
+        let boxedSome: Any = Optional<String>.some("x") as Any
+        let boxedInt: Any = Optional<Int>.some(42) as Any
+
+        expectNormalizedArray(
+            Utils.deepBridgeToAnyIterative([boxedNil, boxedSome, boxedInt] as [Any]),
+            expectedValues: [nil, "x", 42],
+            label: "[Any]"
+        )
+
+        expectNormalizedArray(
+            Utils.deepBridgeToAnyIterative([boxedNil, boxedSome, nil, boxedInt] as [Any?]),
+            expectedValues: [nil, "x", nil, 42],
+            label: "[Any?]"
+        )
+    }
+
     @Test(
         "Utils.deepBridgeToAnyIterative preserves OrderedDictionary entry order",
         .enabled(if: deterministicHashing, "requires SWIFT_DETERMINISTIC_HASHING=1 for stable dictionary iteration")
