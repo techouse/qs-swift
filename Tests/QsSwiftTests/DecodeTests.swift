@@ -1929,7 +1929,7 @@ struct DoesNotCrashTests {
     ///       `testDecode_DeepMaps_NoTimeout_Main` is designed for that purpose.
     @Test("decode - deep maps do not time out")
     func testDecode_DeepMaps_NoTimeout_Safe() async throws {
-        let depth = 2500  // conservative to avoid ARC’s recursive deinit on worker threads
+        let depth = 1_200  // Swift 6.3 reduced worker-thread stack headroom for deep dictionary teardown
         var s = "foo"
         for _ in 0..<depth { s += "[p]" }
         s += "=bar"
