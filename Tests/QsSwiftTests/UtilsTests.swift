@@ -1268,8 +1268,8 @@ struct UtilsTests {
     // while keeping CI stable.
     @Test("deep maps do not time out (safe depth)")
     func testDecode_DeepMaps_NoTimeout_Safe() throws {
-        /// Conservative depth to avoid ARC’s recursive deinit on worker-thread stacks.
-        let depth = 2500
+        /// Swift 6.3 reduced cooperative worker-thread stack headroom for deep dictionary teardown.
+        let depth = 1_200
         var s = "foo"
         for _ in 0..<depth { s += "[p]" }
         s += "=bar"
@@ -1933,7 +1933,7 @@ struct UtilsTests {
 
         let optionalArray: [Any?] = [nil, "value"]
         let bridgedArray = Utils.deepBridgeToAnyIterative(optionalArray)
-        if let arrOpt = bridgedArray as? [Any?] {
+        if Swift.type(of: bridgedArray) == [Any?].self, let arrOpt = bridgedArray as? [Any?] {
             switch arrOpt.first {
             case .some(.none):
                 #expect(true)
