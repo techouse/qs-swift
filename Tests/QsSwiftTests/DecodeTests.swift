@@ -1412,6 +1412,28 @@ struct DecodeTests {
         #expect(isNSNullValue(user?["email"]))
     }
 
+    @Test("decode - compacts nested Foundation arrays in map input")
+    func testDecode_MapInputCompactsNestedFoundationArrays() throws {
+        let input: [String: Any] = [
+            "a": NSArray(array: [Undefined.instance, "x"])
+        ]
+
+        let decoded = try Qs.decode(input)
+        #expect(asStrings(decoded["a"]) == ["x"])
+    }
+
+    @Test("decode - bridges nested Foundation dictionaries to Swift string-keyed maps")
+    func testDecode_MapInputBridgesNestedFoundationDictionaries() throws {
+        let input: [String: Any] = [
+            "a": NSDictionary(dictionary: [1: "x", "drop": Undefined.instance])
+        ]
+
+        let decoded = try Qs.decode(input)
+        let nested = decoded["a"] as? [String: Any]
+        #expect(nested?["1"] as? String == "x")
+        #expect(nested?["drop"] == nil)
+    }
+
     @Test("decode - preserves direct map inputs with nil placeholders")
     func testDecode_MapVariants() throws {
         let optionalMap = try Qs._decodeSyncCore(["a": nil, "b": "two"] as [String: Any?])
