@@ -1434,6 +1434,29 @@ struct DecodeTests {
         #expect(nested?["drop"] == nil)
     }
 
+    @Test("decode - nested Foundation key collisions prefer String keys")
+    func testDecode_MapInputFoundationCollision_StringWins() throws {
+        let input: [String: Any] = [
+            "a": NSDictionary(dictionary: [1: "int", "1": "string"])
+        ]
+
+        let decoded = try Qs.decode(input)
+        let nested = decoded["a"] as? [String: Any]
+        #expect(nested?["1"] as? String == "string")
+    }
+
+    @Test("decode - nested Foundation key collisions prefer String keys after compaction")
+    func testDecode_MapInputFoundationCollision_StringWinsAfterCompaction() throws {
+        let input: [String: Any] = [
+            "a": NSDictionary(dictionary: [1: "int", "1": "string", "drop": Undefined.instance])
+        ]
+
+        let decoded = try Qs.decode(input)
+        let nested = decoded["a"] as? [String: Any]
+        #expect(nested?["1"] as? String == "string")
+        #expect(nested?["drop"] == nil)
+    }
+
     @Test("decode - bridges typed Swift containers in map input")
     func testDecode_MapInputBridgesTypedSwiftContainers() throws {
         let input: [String: Any] = [
