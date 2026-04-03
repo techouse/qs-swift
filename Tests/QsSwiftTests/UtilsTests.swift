@@ -1705,6 +1705,14 @@ struct UtilsTests {
         #expect(Utils.containsUndefined(payload))
     }
 
+    @Test("Utils.containsUndefined inspects Foundation containers")
+    func utils_containsUndefined_foundationContainers() {
+        let payload = NSDictionary(dictionary: [
+            "array": NSArray(array: [Undefined.instance, "x"])
+        ])
+        #expect(Utils.containsUndefined(payload))
+    }
+
     @Test("Utils.containsUndefined reports true for direct sentinel input")
     func utils_containsUndefined_directSentinel() {
         #expect(Utils.containsUndefined(Undefined.instance))
@@ -1960,6 +1968,19 @@ struct UtilsTests {
         } else {
             Issue.record("Optional array branch not exercised")
         }
+    }
+
+    @Test("Utils.deepBridgeToAnyIterative bridges Foundation containers")
+    func utils_deepBridge_foundationContainers() {
+        let foundation: NSDictionary = [
+            1: "x",
+            "nested": NSArray(array: ["y"])
+        ]
+
+        let bridged = Utils.deepBridgeToAnyIterative(foundation)
+        let dict = bridged as? [String: Any]
+        #expect(dict?["1"] as? String == "x")
+        #expect((dict?["nested"] as? [Any])?.first as? String == "y")
     }
 
     @Test("Utils.needsMainDrop short-circuits when threshold is non-positive")
