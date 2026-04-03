@@ -227,10 +227,11 @@ internal enum Utils {
 
     @inline(__always)
     static func eraseOptionalLike<T>(_ value: T) -> Any? {
-        if let optional = value as? QsOptionalValue {
-            return optional._qsWrappedAny
+        var current: Any? = value
+        while let wrapped = current, let optional = wrapped as? QsOptionalValue {
+            current = optional._qsWrappedAny
         }
-        return value
+        return current
     }
 
     @inline(__always)
@@ -292,7 +293,7 @@ internal enum Utils {
             mergeStringifiedEntry(
                 String(describing: keyHash),
                 rank: keyHash.base is String ? 2 : 1,
-                value: child,
+                value: eraseOptionalLike(child),
                 entries: &entries,
                 indexByKey: &indexByKey,
                 ranksByKey: &ranksByKey
@@ -316,7 +317,7 @@ internal enum Utils {
             mergeStringifiedEntry(
                 String(describing: rawKey),
                 rank: rawKey is String ? 2 : 1,
-                value: child,
+                value: eraseOptionalLike(child),
                 entries: &entries,
                 indexByKey: &indexByKey,
                 ranksByKey: &ranksByKey
@@ -438,7 +439,7 @@ internal enum Utils {
             let box = DictBox(entries.count)
             stack.append(.commitDict(box, foundationID, assign))
             for (key, child) in entries.reversed() {
-                stack.append(.build(node: child, assign: { value in box.dict[key] = value }))
+                stack.append(.build(node: Utils.eraseOptionalLike(child), assign: { value in box.dict[key] = value }))
             }
         }
 
@@ -506,7 +507,7 @@ internal enum Utils {
             let box = ArrayBox(array.count)
             stack.append(.commitArray(box, foundationID, assign))
             for (index, child) in array.enumerated() {
-                stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
+                stack.append(.build(node: Utils.eraseOptionalLike(child), assign: { value in box.arr[index] = value }))
             }
         }
 
@@ -535,14 +536,16 @@ internal enum Utils {
                     let box = ArrayBox(arr.count)
                     stack.append(.commitArray(box, nil, assign))
                     for (index, child) in arr.enumerated() {
-                        stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
+                        stack.append(
+                            .build(node: Utils.eraseOptionalLike(child), assign: { value in box.arr[index] = value }))
                     }
                     continue
                 case .arrayOptional(let arrOpt):
                     let box = ArrayBox(arrOpt.count)
                     stack.append(.commitArray(box, nil, assign))
                     for (index, child) in arrOpt.enumerated() {
-                        stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
+                        stack.append(
+                            .build(node: Utils.eraseOptionalLike(child), assign: { value in box.arr[index] = value }))
                     }
                     continue
                 case .foundationDictionary(let dict):
