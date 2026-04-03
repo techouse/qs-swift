@@ -312,7 +312,13 @@ internal enum Utils {
 
     @inline(never)
     internal static func deepBridgeToAnyIterative(_ root: Any?) -> Any {
-        final class DictBox { var dict: [String: Any] = [:] }
+        final class DictBox {
+            var dict: [String: Any]
+            init(_ capacity: Int) {
+                self.dict = [:]
+                self.dict.reserveCapacity(capacity)
+            }
+        }
         final class ArrayBox {
             var arr: [Any]
             init(_ count: Int) { self.arr = Array(repeating: NSNull(), count: count) }
@@ -321,22 +327,98 @@ internal enum Utils {
         typealias Assign = (Any) -> Void
         enum Task {
             case build(node: Any?, assign: Assign)
-            case commitDict(DictBox, Assign)
-            case commitArray(ArrayBox, Assign)
+            case commitDict(DictBox, ObjectIdentifier?, Assign)
+            case commitArray(ArrayBox, ObjectIdentifier?, Assign)
         }
 
         var result: Any = NSNull()
         var stack: [Task] = [.build(node: root, assign: { result = $0 })]
+        var activeFoundationContainers: Set<ObjectIdentifier> = []
+        var completedFoundationContainers: [ObjectIdentifier: Any] = [:]
+
+        @inline(__always)
+        func scheduleDictionaryEntries(
+            _ entries: [(String, Any?)],
+            assign: @escaping Assign,
+            foundationID: ObjectIdentifier? = nil
+        ) {
+            let box = DictBox(entries.count)
+            stack.append(.commitDict(box, foundationID, assign))
+            for (key, child) in entries.reversed() {
+                stack.append(.build(node: child, assign: { value in box.dict[key] = value }))
+            }
+        }
 
         @inline(__always)
         func scheduleStringDictionary<Value>(
             _ dict: [String: Value],
             assign: @escaping Assign
         ) {
-            let box = DictBox()
-            stack.append(.commitDict(box, assign))
+            var entries: [(String, Any?)] = []
+            entries.reserveCapacity(dict.count)
             for (key, child) in dict {
-                stack.append(.build(node: child, assign: { value in box.dict[key] = value }))
+                entries.append((key, Utils.eraseOptionalLike(child)))
+            }
+            scheduleDictionaryEntries(entries, assign: assign)
+        }
+
+        @inline(__always)
+        func scheduleAnyHashableDictionary<Value>(
+            _ dict: [AnyHashable: Value],
+            assign: @escaping Assign
+        ) {
+            var entries: [(String, Any?)] = []
+            entries.reserveCapacity(dict.count)
+            for (keyHash, child) in dict {
+                if Utils.isOverflowKey(keyHash) { continue }
+                entries.append((String(describing: keyHash), Utils.eraseOptionalLike(child)))
+            }
+            scheduleDictionaryEntries(entries, assign: assign)
+        }
+
+        @inline(__always)
+        func scheduleFoundationDictionary(
+            _ dict: NSDictionary,
+            assign: @escaping Assign
+        ) {
+            let foundationID = ObjectIdentifier(dict)
+            if let cached = completedFoundationContainers[foundationID] {
+                assign(cached)
+                return
+            }
+            guard activeFoundationContainers.insert(foundationID).inserted else {
+                assign(NSNull())
+                return
+            }
+
+            var entries: [(String, Any?)] = []
+            entries.reserveCapacity(dict.count)
+            for (key, child) in dict {
+                if let keyHash = key as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
+                entries.append((String(describing: key), child))
+            }
+            scheduleDictionaryEntries(entries, assign: assign, foundationID: foundationID)
+        }
+
+        @inline(__always)
+        func scheduleFoundationArray(
+            _ array: NSArray,
+            assign: @escaping Assign
+        ) {
+            let foundationID = ObjectIdentifier(array)
+            if let cached = completedFoundationContainers[foundationID] {
+                assign(cached)
+                return
+            }
+            guard activeFoundationContainers.insert(foundationID).inserted else {
+                assign(NSNull())
+                return
+            }
+
+            let box = ArrayBox(array.count)
+            stack.append(.commitArray(box, foundationID, assign))
+            for (index, child) in array.enumerated() {
+                stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
             }
         }
 
@@ -356,65 +438,43 @@ internal enum Utils {
                     scheduleStringDictionary(dict, assign: assign)
                     continue
                 case .anyHashableOptional(let dictAHOpt):
-                    let box = DictBox()
-                    stack.append(.commitDict(box, assign))
-                    for (keyHash, child) in dictAHOpt {
-                        if Utils.isOverflowKey(keyHash) { continue }
-                        let keyString = String(describing: keyHash)
-                        stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
-                    }
+                    scheduleAnyHashableDictionary(dictAHOpt, assign: assign)
                     continue
                 case .anyHashableAny(let dictAH):
-                    let box = DictBox()
-                    stack.append(.commitDict(box, assign))
-                    for (keyHash, child) in dictAH {
-                        if Utils.isOverflowKey(keyHash) { continue }
-                        let keyString = String(describing: keyHash)
-                        stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
-                    }
+                    scheduleAnyHashableDictionary(dictAH, assign: assign)
                     continue
                 case .arrayAny(let arr):
                     let box = ArrayBox(arr.count)
-                    stack.append(.commitArray(box, assign))
+                    stack.append(.commitArray(box, nil, assign))
                     for (index, child) in arr.enumerated() {
                         stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
                     }
                     continue
                 case .arrayOptional(let arrOpt):
                     let box = ArrayBox(arrOpt.count)
-                    stack.append(.commitArray(box, assign))
+                    stack.append(.commitArray(box, nil, assign))
                     for (index, child) in arrOpt.enumerated() {
                         stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
                     }
                     continue
                 case .foundationDictionary(let dict):
-                    let box = DictBox()
-                    stack.append(.commitDict(box, assign))
-                    for (key, child) in dict {
-                        if let keyHash = key as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
-                        let keyString = String(describing: key)
-                        stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
-                    }
+                    scheduleFoundationDictionary(dict, assign: assign)
                     continue
                 case .foundationArray(let array):
-                    let box = ArrayBox(array.count)
-                    stack.append(.commitArray(box, assign))
-                    for (index, child) in array.enumerated() {
-                        stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
-                    }
+                    scheduleFoundationArray(array, assign: assign)
                     continue
                 case .genericDictionary(let dict):
-                    let box = DictBox()
-                    stack.append(.commitDict(box, assign))
+                    var entries: [(String, Any?)] = []
+                    entries.reserveCapacity(dict._qsCount)
                     dict._qsForEachEntry { keyHash, child in
                         if Utils.isOverflowKey(keyHash) { return }
-                        let keyString = String(describing: keyHash)
-                        stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
+                        entries.append((String(describing: keyHash), child))
                     }
+                    scheduleDictionaryEntries(entries, assign: assign)
                     continue
                 case .genericArray(let array):
                     let box = ArrayBox(array._qsCount)
-                    stack.append(.commitArray(box, assign))
+                    stack.append(.commitArray(box, nil, assign))
                     array._qsForEachElement { index, child in
                         stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
                     }
@@ -425,10 +485,18 @@ internal enum Utils {
 
                 assign(node)
 
-            case .commitDict(let box, let assign):
+            case .commitDict(let box, let foundationID, let assign):
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                    completedFoundationContainers[foundationID] = box.dict
+                }
                 assign(box.dict)
 
-            case .commitArray(let box, let assign):
+            case .commitArray(let box, let foundationID, let assign):
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                    completedFoundationContainers[foundationID] = box.arr
+                }
                 assign(box.arr)
             }
         }
@@ -442,6 +510,7 @@ internal enum Utils {
     #endif
     internal static func containsUndefined(_ root: Any?) -> Bool {
         var stack: [Any?] = [root]
+        var visitedFoundationContainers: Set<ObjectIdentifier> = []
         while let node = stack.popLast() {
             if node is Undefined { return true }
             guard let node else { continue }
@@ -463,9 +532,11 @@ internal enum Utils {
                 stack.reserveCapacity(stack.count + array.count)
                 for child in array { stack.append(child) }
             case .foundationDictionary(let dict):
+                guard visitedFoundationContainers.insert(ObjectIdentifier(dict)).inserted else { continue }
                 stack.reserveCapacity(stack.count + dict.count)
                 for (_, child) in dict { stack.append(child) }
             case .foundationArray(let array):
+                guard visitedFoundationContainers.insert(ObjectIdentifier(array)).inserted else { continue }
                 stack.reserveCapacity(stack.count + array.count)
                 for child in array { stack.append(child) }
             case .genericDictionary(let dict):
