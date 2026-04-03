@@ -1434,6 +1434,33 @@ struct DecodeTests {
         #expect(nested?["drop"] == nil)
     }
 
+    @Test("decode - bridges typed Swift containers in map input")
+    func testDecode_MapInputBridgesTypedSwiftContainers() throws {
+        let input: [String: Any] = [
+            "dict": [1: "x"] as [Int: String],
+            "array": [nil, "y"] as [String?],
+        ]
+
+        let decoded = try Qs.decode(input)
+        let nestedDict = decoded["dict"] as? [String: Any]
+        let nestedArray = decoded["array"] as? [Any]
+        #expect(nestedDict?["1"] as? String == "x")
+        #expect(nestedArray?.count == 2)
+        #expect(nestedArray?.first is NSNull)
+        #expect(nestedArray?[1] as? String == "y")
+    }
+
+    @Test("decode - compacts typed Swift dictionaries in map input")
+    func testDecode_MapInputCompactsTypedSwiftDictionaries() throws {
+        let input: [String: Any] = [
+            "a": ["drop": Undefined.instance] as [String: Undefined]
+        ]
+
+        let decoded = try Qs.decode(input)
+        let nested = decoded["a"] as? [String: Any]
+        #expect(nested?.isEmpty == true)
+    }
+
     @Test("decode - preserves direct map inputs with nil placeholders")
     func testDecode_MapVariants() throws {
         let optionalMap = try Qs._decodeSyncCore(["a": nil, "b": "two"] as [String: Any?])
@@ -1951,7 +1978,7 @@ struct DoesNotCrashTests {
     ///       `testDecode_DeepMaps_NoTimeout_Main` is designed for that purpose.
     @Test("decode - deep maps do not time out")
     func testDecode_DeepMaps_NoTimeout_Safe() async throws {
-        let depth = 1_200  // Swift 6.3 reduced worker-thread stack headroom for deep dictionary teardown
+        let depth = Qs.MAIN_DROP_THRESHOLD
         var s = "foo"
         for _ in 0..<depth { s += "[p]" }
         s += "=bar"
@@ -1970,7 +1997,7 @@ struct DoesNotCrashTests {
 
     @Test("decode - deep merge conflict does not overflow stack")
     func testDecode_DeepMergeConflict_NoStackOverflow() throws {
-        let depth = 1_200
+        let depth = Qs.MAIN_DROP_THRESHOLD
         var left = "root"
         var right = "root"
         for _ in 0..<depth {

@@ -1268,8 +1268,8 @@ struct UtilsTests {
     // while keeping CI stable.
     @Test("deep maps do not time out (safe depth)")
     func testDecode_DeepMaps_NoTimeout_Safe() throws {
-        /// Swift 6.3 reduced cooperative worker-thread stack headroom for deep dictionary teardown.
-        let depth = 1_200
+        /// Keep the worker-thread safety test aligned with production's main-drop heuristic.
+        let depth = Qs.MAIN_DROP_THRESHOLD
         var s = "foo"
         for _ in 0..<depth { s += "[p]" }
         s += "=bar"
@@ -1713,6 +1713,14 @@ struct UtilsTests {
         #expect(Utils.containsUndefined(payload))
     }
 
+    @Test("Utils.containsUndefined inspects typed Swift containers")
+    func utils_containsUndefined_typedSwiftContainers() {
+        let payload: [Int: [String: Undefined]] = [
+            1: ["drop": Undefined.instance]
+        ]
+        #expect(Utils.containsUndefined(payload))
+    }
+
     @Test("Utils.containsUndefined reports true for direct sentinel input")
     func utils_containsUndefined_directSentinel() {
         #expect(Utils.containsUndefined(Undefined.instance))
@@ -1730,6 +1738,13 @@ struct UtilsTests {
     func utils_estimateSingleKeyChainDepth_nonOptionalChain() {
         let child: [AnyHashable: Any] = [AnyHashable(2): "end"]
         let root: [AnyHashable: Any] = [AnyHashable(1): child]
+        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
+    }
+
+    @Test("Utils.estimateSingleKeyChainDepth traverses typed Swift dictionary chains")
+    func utils_estimateSingleKeyChainDepth_typedSwiftChain() {
+        let child: [Int: String] = [2: "end"]
+        let root: [Int: [Int: String]] = [1: child]
         #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
     }
 
@@ -1974,13 +1989,30 @@ struct UtilsTests {
     func utils_deepBridge_foundationContainers() {
         let foundation: NSDictionary = [
             1: "x",
-            "nested": NSArray(array: ["y"])
+            "nested": NSArray(array: ["y"]),
         ]
 
         let bridged = Utils.deepBridgeToAnyIterative(foundation)
         let dict = bridged as? [String: Any]
         #expect(dict?["1"] as? String == "x")
         #expect((dict?["nested"] as? [Any])?.first as? String == "y")
+    }
+
+    @Test("Utils.deepBridgeToAnyIterative bridges typed Swift containers")
+    func utils_deepBridge_typedSwiftContainers() {
+        let typed: [String: Any] = [
+            "dict": [1: "x"] as [Int: String],
+            "array": [nil, "y"] as [String?],
+        ]
+
+        let bridged = Utils.deepBridgeToAnyIterative(typed)
+        let dict = bridged as? [String: Any]
+        let nestedDict = dict?["dict"] as? [String: Any]
+        let nestedArray = dict?["array"] as? [Any]
+        #expect(nestedDict?["1"] as? String == "x")
+        #expect(nestedArray?.count == 2)
+        #expect(nestedArray?.first is NSNull)
+        #expect(nestedArray?[1] as? String == "y")
     }
 
     @Test("Utils.needsMainDrop short-circuits when threshold is non-positive")
