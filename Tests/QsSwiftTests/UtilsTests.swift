@@ -1387,7 +1387,7 @@ struct UtilsTests {
         let out = Utils.compactToAny(input, allowSparseLists: true)
         if let array = out["array"] as? [Any] {
             #expect(array.first is NSNull)
-            if let nested = array.last as? [Any] {
+            if let nested = anyArray(array[1]) {
                 #expect(nested.first is NSNull)
                 #expect(nested.last as? String == "value")
             } else {
@@ -1424,7 +1424,7 @@ struct UtilsTests {
         let compacted = Utils.compact(&root, allowSparseLists: true)
         if let arr = compacted["opt"] as? [Any] {
             #expect(arr.count == 3)
-            let inner = arr.first as? [Any]
+            let inner = anyArray(arr[0])
             #expect(inner?.count == 3)
             #expect(inner?[0] as? String == "inner")
             #expect(inner?[1] is NSNull)
@@ -1448,7 +1448,7 @@ struct UtilsTests {
             #expect(list.count == 3)
             #expect(list[0] as? String == "value")
             #expect(list[1] is NSNull)
-            let dict = list[2] as? [String: Any]
+            let dict = list[2] as? [String: Any?]
             #expect(dict?.isEmpty == true)
         } else {
             Issue.record("Swift [Any] branch not exercised")
@@ -1465,8 +1465,8 @@ struct UtilsTests {
         let compacted = Utils.compact(&root)
         if let list = compacted["list"] as? [Any] {
             #expect(list.count == 2)
-            #expect(list.first as? String == "keep")
-            let nested = list.last as? [String: Any]
+            #expect(list[0] as? String == "keep")
+            let nested = list[1] as? [String: Any?]
             #expect(nested?.isEmpty == true)
         } else {
             Issue.record("Swift [Any] allowSparse=false branch not exercised")
@@ -1479,7 +1479,7 @@ struct UtilsTests {
         var root: [String: Any?] = ["list": [Any](arrayLiteral: nested)]
 
         let compacted = Utils.compact(&root, allowSparseLists: true)
-        if let list = compacted["list"] as? [Any], let inner = list.first as? [Any] {
+        if let list = compacted["list"] as? [Any], let inner = anyArray(list[0]) {
             #expect(inner.count == 2)
             #expect(inner[0] as? String == "inner")
             #expect(inner[1] is NSNull)
@@ -1497,7 +1497,7 @@ struct UtilsTests {
         let compacted = Utils.compact(&root, allowSparseLists: true)
         if let list = compacted["list"] as? [Any] {
             #expect(list.count == 2)
-            let nested = list.first as? [Any]
+            let nested = anyArray(list[0])
             #expect(nested?.contains { ($0 as? String) == "leaf" } == true)
             #expect(nested?.contains { $0 is NSNull } == true)
             #expect(list.last is NSNull)
@@ -1517,8 +1517,8 @@ struct UtilsTests {
         let compacted = Utils.compact(&root)
         if let list = compacted["list"] as? [Any] {
             #expect(list.count == 2)
-            #expect((list.first as? [String: Any])?.isEmpty == true)
-            #expect(list.last as? String == "tail")
+            #expect((list[0] as? [String: Any?])?.isEmpty == true)
+            #expect(list[1] as? String == "tail")
         } else {
             Issue.record("Dense Swift [Any] branch not compacted as expected")
         }
@@ -1547,7 +1547,7 @@ struct UtilsTests {
         var root: [String: Any?] = ["list": [Any?](arrayLiteral: optionalInner, nil)]
 
         let compacted = Utils.compact(&root, allowSparseLists: true)
-        if let list = compacted["list"] as? [Any], let nested = list.first as? [Any] {
+        if let list = compacted["list"] as? [Any], let nested = anyArray(list[0]) {
             #expect(nested.count == 3)
             #expect(nested.first is NSNull)
             #expect(nested[1] as? String == "leaf")
@@ -1583,9 +1583,9 @@ struct UtilsTests {
 
         if let foundation = sparse["foundation"] as? [Any] {
             #expect(foundation.first is NSNull)
-            let emptied = foundation.compactMap { $0 as? [String: Any] }.first
+            let emptied = foundation.compactMap(compactDict).first
             #expect(emptied?.isEmpty == true)
-            let nested = foundation.compactMap { $0 as? [Any] }.first
+            let nested = foundation.compactMap(anyArray).first
             #expect(nested?.first is NSNull)
         } else {
             Issue.record("Foundation-backed array branch not exercised")
@@ -1593,9 +1593,9 @@ struct UtilsTests {
 
         if let optional = sparse["optional"] as? [Any] {
             #expect(optional.first is NSNull)
-            if let nested = optional.dropFirst().first as? [Any] {
+            if let nested = anyArray(optional[1]) {
                 #expect(nested.first is NSNull)
-                let nestedDict = nested.compactMap { $0 as? [String: Any] }.first
+                let nestedDict = nested.compactMap(compactDict).first
                 #expect(nestedDict?.keys.contains("keep") == true)
                 #expect(nested.last as? String == "leaf")
             } else {
@@ -1750,17 +1750,17 @@ struct UtilsTests {
 
             #expect(array.count == 2)
 
-            let first = array[0] as? [String: Any]
-            let firstInner = first?["1"] as? [Any]
+            let first = anyDict(array[0])
+            let firstInner = anyArray(first?["1"])
             #expect(firstInner?.count == 2)
             #expect(firstInner?.first is NSNull)
             #expect(firstInner?[1] as? String == "x")
 
-            let second = array[1] as? [String: Any]
-            let secondInner = second?["inner"] as? [Any]
+            let second = anyDict(array[1])
+            let secondInner = anyArray(second?["inner"])
             #expect(secondInner?.count == 3)
             #expect(secondInner?.first is NSNull)
-            let deepDict = secondInner?[1] as? [String: Any]
+            let deepDict = anyDict(secondInner?[1])
             #expect(deepDict?["deep"] == nil)
             #expect(deepDict?["keep"] as? String == "leaf")
             #expect(secondInner?[2] is NSNull)
@@ -1781,6 +1781,61 @@ struct UtilsTests {
             ], allowSparseLists: true)
         expectDeepNormalizedShape(compactedAny["swift"], label: "compactToAny swift")
         expectDeepNormalizedShape(compactedAny["foundation"], label: "compactToAny foundation")
+    }
+
+    @Test("Utils.compact and compactToAny tolerate Foundation self-cycles")
+    func utils_compact_foundationSelfCycles() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
+                #expect(
+                    Bool(false),
+                    Comment("Skipped: cannot safely build a cyclic Foundation container on Linux"))
+            }
+        #else
+            let cyclicDict = NSMutableDictionary()
+            cyclicDict["self"] = cyclicDict
+            cyclicDict["leaf"] = "x"
+
+            var compactRoot: [String: Any?] = ["dict": cyclicDict]
+            let compacted = Utils.compact(&compactRoot, allowSparseLists: true)
+            if let dict = compacted["dict"] as? [String: Any?] {
+                #expect(dict["leaf"] as? String == "x")
+                #expect((dict["self"] ?? nil) is NSNull)
+            } else {
+                Issue.record("Expected compacted cyclic dictionary")
+            }
+
+            let compactedAny = Utils.compactToAny(["dict": cyclicDict], allowSparseLists: true)
+            if let dict = compactedAny["dict"] as? [String: Any] {
+                #expect(dict["leaf"] as? String == "x")
+                #expect(dict["self"] is NSNull)
+            } else {
+                Issue.record("Expected compactToAny cyclic dictionary")
+            }
+
+            let cyclicArray = NSMutableArray()
+            cyclicArray.add(cyclicArray)
+            cyclicArray.add("y")
+
+            var compactArrayRoot: [String: Any?] = ["array": cyclicArray]
+            let compactedArray = Utils.compact(&compactArrayRoot, allowSparseLists: true)
+            if let array = compactedArray["array"] as? [Any] {
+                #expect(array.count == 2)
+                #expect(array[0] is NSNull)
+                #expect(array[1] as? String == "y")
+            } else {
+                Issue.record("Expected compacted cyclic array")
+            }
+
+            let compactedAnyArray = Utils.compactToAny(["array": cyclicArray], allowSparseLists: true)
+            if let array = compactedAnyArray["array"] as? [Any] {
+                #expect(array.count == 2)
+                #expect(array[0] is NSNull)
+                #expect(array[1] as? String == "y")
+            } else {
+                Issue.record("Expected compactToAny cyclic array")
+            }
+        #endif
     }
 
     @Test("Utils.containsUndefined detects sentinel in nested structures")
@@ -2290,6 +2345,38 @@ struct UtilsTests {
 }
 
 // MARK: - Helpers
+
+private func compactDict(_ value: Any) -> [String: Any?]? {
+    value as? [String: Any?]
+}
+
+private func anyArray(_ value: Any?) -> [Any]? {
+    if let array = value as? [Any] {
+        return array
+    }
+    if let array = value as? [Any?] {
+        return array.map { $0 ?? NSNull() }
+    }
+    if let array = value as? NSArray {
+        return array.map { $0 }
+    }
+    return nil
+}
+
+private func anyDict(_ value: Any?) -> [String: Any]? {
+    if let dict = value as? [String: Any] {
+        return dict
+    }
+    if let dict = value as? [String: Any?] {
+        var bridged: [String: Any] = [:]
+        bridged.reserveCapacity(dict.count)
+        for (key, child) in dict {
+            bridged[key] = child ?? NSNull()
+        }
+        return bridged
+    }
+    return nil
+}
 
 private final class Holder: CustomStringConvertible {
     var payload: Any?
