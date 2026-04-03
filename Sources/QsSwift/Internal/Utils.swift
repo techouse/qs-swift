@@ -17,27 +17,27 @@ extension Optional: QsOptionalValue {
     }
 }
 
-protocol QsErasedDictionaryContainer {
+private protocol QsErasedDictionaryContainer {
     var _qsCount: Int { get }
     func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void)
     func _qsFirstEntry() -> (key: AnyHashable, value: Any?)?
 }
 
-protocol QsErasedArrayContainer {
+private protocol QsErasedArrayContainer {
     var _qsCount: Int { get }
     func _qsForEachElement(_ body: (Int, Any?) -> Void)
 }
 
 extension Dictionary: QsErasedDictionaryContainer where Key: Hashable {
-    var _qsCount: Int { count }
+    fileprivate var _qsCount: Int { count }
 
-    func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void) {
+    fileprivate func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void) {
         for (key, value) in self {
             body(AnyHashable(key), Utils.eraseOptionalLike(value))
         }
     }
 
-    func _qsFirstEntry() -> (key: AnyHashable, value: Any?)? {
+    fileprivate func _qsFirstEntry() -> (key: AnyHashable, value: Any?)? {
         for (key, value) in self {
             return (AnyHashable(key), Utils.eraseOptionalLike(value))
         }
@@ -46,15 +46,15 @@ extension Dictionary: QsErasedDictionaryContainer where Key: Hashable {
 }
 
 extension OrderedDictionary: QsErasedDictionaryContainer where Key: Hashable {
-    var _qsCount: Int { count }
+    fileprivate var _qsCount: Int { count }
 
-    func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void) {
+    fileprivate func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void) {
         for (key, value) in self {
             body(AnyHashable(key), Utils.eraseOptionalLike(value))
         }
     }
 
-    func _qsFirstEntry() -> (key: AnyHashable, value: Any?)? {
+    fileprivate func _qsFirstEntry() -> (key: AnyHashable, value: Any?)? {
         for (key, value) in self {
             return (AnyHashable(key), Utils.eraseOptionalLike(value))
         }
@@ -63,9 +63,9 @@ extension OrderedDictionary: QsErasedDictionaryContainer where Key: Hashable {
 }
 
 extension Array: QsErasedArrayContainer {
-    var _qsCount: Int { count }
+    fileprivate var _qsCount: Int { count }
 
-    func _qsForEachElement(_ body: (Int, Any?) -> Void) {
+    fileprivate func _qsForEachElement(_ body: (Int, Any?) -> Void) {
         for (index, value) in enumerated() {
             body(index, Utils.eraseOptionalLike(value))
         }
