@@ -16,7 +16,7 @@ extension Qs {
     /// long single-key chains (e.g. `["p": ["p": ...]]`) which risks a `EXC_BAD_ACCESS`
     /// in a background thread. Handing the *final release* to the main thread avoids
     /// that destructor recursion in practice.
-    private static let MAIN_DROP_THRESHOLD = 2500
+    internal static let MAIN_DROP_THRESHOLD = 1_200
 
     // MARK: - Public API (Sync)
 

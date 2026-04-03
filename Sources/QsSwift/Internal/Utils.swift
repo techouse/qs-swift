@@ -2,6 +2,76 @@
 import Foundation
 import OrderedCollections
 
+private protocol QsOptionalValue {
+    var _qsWrappedAny: Any? { get }
+}
+
+extension Optional: QsOptionalValue {
+    fileprivate var _qsWrappedAny: Any? {
+        switch self {
+        case .some(let wrapped):
+            return wrapped
+        case .none:
+            return nil
+        }
+    }
+}
+
+protocol QsErasedDictionaryContainer {
+    var _qsCount: Int { get }
+    func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void)
+    func _qsFirstEntry() -> (key: AnyHashable, value: Any?)?
+}
+
+protocol QsErasedArrayContainer {
+    var _qsCount: Int { get }
+    func _qsForEachElement(_ body: (Int, Any?) -> Void)
+}
+
+extension Dictionary: QsErasedDictionaryContainer where Key: Hashable {
+    var _qsCount: Int { count }
+
+    func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void) {
+        for (key, value) in self {
+            body(AnyHashable(key), Utils.eraseOptionalLike(value))
+        }
+    }
+
+    func _qsFirstEntry() -> (key: AnyHashable, value: Any?)? {
+        for (key, value) in self {
+            return (AnyHashable(key), Utils.eraseOptionalLike(value))
+        }
+        return nil
+    }
+}
+
+extension OrderedDictionary: QsErasedDictionaryContainer where Key: Hashable {
+    var _qsCount: Int { count }
+
+    func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void) {
+        for (key, value) in self {
+            body(AnyHashable(key), Utils.eraseOptionalLike(value))
+        }
+    }
+
+    func _qsFirstEntry() -> (key: AnyHashable, value: Any?)? {
+        for (key, value) in self {
+            return (AnyHashable(key), Utils.eraseOptionalLike(value))
+        }
+        return nil
+    }
+}
+
+extension Array: QsErasedArrayContainer {
+    var _qsCount: Int { count }
+
+    func _qsForEachElement(_ body: (Int, Any?) -> Void) {
+        for (index, value) in enumerated() {
+            body(index, Utils.eraseOptionalLike(value))
+        }
+    }
+}
+
 /// A collection of utility methods used by the library.
 internal enum Utils {
     private final class GenericContainerTypeNameCache: @unchecked Sendable {
@@ -151,6 +221,16 @@ internal enum Utils {
         case arrayOptional([Any?])
         case foundationDictionary(NSDictionary)
         case foundationArray(NSArray)
+        case genericDictionary(any QsErasedDictionaryContainer)
+        case genericArray(any QsErasedArrayContainer)
+    }
+
+    @inline(__always)
+    static func eraseOptionalLike<T>(_ value: T) -> Any? {
+        if let optional = value as? QsOptionalValue {
+            return optional._qsWrappedAny
+        }
+        return value
     }
 
     @inline(__always)
@@ -190,6 +270,12 @@ internal enum Utils {
         }
         if valueType is AnyClass, let array = value as? NSArray {
             return .foundationArray(array)
+        }
+        if let dict = value as? any QsErasedDictionaryContainer {
+            return .genericDictionary(dict)
+        }
+        if let array = value as? any QsErasedArrayContainer {
+            return .genericArray(array)
         }
 
         return nil
@@ -313,6 +399,22 @@ internal enum Utils {
                         stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
                     }
                     continue
+                case .genericDictionary(let dict):
+                    let box = DictBox()
+                    stack.append(.commitDict(box, assign))
+                    dict._qsForEachEntry { keyHash, child in
+                        if Utils.isOverflowKey(keyHash) { return }
+                        let keyString = String(describing: keyHash)
+                        stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
+                    }
+                    continue
+                case .genericArray(let array):
+                    let box = ArrayBox(array._qsCount)
+                    stack.append(.commitArray(box, assign))
+                    array._qsForEachElement { index, child in
+                        stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
+                    }
+                    continue
                 case nil:
                     break
                 }
@@ -362,6 +464,12 @@ internal enum Utils {
             case .foundationArray(let array):
                 stack.reserveCapacity(stack.count + array.count)
                 for child in array { stack.append(child) }
+            case .genericDictionary(let dict):
+                stack.reserveCapacity(stack.count + dict._qsCount)
+                dict._qsForEachEntry { _, child in stack.append(child) }
+            case .genericArray(let array):
+                stack.reserveCapacity(stack.count + array._qsCount)
+                array._qsForEachElement { _, child in stack.append(child) }
             case nil:
                 break
             }
@@ -395,7 +503,10 @@ internal enum Utils {
             case .foundationDictionary(let dict):
                 guard dict.count == 1, let next = dict.objectEnumerator().nextObject() else { return depth }
                 current = next
-            case .arrayAny, .arrayOptional, .foundationArray, nil:
+            case .genericDictionary(let dict):
+                guard dict._qsCount == 1, let entry = dict._qsFirstEntry() else { return depth }
+                current = entry.value
+            case .arrayAny, .arrayOptional, .foundationArray, .genericArray, nil:
                 return depth
             }
             depth += 1
