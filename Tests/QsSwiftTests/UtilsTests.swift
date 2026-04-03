@@ -1723,6 +1723,66 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.compact and compactToAny normalize deep Foundation and pure-Swift containers consistently")
+    func utils_compact_deepFoundationMatchesPureSwift() {
+        let undefined = Undefined.instance
+        let swiftNested: [Any] = [
+            [1: [undefined, "x"]] as [Int: [Any]],
+            ["inner": [undefined, ["deep": undefined, "keep": "leaf"] as [String: Any?], nil] as [Any?]]
+                as [String: [Any?]],
+        ]
+        let foundationNested = NSArray(array: [
+            NSDictionary(dictionary: [1: NSArray(array: [undefined, "x"])]),
+            NSDictionary(dictionary: [
+                "inner": NSArray(array: [
+                    undefined,
+                    NSDictionary(dictionary: ["deep": undefined, "keep": "leaf"]),
+                    NSNull(),
+                ])
+            ]),
+        ])
+
+        func expectDeepNormalizedShape(_ value: Any?, label: String) {
+            guard let array = value as? [Any] else {
+                Issue.record("Expected normalized array for \(label), got: \(String(describing: value))")
+                return
+            }
+
+            #expect(array.count == 2)
+
+            let first = array[0] as? [String: Any]
+            let firstInner = first?["1"] as? [Any]
+            #expect(firstInner?.count == 2)
+            #expect(firstInner?.first is NSNull)
+            #expect(firstInner?[1] as? String == "x")
+
+            let second = array[1] as? [String: Any]
+            let secondInner = second?["inner"] as? [Any]
+            #expect(secondInner?.count == 3)
+            #expect(secondInner?.first is NSNull)
+            let deepDict = secondInner?[1] as? [String: Any]
+            #expect(deepDict?["deep"] == nil)
+            #expect(deepDict?["keep"] as? String == "leaf")
+            #expect(secondInner?[2] is NSNull)
+        }
+
+        var compactRoot: [String: Any?] = [
+            "swift": swiftNested,
+            "foundation": foundationNested,
+        ]
+        let compacted = Utils.compact(&compactRoot, allowSparseLists: true)
+        expectDeepNormalizedShape(compacted["swift"] ?? nil, label: "compact swift")
+        expectDeepNormalizedShape(compacted["foundation"] ?? nil, label: "compact foundation")
+
+        let compactedAny = Utils.compactToAny(
+            [
+                "swift": swiftNested,
+                "foundation": foundationNested,
+            ], allowSparseLists: true)
+        expectDeepNormalizedShape(compactedAny["swift"], label: "compactToAny swift")
+        expectDeepNormalizedShape(compactedAny["foundation"], label: "compactToAny foundation")
+    }
+
     @Test("Utils.containsUndefined detects sentinel in nested structures")
     func utils_containsUndefined_detects() {
         let undefined = Undefined.instance
