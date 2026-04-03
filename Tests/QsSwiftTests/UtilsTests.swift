@@ -1684,6 +1684,43 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.compactToAny normalizes Foundation and AnyHashable containers inside arrays")
+    func utils_compactToAny_arrayElementsBridgeFoundationAndHashableContainers() {
+        let input: [String: Any?] = [
+            "list": [
+                NSDictionary(dictionary: [1: "x", "drop": Undefined.instance]),
+                [AnyHashable(2): "y"] as [AnyHashable: Any],
+                NSArray(array: [Undefined.instance, "z"]),
+            ]
+        ]
+
+        let sparse = Utils.compactToAny(input, allowSparseLists: true)
+        if let list = sparse["list"] as? [Any] {
+            let foundationDict = list[0] as? [String: Any]
+            #expect(foundationDict?["1"] as? String == "x")
+            #expect(foundationDict?["drop"] == nil)
+
+            let hashableDict = list[1] as? [String: Any]
+            #expect(hashableDict?["2"] as? String == "y")
+
+            let foundationArray = list[2] as? [Any]
+            #expect(foundationArray?.count == 2)
+            #expect(foundationArray?.first is NSNull)
+            #expect(foundationArray?[1] as? String == "z")
+        } else {
+            Issue.record("Expected normalized list from compactToAny")
+        }
+
+        let dense = Utils.compactToAny(input, allowSparseLists: false)
+        if let list = dense["list"] as? [Any] {
+            let foundationArray = list[2] as? [Any]
+            #expect(foundationArray?.count == 1)
+            #expect(foundationArray?.first as? String == "z")
+        } else {
+            Issue.record("Expected dense normalized list from compactToAny")
+        }
+    }
+
     @Test("Utils.containsUndefined detects sentinel in nested structures")
     func utils_containsUndefined_detects() {
         let undefined = Undefined.instance
