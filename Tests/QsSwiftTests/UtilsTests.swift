@@ -1343,10 +1343,13 @@ struct UtilsTests {
 
         if let typed = compacted["typed"] as? [String: Any?] {
             #expect(typed.keys.contains("1"))
-            switch typed["1"] {
-            case .some(.none):
-                #expect(Bool(true))
-            default:
+            let preservesNilEntry: Bool
+            if case .some(.none) = typed["1"] {
+                preservesNilEntry = true
+            } else {
+                preservesNilEntry = false
+            }
+            if !preservesNilEntry {
                 Issue.record("Expected typed dictionary nil entry to be preserved")
             }
         } else {
@@ -2309,10 +2312,13 @@ struct UtilsTests {
         let optionalArray: [Any?] = [nil, "value"]
         let bridgedArray = Utils.deepBridgeToAnyIterative(optionalArray)
         if Swift.type(of: bridgedArray) == [Any?].self, let arrOpt = bridgedArray as? [Any?] {
-            switch arrOpt.first {
-            case .some(.none):
-                #expect(true)
-            default:
+            let firstElementIsNone: Bool
+            if case .some(.none) = arrOpt.first {
+                firstElementIsNone = true
+            } else {
+                firstElementIsNone = false
+            }
+            if !firstElementIsNone {
                 Issue.record("Expected first element to be .none")
             }
 
