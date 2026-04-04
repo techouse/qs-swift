@@ -1387,7 +1387,7 @@ struct UtilsTests {
         let out = Utils.compactToAny(input, allowSparseLists: true)
         if let array = out["array"] as? [Any] {
             #expect(array.first is NSNull)
-            if let nested = anyArray(array[1]) {
+            if let nested = array.dropFirst().first.flatMap(anyArray) {
                 #expect(nested.first is NSNull)
                 #expect(nested.last as? String == "value")
             } else {
