@@ -1934,6 +1934,14 @@ struct UtilsTests {
         #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
     }
 
+    @Test("Utils.estimateSingleKeyChainDepth unwraps boxed optional dictionary links")
+    func utils_estimateSingleKeyChainDepth_boxedOptionalChain() {
+        let level2: [String: Any] = ["c": "end"]
+        let level1: [String: Any] = ["b": Optional<[String: Any]>.some(level2) as Any]
+        let root: [String: Any] = ["a": Optional<[String: Any]>.some(level1) as Any]
+        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 3)
+    }
+
     @Test("Utils.merge handles heterogeneous containers")
     func utils_merge_coversBranches() {
         let undefined = Undefined.instance
@@ -2306,6 +2314,14 @@ struct UtilsTests {
         let root: [String: Any?] = ["k": nil]
         #expect(!Utils.needsMainDrop(root, threshold: 0))
         #expect(!Utils.needsMainDrop(root, threshold: -3))
+    }
+
+    @Test("Utils.needsMainDrop sees boxed optional single-key chains")
+    func utils_needsMainDrop_boxedOptionalChain() {
+        let level2: [String: Any] = ["c": "end"]
+        let level1: [String: Any] = ["b": Optional<[String: Any]>.some(level2) as Any]
+        let root: [String: Any?] = ["a": Optional<[String: Any]>.some(level1) as Any]
+        #expect(Utils.needsMainDrop(root, threshold: 2))
     }
 
     @Test("Utils.dropOnMainThread tolerates nil payloads")
