@@ -240,35 +240,42 @@ internal enum Utils {
         return eraseOptionalLike(value)
     }
 
+    private struct EntryMergeState {
+        var entries: [(String, Any?)] = []
+        var indexByKey: [String: Int] = [:]
+        var ranksByKey: [String: Int] = [:]
+
+        init(capacity: Int) {
+            entries.reserveCapacity(capacity)
+            indexByKey.reserveCapacity(capacity)
+            ranksByKey.reserveCapacity(capacity)
+        }
+    }
+
     @inline(__always)
     private static func mergeStringifiedEntry(
         _ keyString: String,
         rank: Int,
         value: Any?,
-        entries: inout [(String, Any?)],
-        indexByKey: inout [String: Int],
-        ranksByKey: inout [String: Int]
+        state: inout EntryMergeState
     ) {
-        if let existingIndex = indexByKey[keyString] {
-            guard let existingRank = ranksByKey[keyString], rank >= existingRank else { return }
-            entries[existingIndex] = (keyString, value)
-            ranksByKey[keyString] = rank
+        if let existingIndex = state.indexByKey[keyString] {
+            guard let existingRank = state.ranksByKey[keyString], rank >= existingRank else { return }
+            state.entries[existingIndex] = (keyString, value)
+            state.ranksByKey[keyString] = rank
             return
         }
 
-        indexByKey[keyString] = entries.count
-        ranksByKey[keyString] = rank
-        entries.append((keyString, value))
+        state.indexByKey[keyString] = state.entries.count
+        state.ranksByKey[keyString] = rank
+        state.entries.append((keyString, value))
     }
 
     @inline(__always)
     internal static func stringifiedEntriesPreservingStringKeyPrecedence<Value>(
         _ dict: [AnyHashable: Value]
     ) -> [(String, Any?)] {
-        var entries: [(String, Any?)] = []
-        entries.reserveCapacity(dict.count)
-        var indexByKey: [String: Int] = [:]
-        var ranksByKey: [String: Int] = [:]
+        var state = EntryMergeState(capacity: dict.count)
 
         for (keyHash, child) in dict {
             if Utils.isOverflowKey(keyHash) { continue }
@@ -276,23 +283,18 @@ internal enum Utils {
                 String(describing: keyHash),
                 rank: keyHash.base is String ? 2 : 1,
                 value: eraseOptionalLike(child),
-                entries: &entries,
-                indexByKey: &indexByKey,
-                ranksByKey: &ranksByKey
+                state: &state
             )
         }
 
-        return entries
+        return state.entries
     }
 
     @inline(__always)
     internal static func stringifiedEntriesPreservingStringKeyPrecedence(
         _ entriesByKey: [(AnyHashable, Any?)]
     ) -> [(String, Any?)] {
-        var entries: [(String, Any?)] = []
-        entries.reserveCapacity(entriesByKey.count)
-        var indexByKey: [String: Int] = [:]
-        var ranksByKey: [String: Int] = [:]
+        var state = EntryMergeState(capacity: entriesByKey.count)
 
         for (keyHash, child) in entriesByKey {
             if Utils.isOverflowKey(keyHash) { continue }
@@ -300,23 +302,18 @@ internal enum Utils {
                 String(describing: keyHash),
                 rank: keyHash.base is String ? 2 : 1,
                 value: eraseOptionalLike(child),
-                entries: &entries,
-                indexByKey: &indexByKey,
-                ranksByKey: &ranksByKey
+                state: &state
             )
         }
 
-        return entries
+        return state.entries
     }
 
     @inline(__always)
     internal static func stringifiedEntriesPreservingStringKeyPrecedence(
         _ dict: NSDictionary
     ) -> [(String, Any?)] {
-        var entries: [(String, Any?)] = []
-        entries.reserveCapacity(dict.count)
-        var indexByKey: [String: Int] = [:]
-        var ranksByKey: [String: Int] = [:]
+        var state = EntryMergeState(capacity: dict.count)
 
         for (rawKey, child) in dict {
             if let keyHash = rawKey as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
@@ -324,13 +321,11 @@ internal enum Utils {
                 String(describing: rawKey),
                 rank: rawKey is String ? 2 : 1,
                 value: eraseOptionalLike(child),
-                entries: &entries,
-                indexByKey: &indexByKey,
-                ranksByKey: &ranksByKey
+                state: &state
             )
         }
 
-        return entries
+        return state.entries
     }
 
     @inline(__always)
