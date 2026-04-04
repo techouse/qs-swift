@@ -741,29 +741,29 @@ internal enum Utils {
     @inline(__always)
     internal static func estimateSingleKeyChainDepth(_ value: Any?, cap: Int = 20_000) -> Int {
         var depth = 0
-        var current = value
+        var current = eraseOptionalLike(value)
         while depth < cap {
-            guard let currentValue = current else { return depth }
+            guard let currentValue = eraseOptionalLike(current) else { return depth }
 
             switch exactContainer(currentValue) {
             case .stringOptional(let dict):
                 guard dict.count == 1, let entry = dict.first else { return depth }
-                current = entry.value
+                current = eraseOptionalLike(entry.value)
             case .stringAny(let dict):
                 guard dict.count == 1, let next = dict.first?.value else { return depth }
-                current = next
+                current = eraseOptionalLike(next)
             case .anyHashableOptional(let dict):
                 guard dict.count == 1, let entry = dict.first else { return depth }
-                current = entry.value
+                current = eraseOptionalLike(entry.value)
             case .anyHashableAny(let dict):
                 guard dict.count == 1, let next = dict.first?.value else { return depth }
-                current = next
+                current = eraseOptionalLike(next)
             case .foundationDictionary(let dict):
                 guard dict.count == 1, let next = dict.objectEnumerator().nextObject() else { return depth }
-                current = next
+                current = eraseOptionalLike(next)
             case .genericDictionary(let dict):
                 guard dict._qsCount == 1, let entry = dict._qsFirstEntry() else { return depth }
-                current = entry.value
+                current = eraseOptionalLike(entry.value)
             case .arrayAny, .arrayOptional, .foundationArray, .genericArray, nil:
                 return depth
             }
