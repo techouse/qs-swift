@@ -1321,8 +1321,11 @@ struct UtilsTests {
             "optional": [Optional<Any>.none, Optional<Any>.some(undefined), Optional<Any>.some("tail")] as [Any?]
         ]
         let optionalCompacted = Utils.compact(&optionalRoot, allowSparseLists: false)
-        if let optional = optionalCompacted["optional"] {
+        if let optional = optionalCompacted["optional"] as? [Any] {
             #expect(!Utils.containsUndefined(optional))
+            #expect(optional.count == 2)
+            #expect(optional.first is NSNull)
+            #expect(optional.last as? String == "tail")
         } else {
             Issue.record("Expected optional array branch result")
         }
