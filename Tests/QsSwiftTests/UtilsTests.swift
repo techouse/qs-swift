@@ -1331,6 +1331,29 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.compact preserves nil entries in typed dictionaries while dropping Undefined")
+    func utils_compact_preservesNilInTypedDictionaries() {
+        var root: [String: Any?] = [
+            "typed": [1: Optional<String>.none] as [Int: String?],
+            "drop": Undefined.instance,
+        ]
+
+        let compacted = Utils.compact(&root, allowSparseLists: false)
+        #expect(compacted.keys.contains("drop") == false)
+
+        if let typed = compacted["typed"] as? [String: Any?] {
+            #expect(typed.keys.contains("1"))
+            switch typed["1"] {
+            case .some(.none):
+                #expect(Bool(true))
+            default:
+                Issue.record("Expected typed dictionary nil entry to be preserved")
+            }
+        } else {
+            Issue.record("Expected compacted typed dictionary")
+        }
+    }
+
     @Test("Utils.compact preserves sparse lists when requested")
     func utils_compact_allowSparseKeepsPlaceholders() {
         let undefined = Undefined.instance
