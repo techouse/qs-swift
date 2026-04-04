@@ -492,31 +492,31 @@ internal enum Utils {
     @inline(__always)
     internal static func withExactArrayElements<R>(
         _ value: Any,
-        _ body: (_ count: Int, _ visit: (@escaping (Any?) -> Void) -> Void) -> R
+        _ body: (_ count: Int, _ visit: (@escaping (_ index: Int, _ child: Any?) -> Void) -> Void) -> R
     ) -> R? {
         switch exactContainer(value) {
         case .arrayAny(let array):
             return body(array.count) { visit in
-                for element in array {
-                    visit(eraseOptionalLike(element))
+                for (index, element) in array.enumerated() {
+                    visit(index, eraseOptionalLike(element))
                 }
             }
         case .arrayOptional(let array):
             return body(array.count) { visit in
-                for element in array {
-                    visit(eraseOptionalLike(element))
+                for (index, element) in array.enumerated() {
+                    visit(index, eraseOptionalLike(element))
                 }
             }
         case .foundationArray(let array):
             return body(array.count) { visit in
-                for element in array {
-                    visit(eraseOptionalLike(element))
+                for (index, element) in array.enumerated() {
+                    visit(index, eraseOptionalLike(element))
                 }
             }
         case .genericArray(let array):
             return body(array._qsCount) { visit in
-                array._qsForEachElement { _, child in
-                    visit(child)
+                array._qsForEachElement { index, child in
+                    visit(index, child)
                 }
             }
         case .stringAny, .stringOptional, .anyHashableAny, .anyHashableOptional,
