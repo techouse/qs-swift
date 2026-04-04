@@ -1260,7 +1260,9 @@ struct DecodeTests {
                     #expect(l2.count == 1)
 
                     if let l3 = l2.first.flatMap(asDictString) {
-                        #expect(asStrings(l3["c"]) == ["1"])
+                        let c = arrayElements(l3["c"])
+                        #expect(c?.count == 1)
+                        #expect(c?.first as? String == "1")
                     } else {
                         Issue.record("Expected dictionary at a[0][0][0]")
                     }
@@ -1459,7 +1461,9 @@ struct DecodeTests {
         ]
 
         let decoded = try Qs.decode(input)
-        #expect(asStrings(decoded["a"]) == ["x"])
+        let array = arrayElements(decoded["a"])
+        #expect(array?.count == 1)
+        #expect(array?.first as? String == "x")
     }
 
     @Test("decode - bridges nested Foundation dictionaries to Swift string-keyed maps")
@@ -4387,9 +4391,6 @@ private func unwrapOptional(_ any: Any) -> Any? {
 
 private func arrayElements(_ value: Any?) -> [Any]? {
     guard let value = value.flatMap(unwrapOptional) else { return nil }
-    if let array = value as? [Any] {
-        return array
-    }
     if let array = value as? [Any?] {
         return array.map { element in
             if let element {
@@ -4397,6 +4398,9 @@ private func arrayElements(_ value: Any?) -> [Any]? {
             }
             return NSNull()
         }
+    }
+    if let array = value as? [Any] {
+        return array.map { unwrapOptional($0) ?? NSNull() }
     }
     if let array = value as? NSArray {
         return array.map { unwrapOptional($0) ?? NSNull() }
