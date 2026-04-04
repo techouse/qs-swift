@@ -1593,7 +1593,7 @@ struct UtilsTests {
 
         if let optional = sparse["optional"] as? [Any] {
             #expect(optional.first is NSNull)
-            if let nested = anyArray(optional[1]) {
+            if let nested: [Any] = optional.dropFirst().first.flatMap(anyArray) {
                 #expect(nested.first is NSNull)
                 let nestedDict = nested.compactMap(compactDict).first
                 #expect(nestedDict?.keys.contains("keep") == true)
