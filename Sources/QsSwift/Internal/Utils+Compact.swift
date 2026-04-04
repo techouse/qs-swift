@@ -15,7 +15,8 @@ extension Utils {
 
     /// Compact a nested structure by removing all `Undefined` values.
     /// - Note: `NSNull()` is preserved (represents an explicit `null`).
-    /// - If `allowSparseLists` is `false` (default), array holes are *removed* (indexes shift).
+    /// - If `allowSparseLists` is `false` (default), `Undefined` array holes are removed
+    ///   (indexes shift), while explicit `nil` remains as `NSNull()`.
     /// - If `allowSparseLists` is `true`, holes are kept as `NSNull()` (Swift arrays can't be truly sparse).
     @usableFromInline
     static func compact(
@@ -96,15 +97,13 @@ extension Utils {
                     continue
                 }
                 guard let element else {
-                    if allowSparseLists {
-                        stack.append(
-                            .build(
-                                node: NSNull(),
-                                assign: { value in
-                                    guard let value else { return }
-                                    box.arr.append(value)
-                                }))
-                    }
+                    stack.append(
+                        .build(
+                            node: NSNull(),
+                            assign: { value in
+                                guard let value else { return }
+                                box.arr.append(value)
+                            }))
                     continue
                 }
                 stack.append(
