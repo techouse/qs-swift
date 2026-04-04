@@ -31,11 +31,8 @@ extension Utils {
             }
         }
         final class ArrayBox {
-            var arr: [Any]
-            init(_ capacity: Int) {
-                self.arr = []
-                self.arr.reserveCapacity(capacity)
-            }
+            var arr: [Any?]
+            init(_ count: Int) { self.arr = Array(repeating: nil, count: count) }
         }
 
         typealias Assign = (Any?) -> Void
@@ -78,45 +75,28 @@ extension Utils {
             count: Int,
             foundationID: ObjectIdentifier?,
             assign: @escaping Assign,
-            visit: (@escaping (Any?) -> Void) -> Void
+            visit: (@escaping (_ index: Int, _ child: Any?) -> Void) -> Void
         ) {
             let box = ArrayBox(count)
             stack.append(.commitArray(box, foundationID, assign))
 
-            var elements: [Any?] = []
-            elements.reserveCapacity(count)
-            visit { elements.append($0) }
-
-            for rawElement in elements.reversed() {
+            visit { index, rawElement in
                 let element = Utils.eraseOptionalElement(rawElement)
                 if element is Undefined {
                     if allowSparseLists {
-                        stack.append(
-                            .build(
-                                node: NSNull(),
-                                assign: { value in
-                                    guard let value else { return }
-                                    box.arr.append(value)
-                                }))
+                        box.arr[index] = NSNull()
                     }
-                    continue
+                    return
                 }
                 guard let element else {
-                    stack.append(
-                        .build(
-                            node: NSNull(),
-                            assign: { value in
-                                guard let value else { return }
-                                box.arr.append(value)
-                            }))
-                    continue
+                    box.arr[index] = NSNull()
+                    return
                 }
                 stack.append(
                     .build(
                         node: element,
                         assign: { value in
-                            guard let value else { return }
-                            box.arr.append(value)
+                            box.arr[index] = value
                         }))
             }
         }
@@ -172,7 +152,8 @@ extension Utils {
                 if let foundationID {
                     activeFoundationContainers.remove(foundationID)
                 }
-                assign(box.arr)
+                let array = allowSparseLists ? box.arr.map { $0 ?? NSNull() } : box.arr.compactMap { $0 }
+                assign(array)
             }
         }
 
@@ -195,11 +176,8 @@ extension Utils {
             }
         }
         final class ArrayBox {
-            var arr: [Any]
-            init(_ capacity: Int) {
-                self.arr = []
-                self.arr.reserveCapacity(capacity)
-            }
+            var arr: [Any?]
+            init(_ count: Int) { self.arr = Array(repeating: nil, count: count) }
         }
 
         typealias Assign = (Any?) -> Void
@@ -237,35 +215,28 @@ extension Utils {
             count: Int,
             foundationID: ObjectIdentifier?,
             assign: @escaping Assign,
-            visit: (@escaping (Any?) -> Void) -> Void
+            visit: (@escaping (_ index: Int, _ child: Any?) -> Void) -> Void
         ) {
             let box = ArrayBox(count)
             stack.append(.commitArray(box, foundationID, assign))
 
-            var elements: [Any?] = []
-            elements.reserveCapacity(count)
-            visit { elements.append($0) }
-
-            for rawElement in elements.reversed() {
+            visit { index, rawElement in
                 let element = Utils.eraseOptionalElement(rawElement)
                 if element is Undefined {
                     if allowSparseLists {
-                        stack.append(
-                            .build(
-                                node: NSNull(),
-                                assign: { value in
-                                    guard let value else { return }
-                                    box.arr.append(value)
-                                }))
+                        box.arr[index] = NSNull()
                     }
-                    continue
+                    return
+                }
+                guard let element else {
+                    box.arr[index] = NSNull()
+                    return
                 }
                 stack.append(
                     .build(
                         node: element,
                         assign: { value in
-                            guard let value else { return }
-                            box.arr.append(value)
+                            box.arr[index] = value
                         }))
             }
         }
@@ -321,7 +292,8 @@ extension Utils {
                 if let foundationID {
                     activeFoundationContainers.remove(foundationID)
                 }
-                assign(box.arr)
+                let array = allowSparseLists ? box.arr.map { $0 ?? NSNull() } : box.arr.compactMap { $0 }
+                assign(array)
             }
         }
 
