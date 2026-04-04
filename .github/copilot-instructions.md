@@ -39,7 +39,7 @@ When implementing a new option or behavior:
 ## 6. Testing Guidelines
 - Run `make test` (exports `SWIFT_DETERMINISTIC_HASHING=1`). Release validation: `make test-release`.
 - SwiftPM tests in `Tests/QsSwiftTests` and `Tests/QsObjCTests` use `apple/swift-testing` (`@Test`, `#expect`).
-- Use `swift test --filter '<regex>'` for targeted SwiftPM runs; `--filter` matches test identifiers via regular expression (for example, `swift test --filter 'QsSwiftTests\\.EncodeTests\\.testObjectsInsideLists'`).
+- Use `SWIFT_DETERMINISTIC_HASHING=1 swift test --filter '<regex>'` for targeted SwiftPM runs; `--filter` matches test identifiers via regular expression (for example, `SWIFT_DETERMINISTIC_HASHING=1 swift test --filter 'QsSwiftTests\\.EncodeTests\\.testObjectsInsideLists'`).
 - In this toolchain, do not assume leading-dot tag filters (for example, `.smoke`) are supported by `swift test --filter`; prefer regex filters.
 - Add new fixtures beside similar ones; for end-to-end cases, mutate `EndToEndTestCases.swift` only with `OrderedDictionary`.
 - Prefer explicit assertion helpers over vague equality when validating ordering or null semantics.
@@ -65,7 +65,7 @@ When implementing a new option or behavior:
 - Doc comments: concise, mention option interactions (e.g. `decodeDotInKeys` implies `allowDots`).
 
 ## 11. Pull Request Expectations
-- Include: summary, validation steps (`swift test`, any comparison or bench data if perf‑related), updated docs for user-facing changes.
+- Include: summary, validation steps (`make test` or `SWIFT_DETERMINISTIC_HASHING=1 swift test`, any comparison or bench data if perf‑related), updated docs for user-facing changes.
 - Keep commits small & present‑tense (emoji prefixes optional: :memo:, :sparkles:, :wrench:).
 
 ## 12. Quick Command Reference
