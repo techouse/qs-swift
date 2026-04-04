@@ -1,105 +1,163 @@
 import Foundation
 
 extension Utils {
+    @inline(__always)
+    private static func foundationContainerID(_ value: Any) -> ObjectIdentifier? {
+        guard Swift.type(of: value) is AnyClass else { return nil }
+        if let dict = value as? NSDictionary {
+            return ObjectIdentifier(dict)
+        }
+        if let array = value as? NSArray {
+            return ObjectIdentifier(array)
+        }
+        return nil
+    }
+
     /// Compact a nested structure by removing all `Undefined` values.
     /// - Note: `NSNull()` is preserved (represents an explicit `null`).
-    /// - If `allowSparseLists` is `false` (default), array holes are *removed* (indexes shift).
+    /// - If `allowSparseLists` is `false` (default), `Undefined` array holes are removed
+    ///   (indexes shift), while explicit `nil` remains as `NSNull()`.
     /// - If `allowSparseLists` is `true`, holes are kept as `NSNull()` (Swift arrays can't be truly sparse).
     @usableFromInline
     static func compact(
         _ root: inout [String: Any?],
         allowSparseLists: Bool = false
     ) -> [String: Any?] {
+        final class DictBox {
+            var dict: [String: Any?]
+            init(_ capacity: Int) {
+                self.dict = [:]
+                self.dict.reserveCapacity(capacity)
+            }
+        }
+        final class ArrayBox {
+            var arr: [Any?]
+            init(_ count: Int) { self.arr = Array(repeating: nil, count: count) }
+        }
+
+        typealias Assign = (Any?) -> Void
+        enum Task {
+            case build(node: Any?, assign: Assign)
+            case commitDict(DictBox, ObjectIdentifier?, Assign)
+            case commitArray(ArrayBox, ObjectIdentifier?, Assign)
+        }
+
+        var activeFoundationContainers: Set<ObjectIdentifier> = []
+        var result: Any?
+        var stack: [Task] = [.build(node: root, assign: { result = $0 })]
+
         @inline(__always)
-        func compactValue(_ value: Any?, allowSparse: Bool) -> Any? {
-            // Drop Undefined entirely
-            if value is Undefined { return nil }
-
-            // Dictionary branch
-            if let dict = value as? [String: Any?] {
-                var out: [String: Any?] = [:]
-                out.reserveCapacity(dict.count)
-                for (key, val) in dict {
-                    if let cv = compactValue(val, allowSparse: allowSparse) {
-                        out[key] = cv
-                    }
-                    // else: value was Undefined → remove the key
+        func scheduleEntries(
+            _ entries: [(String, Any?)],
+            foundationID: ObjectIdentifier?,
+            assign: @escaping Assign
+        ) {
+            let box = DictBox(entries.count)
+            stack.append(.commitDict(box, foundationID, assign))
+            for (key, child) in entries.reversed() {
+                let value = Utils.eraseOptionalLike(child)
+                if value is Undefined { continue }
+                if value == nil {
+                    box.dict.updateValue(nil, forKey: key)
+                    continue
                 }
-                return out
+                stack.append(
+                    .build(
+                        node: value,
+                        assign: { value in
+                            box.dict.updateValue(value, forKey: key)
+                        }))
             }
-
-            // Array branches – tolerate both [Any] and [Any?] shapes.
-            if let arrOpt = value as? [Any?] {
-                var out: [Any] = []
-                out.reserveCapacity(arrOpt.count)
-                for element in arrOpt {
-                    guard let unwrapped = element else {
-                        out.append(NSNull())
-                        continue
-                    }
-                    if unwrapped is Undefined {
-                        if allowSparse { out.append(NSNull()) }
-                        continue
-                    }
-                    if let subDict = unwrapped as? [String: Any?] {
-                        if let cv = compactValue(subDict, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else if let subArr = unwrapped as? [Any] {
-                        if let cv = compactValue(subArr, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else if let subArrOpt2 = unwrapped as? [Any?] {
-                        if let cv = compactValue(subArrOpt2, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else {
-                        out.append(unwrapped)
-                    }
-                }
-                return out
-            }
-
-            if let arr = value as? [Any] {
-                var out: [Any] = []
-                out.reserveCapacity(arr.count)
-                for element in arr {
-                    if element is Undefined {
-                        if allowSparse { out.append(NSNull()) }
-                        // else: drop it
-                        continue
-                    }
-                    if let subDict = element as? [String: Any?] {
-                        if let cv = compactValue(subDict, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else if let subArr = element as? [Any] {
-                        if let cv = compactValue(subArr, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else if let subArrOpt = element as? [Any?] {
-                        if let cv = compactValue(subArrOpt, allowSparse: allowSparse) {
-                            out.append(cv)
-                        }
-                    } else {
-                        out.append(element)
-                    }
-                }
-                return out
-            }
-
-            // Primitive (String/Number/Bool/Date/URL/NSNull/etc)
-            return value
         }
 
-        var newRoot: [String: Any?] = [:]
-        newRoot.reserveCapacity(root.count)
-        for (key, value) in root {
-            if let cv = compactValue(value, allowSparse: allowSparseLists) {
-                newRoot[key] = cv
+        @inline(__always)
+        func scheduleArray(
+            count: Int,
+            foundationID: ObjectIdentifier?,
+            assign: @escaping Assign,
+            visit: (@escaping (_ index: Int, _ child: Any?) -> Void) -> Void
+        ) {
+            let box = ArrayBox(count)
+            stack.append(.commitArray(box, foundationID, assign))
+
+            visit { index, rawElement in
+                let element = Utils.eraseOptionalElement(rawElement)
+                if element is Undefined {
+                    if allowSparseLists {
+                        box.arr[index] = NSNull()
+                    }
+                    return
+                }
+                guard let element else {
+                    box.arr[index] = NSNull()
+                    return
+                }
+                stack.append(
+                    .build(
+                        node: element,
+                        assign: { value in
+                            box.arr[index] = value
+                        }))
             }
         }
-        root = newRoot
+
+        while let task = stack.popLast() {
+            switch task {
+            case .build(let rawNode, let assign):
+                let node = Utils.eraseOptionalLike(rawNode)
+                if node is Undefined {
+                    assign(nil)
+                    continue
+                }
+                guard let node else {
+                    assign(nil)
+                    continue
+                }
+
+                let foundationID = Utils.foundationContainerID(node)
+                if let foundationID {
+                    guard activeFoundationContainers.insert(foundationID).inserted else {
+                        assign(NSNull())
+                        continue
+                    }
+                }
+
+                if Utils.withExactStringifiedEntries(
+                    node,
+                    { entries in
+                        scheduleEntries(entries, foundationID: foundationID, assign: assign)
+                    }) != nil
+                {
+                    continue
+                }
+
+                if Utils.withExactArrayElements(
+                    node,
+                    { count, visit in
+                        scheduleArray(count: count, foundationID: foundationID, assign: assign, visit: visit)
+                    }) != nil
+                {
+                    continue
+                }
+
+                assign(node)
+
+            case .commitDict(let box, let foundationID, let assign):
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                }
+                assign(box.dict)
+
+            case .commitArray(let box, let foundationID, let assign):
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                }
+                let array = allowSparseLists ? box.arr.map { $0 ?? NSNull() } : box.arr.compactMap { $0 }
+                assign(array)
+            }
+        }
+
+        root = result as? [String: Any?] ?? [:]
         return root
     }
 
@@ -110,47 +168,135 @@ extension Utils {
         _ root: [String: Any?],
         allowSparseLists: Bool
     ) -> [String: Any] {
-        func normalizeArray(_ arr: [Any?]) -> [Any] {
-            var out: [Any] = []
-            out.reserveCapacity(arr.count)
+        final class DictBox {
+            var dict: [String: Any]
+            init(_ capacity: Int) {
+                self.dict = [:]
+                self.dict.reserveCapacity(capacity)
+            }
+        }
+        final class ArrayBox {
+            var arr: [Any?]
+            init(_ count: Int) { self.arr = Array(repeating: nil, count: count) }
+        }
 
-            for el in arr {
-                switch el {
-                case is Undefined:
-                    if allowSparseLists { out.append(NSNull()) }
-                // else: drop it
-                case let dict as [String: Any?]:
-                    out.append(compactToAny(dict, allowSparseLists: allowSparseLists))
-                case let arrayOpt as [Any?]:
-                    out.append(normalizeArray(arrayOpt))
-                case .some(let value):
-                    out.append(value)
-                case .none:
-                    // explicit nil → NSNull so we can keep `[Any]`
-                    out.append(NSNull())
+        typealias Assign = (Any?) -> Void
+        enum Task {
+            case build(node: Any?, assign: Assign)
+            case commitDict(DictBox, ObjectIdentifier?, Assign)
+            case commitArray(ArrayBox, ObjectIdentifier?, Assign)
+        }
+
+        var activeFoundationContainers: Set<ObjectIdentifier> = []
+        var result: Any?
+        var stack: [Task] = [.build(node: root, assign: { result = $0 })]
+
+        @inline(__always)
+        func scheduleEntries(
+            _ entries: [(String, Any?)],
+            foundationID: ObjectIdentifier?,
+            assign: @escaping Assign
+        ) {
+            let box = DictBox(entries.count)
+            stack.append(.commitDict(box, foundationID, assign))
+            for (key, child) in entries.reversed() {
+                stack.append(
+                    .build(
+                        node: child,
+                        assign: { value in
+                            guard let value else { return }
+                            box.dict[key] = value
+                        }))
+            }
+        }
+
+        @inline(__always)
+        func scheduleArray(
+            count: Int,
+            foundationID: ObjectIdentifier?,
+            assign: @escaping Assign,
+            visit: (@escaping (_ index: Int, _ child: Any?) -> Void) -> Void
+        ) {
+            let box = ArrayBox(count)
+            stack.append(.commitArray(box, foundationID, assign))
+
+            visit { index, rawElement in
+                let element = Utils.eraseOptionalElement(rawElement)
+                if element is Undefined {
+                    if allowSparseLists {
+                        box.arr[index] = NSNull()
+                    }
+                    return
                 }
-            }
-            return out
-        }
-
-        var out: [String: Any] = [:]
-        out.reserveCapacity(root.count)
-
-        for (key, value) in root {
-            switch value {
-            case is Undefined:
-                // drop
-                continue
-            case let dict as [String: Any?]:
-                out[key] = compactToAny(dict, allowSparseLists: allowSparseLists)
-            case let arrayOpt as [Any?]:
-                out[key] = normalizeArray(arrayOpt)
-            case .some(let value):
-                out[key] = value
-            case .none:
-                out[key] = NSNull()
+                guard let element else {
+                    box.arr[index] = NSNull()
+                    return
+                }
+                stack.append(
+                    .build(
+                        node: element,
+                        assign: { value in
+                            box.arr[index] = value
+                        }))
             }
         }
-        return out
+
+        while let task = stack.popLast() {
+            switch task {
+            case .build(let rawNode, let assign):
+                let node = Utils.eraseOptionalLike(rawNode)
+                if node is Undefined {
+                    assign(nil)
+                    continue
+                }
+                guard let node else {
+                    assign(NSNull())
+                    continue
+                }
+
+                let foundationID = Utils.foundationContainerID(node)
+                if let foundationID {
+                    guard activeFoundationContainers.insert(foundationID).inserted else {
+                        assign(NSNull())
+                        continue
+                    }
+                }
+
+                if Utils.withExactStringifiedEntries(
+                    node,
+                    { entries in
+                        scheduleEntries(entries, foundationID: foundationID, assign: assign)
+                    }) != nil
+                {
+                    continue
+                }
+
+                if Utils.withExactArrayElements(
+                    node,
+                    { count, visit in
+                        scheduleArray(count: count, foundationID: foundationID, assign: assign, visit: visit)
+                    }) != nil
+                {
+                    continue
+                }
+
+                assign(node)
+
+            case .commitDict(let box, let foundationID, let assign):
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                }
+                assign(box.dict)
+
+            case .commitArray(let box, let foundationID, let assign):
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                }
+                let array = allowSparseLists ? box.arr.map { $0 ?? NSNull() } : box.arr.compactMap { $0 }
+                assign(array)
+            }
+        }
+
+        return result as? [String: Any] ?? [:]
     }
 }

@@ -1205,31 +1205,73 @@ struct DecodeTests {
         // a[1][b][2][c]=1 -> ["a": [ { "b": [ { "c": "1" } ] } ]]
         do {
             let r = try Qs.decode("a[1][b][2][c]=1", options: DecodeOptions(listLimit: 20))
-            let a = r["a"] as? [Any]
-            let level1 = a?.first as? [String: Any]
-            let bArr = level1?["b"] as? [Any]
-            let firstMap = bArr?.first as? [String: Any]
-            #expect((firstMap?["c"] as? String) == "1")
+            let a = arrayElements(r["a"])
+            #expect(a?.count == 1)
+
+            if let level1 = a?.first.flatMap(asDictString) {
+                let bArr = arrayElements(level1["b"])
+                #expect(bArr?.count == 1)
+
+                if let firstMap = bArr?.first.flatMap(asDictString) {
+                    #expect((firstMap["c"] as? String) == "1")
+                } else {
+                    Issue.record("Expected nested map at a[0].b[0]")
+                }
+            } else {
+                Issue.record("Expected dictionary at a[0]")
+            }
         }
 
         // a[1][2][3][c]=1 -> ["a": [[[ { "c": "1" } ]]]]
         do {
             let r = try Qs.decode("a[1][2][3][c]=1", options: DecodeOptions(listLimit: 20))
-            let a = r["a"] as? [Any]
-            let l1 = a?.first as? [Any]
-            let l2 = l1?.first as? [Any]
-            let l3 = l2?.first as? [String: Any]
-            #expect((l3?["c"] as? String) == "1")
+            let a = arrayElements(r["a"])
+            #expect(a?.count == 1)
+
+            if let l1 = a?.first.flatMap(arrayElements) {
+                #expect(l1.count == 1)
+
+                if let l2 = l1.first.flatMap(arrayElements) {
+                    #expect(l2.count == 1)
+
+                    if let l3 = l2.first.flatMap(asDictString) {
+                        #expect((l3["c"] as? String) == "1")
+                    } else {
+                        Issue.record("Expected dictionary at a[0][0][0]")
+                    }
+                } else {
+                    Issue.record("Expected array at a[0][0]")
+                }
+            } else {
+                Issue.record("Expected array at a[0]")
+            }
         }
 
         // a[1][2][3][c][1]=1 -> ["a": [[[ { "c": ["1"] } ]]]]
         do {
             let r = try Qs.decode("a[1][2][3][c][1]=1", options: DecodeOptions(listLimit: 20))
-            let a = r["a"] as? [Any]
-            let l1 = a?.first as? [Any]
-            let l2 = l1?.first as? [Any]
-            let l3 = l2?.first as? [String: Any]
-            #expect(asStrings(l3?["c"]) == ["1"])
+            let a = arrayElements(r["a"])
+            #expect(a?.count == 1)
+
+            if let l1 = a?.first.flatMap(arrayElements) {
+                #expect(l1.count == 1)
+
+                if let l2 = l1.first.flatMap(arrayElements) {
+                    #expect(l2.count == 1)
+
+                    if let l3 = l2.first.flatMap(asDictString) {
+                        let c = arrayElements(l3["c"])
+                        #expect(c?.count == 1)
+                        #expect(c?.first as? String == "1")
+                    } else {
+                        Issue.record("Expected dictionary at a[0][0][0]")
+                    }
+                } else {
+                    Issue.record("Expected array at a[0][0]")
+                }
+            } else {
+                Issue.record("Expected array at a[0]")
+            }
         }
     }
 
@@ -1412,6 +1454,80 @@ struct DecodeTests {
         #expect(isNSNullValue(user?["email"]))
     }
 
+    @Test("decode - compacts nested Foundation arrays in map input")
+    func testDecode_MapInputCompactsNestedFoundationArrays() throws {
+        let input: [String: Any] = [
+            "a": NSArray(array: [Undefined.instance, "x"])
+        ]
+
+        let decoded = try Qs.decode(input)
+        let array = arrayElements(decoded["a"])
+        #expect(array?.count == 1)
+        #expect(array?.first as? String == "x")
+    }
+
+    @Test("decode - bridges nested Foundation dictionaries to Swift string-keyed maps")
+    func testDecode_MapInputBridgesNestedFoundationDictionaries() throws {
+        let input: [String: Any] = [
+            "a": NSDictionary(dictionary: [1: "x", "drop": Undefined.instance])
+        ]
+
+        let decoded = try Qs.decode(input)
+        let nested = decoded["a"] as? [String: Any]
+        #expect(nested?["1"] as? String == "x")
+        #expect(nested?["drop"] == nil)
+    }
+
+    @Test("decode - nested Foundation key collisions prefer String keys")
+    func testDecode_MapInputFoundationCollision_StringWins() throws {
+        let input: [String: Any] = [
+            "a": NSDictionary(dictionary: [1: "int", "1": "string"])
+        ]
+
+        let decoded = try Qs.decode(input)
+        let nested = decoded["a"] as? [String: Any]
+        #expect(nested?["1"] as? String == "string")
+    }
+
+    @Test("decode - nested Foundation key collisions prefer String keys after compaction")
+    func testDecode_MapInputFoundationCollision_StringWinsAfterCompaction() throws {
+        let input: [String: Any] = [
+            "a": NSDictionary(dictionary: [1: "int", "1": "string", "drop": Undefined.instance])
+        ]
+
+        let decoded = try Qs.decode(input)
+        let nested = decoded["a"] as? [String: Any]
+        #expect(nested?["1"] as? String == "string")
+        #expect(nested?["drop"] == nil)
+    }
+
+    @Test("decode - bridges typed Swift containers in map input")
+    func testDecode_MapInputBridgesTypedSwiftContainers() throws {
+        let input: [String: Any] = [
+            "dict": [1: "x"] as [Int: String],
+            "array": [nil, "y"] as [String?],
+        ]
+
+        let decoded = try Qs.decode(input)
+        let nestedDict = decoded["dict"] as? [String: Any]
+        let nestedArray = decoded["array"] as? [Any]
+        #expect(nestedDict?["1"] as? String == "x")
+        #expect(nestedArray?.count == 2)
+        #expect(nestedArray?.first is NSNull)
+        #expect(nestedArray?[1] as? String == "y")
+    }
+
+    @Test("decode - compacts typed Swift dictionaries in map input")
+    func testDecode_MapInputCompactsTypedSwiftDictionaries() throws {
+        let input: [String: Any] = [
+            "a": ["drop": Undefined.instance] as [String: Undefined]
+        ]
+
+        let decoded = try Qs.decode(input)
+        let nested = decoded["a"] as? [String: Any]
+        #expect(nested?.isEmpty == true)
+    }
+
     @Test("decode - preserves direct map inputs with nil placeholders")
     func testDecode_MapVariants() throws {
         let optionalMap = try Qs._decodeSyncCore(["a": nil, "b": "two"] as [String: Any?])
@@ -1421,6 +1537,54 @@ struct DecodeTests {
         let anyMap = try Qs._decodeSyncCore(["a": "one", "b": 2] as [String: Any])
         #expect(anyMap["a"] as? String == "one")
         #expect(anyMap["b"] as? Int == 2)
+    }
+
+    @Test("decode - preserves explicit nil elements in dense direct-map optional arrays during compaction")
+    func testDecode_DirectMapDenseOptionalArrayKeepsNil() throws {
+        let input: [String: Any?] = [
+            "list": [Optional<String>.none, Optional<String>.some("x")] as [String?],
+            "drop": Undefined.instance,
+        ]
+
+        let decoded = try Qs.decode(input)
+        let list = decoded["list"] as? [Any]
+        #expect(list?.count == 2)
+        #expect(list?.first is NSNull)
+        #expect(list?.last as? String == "x")
+        #expect(decoded["drop"] == nil)
+    }
+
+    @Test("decode - preserves explicit nil entries in typed direct-map dictionaries during compaction")
+    func testDecode_DirectMapTypedDictionaryKeepsNil() throws {
+        let input: [String: Any?] = [
+            "typed": [1: Optional<String>.none] as [Int: String?],
+            "drop": Undefined.instance,
+        ]
+
+        let decoded = try Qs.decode(input)
+        let typed = decoded["typed"] as? [String: Any]
+        #expect(typed?.keys.contains("1") == true)
+        #expect(typed?["1"] is NSNull)
+        #expect(decoded["drop"] == nil)
+    }
+
+    @Test("decode - preserves explicit nil entries in dense direct-map optional dictionaries during compaction")
+    func testDecode_DirectMapDenseOptionalDictionaryKeepsNil() throws {
+        let input: [String: Any?] = [
+            "dict": [
+                "keep": Optional<String>.some("x"),
+                "nil": Optional<String>.none,
+            ] as [String: String?],
+            "drop": Undefined.instance,
+        ]
+
+        let decoded = try Qs.decode(input)
+        let dict = decoded["dict"] as? [String: Any]
+        #expect(dict?.keys.contains("keep") == true)
+        #expect(dict?["keep"] as? String == "x")
+        #expect(dict?.keys.contains("nil") == true)
+        #expect(dict?["nil"] is NSNull)
+        #expect(decoded["drop"] == nil)
     }
 
     @Test("decode - AnyHashable key collisions are deterministic (String wins)")
@@ -1929,7 +2093,7 @@ struct DoesNotCrashTests {
     ///       `testDecode_DeepMaps_NoTimeout_Main` is designed for that purpose.
     @Test("decode - deep maps do not time out")
     func testDecode_DeepMaps_NoTimeout_Safe() async throws {
-        let depth = 2500  // conservative to avoid ARC’s recursive deinit on worker threads
+        let depth = Qs.MAIN_DROP_THRESHOLD
         var s = "foo"
         for _ in 0..<depth { s += "[p]" }
         s += "=bar"
@@ -1948,7 +2112,7 @@ struct DoesNotCrashTests {
 
     @Test("decode - deep merge conflict does not overflow stack")
     func testDecode_DeepMergeConflict_NoStackOverflow() throws {
-        let depth = 1_200
+        let depth = Qs.MAIN_DROP_THRESHOLD
         var left = "root"
         var right = "root"
         for _ in 0..<depth {
@@ -4225,12 +4389,31 @@ private func unwrapOptional(_ any: Any) -> Any? {
     return m.children.first?.value
 }
 
+private func arrayElements(_ value: Any?) -> [Any]? {
+    guard let value = value.flatMap(unwrapOptional) else { return nil }
+    if let array = value as? [Any?] {
+        return array.map { element in
+            if let element {
+                return unwrapOptional(element) ?? NSNull()
+            }
+            return NSNull()
+        }
+    }
+    if let array = value as? [Any] {
+        return array.map { unwrapOptional($0) ?? NSNull() }
+    }
+    if let array = value as? NSArray {
+        return array.map { unwrapOptional($0) ?? NSNull() }
+    }
+    return nil
+}
+
 private func as2DStrings(_ value: Any?) -> [[String]]? {
-    guard let outer = value as? [Any] else { return nil }
+    guard let outer = arrayElements(value) else { return nil }
     var out: [[String]] = []
     out.reserveCapacity(outer.count)
     for innerAny in outer {
-        guard let inner = innerAny as? [Any] else { return nil }
+        guard let inner = arrayElements(innerAny) else { return nil }
         let row = inner.compactMap { unwrapOptional($0) as? String }
         out.append(row)
     }
@@ -4279,7 +4462,7 @@ func parseQuery_interpretsNumericEntities() throws {
 private func isNSNullValue(_ v: Any?) -> Bool { v is NSNull }
 
 private func asStrings(_ v: Any?) -> [String]? {
-    (v as? [Any])?.compactMap { $0 as? String }
+    arrayElements(v)?.compactMap { unwrapOptional($0) as? String }
 }
 
 private func flatStrings(_ v: Any?) -> [String]? {

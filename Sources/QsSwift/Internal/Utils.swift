@@ -1,5 +1,81 @@
+// swiftlint:disable file_length
 import Foundation
 import OrderedCollections
+
+// Cheap protocol-based optional erasure used throughout decode hot paths.
+// This lets us unwrap Optional values hidden behind `Any` without paying for Mirror.
+private protocol QsOptionalValue {
+    var _qsWrappedAny: Any? { get }
+}
+
+extension Optional: QsOptionalValue {
+    fileprivate var _qsWrappedAny: Any? {
+        switch self {
+        case .some(let wrapped):
+            return wrapped
+        case .none:
+            return nil
+        }
+    }
+}
+
+// Type-erased traversal hooks for generic Array/Dictionary/OrderedDictionary values.
+// These preserve support for typed Swift containers like `[Int: String]` without falling
+// back to the broad runtime casts that became unsafe on Swift 6.3 for deep graphs.
+private protocol QsErasedDictionaryContainer {
+    var _qsCount: Int { get }
+    func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void)
+    func _qsFirstEntry() -> (key: AnyHashable, value: Any?)?
+}
+
+private protocol QsErasedArrayContainer {
+    var _qsCount: Int { get }
+    func _qsForEachElement(_ body: (Int, Any?) -> Void)
+}
+
+extension Dictionary: QsErasedDictionaryContainer where Key: Hashable {
+    fileprivate var _qsCount: Int { count }
+
+    fileprivate func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void) {
+        for (key, value) in self {
+            body(AnyHashable(key), Utils.eraseOptionalLike(value))
+        }
+    }
+
+    fileprivate func _qsFirstEntry() -> (key: AnyHashable, value: Any?)? {
+        for (key, value) in self {
+            return (AnyHashable(key), Utils.eraseOptionalLike(value))
+        }
+        return nil
+    }
+}
+
+extension OrderedDictionary: QsErasedDictionaryContainer where Key: Hashable {
+    fileprivate var _qsCount: Int { count }
+
+    fileprivate func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void) {
+        for (key, value) in self {
+            body(AnyHashable(key), Utils.eraseOptionalLike(value))
+        }
+    }
+
+    fileprivate func _qsFirstEntry() -> (key: AnyHashable, value: Any?)? {
+        for (key, value) in self {
+            return (AnyHashable(key), Utils.eraseOptionalLike(value))
+        }
+        return nil
+    }
+}
+
+extension Array: QsErasedArrayContainer {
+    fileprivate var _qsCount: Int { count }
+
+    fileprivate func _qsForEachElement(_ body: (Int, Any?) -> Void) {
+        for (index, value) in enumerated() {
+            body(index, Utils.eraseOptionalLike(value))
+        }
+    }
+}
 
 /// A collection of utility methods used by the library.
 internal enum Utils {
@@ -138,6 +214,333 @@ internal enum Utils {
         return isGenericContainerType
     }
 
+    // Avoid downcasting between `[String: Any]` and `[String: Any?]` (and the array/hashable
+    // equivalents) while traversing deep graphs. Swift 6.3 can recursively walk the entire
+    // subtree for those conversions, which overflows worker-thread stacks on long chains.
+    private enum ExactContainer {
+        case stringAny([String: Any])
+        case stringOptional([String: Any?])
+        case anyHashableAny([AnyHashable: Any])
+        case anyHashableOptional([AnyHashable: Any?])
+        case arrayAny([Any])
+        case arrayOptional([Any?])
+        case foundationDictionary(NSDictionary)
+        case foundationArray(NSArray)
+        case genericDictionary(any QsErasedDictionaryContainer)
+        case genericArray(any QsErasedArrayContainer)
+    }
+
+    @inline(__always)
+    static func eraseOptionalLike<T>(_ value: T) -> Any? {
+        var current: Any? = value
+        while let wrapped = current, let optional = wrapped as? QsOptionalValue {
+            current = optional._qsWrappedAny
+        }
+        return current
+    }
+
+    @inline(__always)
+    static func eraseOptionalElement(_ value: Any?) -> Any? {
+        guard let value else { return nil }
+        return eraseOptionalLike(value)
+    }
+
+    // Tracks stringified dictionary entries while resolving collisions such as `1` vs `"1"`.
+    // We keep the first stable insertion slot for a logical key, but allow a higher-ranked
+    // string key to replace the value later.
+    private struct EntryMergeState {
+        var entries: [(String, Any?)] = []
+        var indexByKey: [String: Int] = [:]
+        var ranksByKey: [String: Int] = [:]
+
+        init(capacity: Int) {
+            entries.reserveCapacity(capacity)
+            indexByKey.reserveCapacity(capacity)
+            ranksByKey.reserveCapacity(capacity)
+        }
+    }
+
+    private struct SingleLogicalEntry {
+        let value: Any?
+    }
+
+    @inline(__always)
+    private static func mergeStringifiedEntry(
+        _ keyString: String,
+        rank: Int,
+        value: Any?,
+        state: inout EntryMergeState
+    ) {
+        // Higher rank means "more string-like". This preserves the public collision policy
+        // where real string keys win over non-string keys with the same textual form.
+        if let existingIndex = state.indexByKey[keyString] {
+            guard let existingRank = state.ranksByKey[keyString], rank >= existingRank else { return }
+            state.entries[existingIndex] = (keyString, value)
+            state.ranksByKey[keyString] = rank
+            return
+        }
+
+        state.indexByKey[keyString] = state.entries.count
+        state.ranksByKey[keyString] = rank
+        state.entries.append((keyString, value))
+    }
+
+    @inline(__always)
+    internal static func stringifiedEntriesPreservingStringKeyPrecedence<Value>(
+        _ dict: [AnyHashable: Value]
+    ) -> [(String, Any?)] {
+        var state = EntryMergeState(capacity: dict.count)
+
+        for (keyHash, child) in dict {
+            if Utils.isOverflowKey(keyHash) { continue }
+            mergeStringifiedEntry(
+                String(describing: keyHash),
+                rank: keyHash.base is String ? 2 : 1,
+                value: eraseOptionalLike(child),
+                state: &state
+            )
+        }
+
+        return state.entries
+    }
+
+    @inline(__always)
+    internal static func stringifiedEntriesPreservingStringKeyPrecedence(
+        _ entriesByKey: [(AnyHashable, Any?)]
+    ) -> [(String, Any?)] {
+        var state = EntryMergeState(capacity: entriesByKey.count)
+
+        for (keyHash, child) in entriesByKey {
+            if Utils.isOverflowKey(keyHash) { continue }
+            mergeStringifiedEntry(
+                String(describing: keyHash),
+                rank: keyHash.base is String ? 2 : 1,
+                value: eraseOptionalLike(child),
+                state: &state
+            )
+        }
+
+        return state.entries
+    }
+
+    @inline(__always)
+    internal static func stringifiedEntriesPreservingStringKeyPrecedence(
+        _ dict: NSDictionary
+    ) -> [(String, Any?)] {
+        var state = EntryMergeState(capacity: dict.count)
+
+        for (rawKey, child) in dict {
+            if let keyHash = rawKey as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
+            mergeStringifiedEntry(
+                String(describing: rawKey),
+                rank: rawKey is String ? 2 : 1,
+                value: eraseOptionalLike(child),
+                state: &state
+            )
+        }
+
+        return state.entries
+    }
+
+    @inline(__always)
+    private static func singleValueIfSingleLogicalEntry<Value>(
+        _ dict: [String: Value]
+    ) -> SingleLogicalEntry? {
+        guard dict.count == 1, let entry = dict.first else { return nil }
+        return SingleLogicalEntry(value: eraseOptionalLike(entry.value))
+    }
+
+    @inline(__always)
+    private static func singleValueIfSingleLogicalEntry<Value>(
+        _ dict: [AnyHashable: Value]
+    ) -> SingleLogicalEntry? {
+        var state = EntryMergeState(capacity: min(dict.count, 2))
+
+        for (keyHash, child) in dict {
+            if Utils.isOverflowKey(keyHash) { continue }
+            mergeStringifiedEntry(
+                String(describing: keyHash),
+                rank: keyHash.base is String ? 2 : 1,
+                value: eraseOptionalLike(child),
+                state: &state
+            )
+            if state.entries.count > 1 { return nil }
+        }
+
+        guard state.entries.count == 1 else { return nil }
+        return SingleLogicalEntry(value: state.entries[0].1)
+    }
+
+    @inline(__always)
+    private static func singleValueIfSingleLogicalEntry(
+        _ dict: NSDictionary
+    ) -> SingleLogicalEntry? {
+        var state = EntryMergeState(capacity: min(dict.count, 2))
+
+        for (rawKey, child) in dict {
+            if let keyHash = rawKey as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
+            mergeStringifiedEntry(
+                String(describing: rawKey),
+                rank: rawKey is String ? 2 : 1,
+                value: eraseOptionalLike(child),
+                state: &state
+            )
+            if state.entries.count > 1 { return nil }
+        }
+
+        guard state.entries.count == 1 else { return nil }
+        return SingleLogicalEntry(value: state.entries[0].1)
+    }
+
+    @inline(__always)
+    private static func singleValueIfSingleLogicalEntry(
+        _ dict: any QsErasedDictionaryContainer
+    ) -> SingleLogicalEntry? {
+        var state = EntryMergeState(capacity: min(dict._qsCount, 2))
+
+        dict._qsForEachEntry { keyHash, child in
+            guard state.entries.count <= 1 else { return }
+            if Utils.isOverflowKey(keyHash) { return }
+            mergeStringifiedEntry(
+                String(describing: keyHash),
+                rank: keyHash.base is String ? 2 : 1,
+                value: eraseOptionalLike(child),
+                state: &state
+            )
+        }
+
+        guard state.entries.count == 1 else { return nil }
+        return SingleLogicalEntry(value: state.entries[0].1)
+    }
+
+    @inline(__always)
+    private static func exactContainer(_ value: Any) -> ExactContainer? {
+        let valueType = Swift.type(of: value)
+
+        @inline(__always)
+        func exactCast<T>(_ type: T.Type) -> T? {
+            // `value as? T` alone is too permissive here: it can trigger recursive bridging
+            // between container shapes such as `[String: Any]` and `[String: Any?]`.
+            // Matching the runtime type first keeps traversal classification exact.
+            guard valueType == type else { return nil }
+            guard let typed = value as? T else {
+                assertionFailure("Exact cast failed for runtime type \(valueType)")
+                return nil
+            }
+            return typed
+        }
+
+        if let dict = exactCast([String: Any].self) {
+            return .stringAny(dict)
+        }
+        if let dict = exactCast([String: Any?].self) {
+            return .stringOptional(dict)
+        }
+        if let dict = exactCast([AnyHashable: Any].self) {
+            return .anyHashableAny(dict)
+        }
+        if let dict = exactCast([AnyHashable: Any?].self) {
+            return .anyHashableOptional(dict)
+        }
+        if let array = exactCast([Any].self) {
+            return .arrayAny(array)
+        }
+        if let array = exactCast([Any?].self) {
+            return .arrayOptional(array)
+        }
+        if valueType is AnyClass, let dict = value as? NSDictionary {
+            return .foundationDictionary(dict)
+        }
+        if valueType is AnyClass, let array = value as? NSArray {
+            return .foundationArray(array)
+        }
+        if let dict = value as? any QsErasedDictionaryContainer {
+            return .genericDictionary(dict)
+        }
+        if let array = value as? any QsErasedArrayContainer {
+            return .genericArray(array)
+        }
+
+        return nil
+    }
+
+    @inline(__always)
+    internal static func withExactStringifiedEntries<R>(
+        _ value: Any,
+        _ body: ([(String, Any?)]) -> R
+    ) -> R? {
+        // Normalize every dictionary-like input into a single `[(String, Any?)]` view so the
+        // traversal/compaction code can apply one collision policy for Swift, generic, and
+        // Foundation-backed maps.
+        switch exactContainer(value) {
+        case .stringOptional(let dict):
+            var entries: [(String, Any?)] = []
+            entries.reserveCapacity(dict.count)
+            for (key, child) in dict {
+                entries.append((key, eraseOptionalLike(child)))
+            }
+            return body(entries)
+        case .stringAny(let dict):
+            var entries: [(String, Any?)] = []
+            entries.reserveCapacity(dict.count)
+            for (key, child) in dict {
+                entries.append((key, eraseOptionalLike(child)))
+            }
+            return body(entries)
+        case .anyHashableOptional(let dict):
+            return body(stringifiedEntriesPreservingStringKeyPrecedence(dict))
+        case .anyHashableAny(let dict):
+            return body(stringifiedEntriesPreservingStringKeyPrecedence(dict))
+        case .foundationDictionary(let dict):
+            return body(stringifiedEntriesPreservingStringKeyPrecedence(dict))
+        case .genericDictionary(let dict):
+            var rawEntries: [(AnyHashable, Any?)] = []
+            rawEntries.reserveCapacity(dict._qsCount)
+            dict._qsForEachEntry { keyHash, child in
+                rawEntries.append((keyHash, child))
+            }
+            return body(stringifiedEntriesPreservingStringKeyPrecedence(rawEntries))
+        case .arrayAny, .arrayOptional, .foundationArray, .genericArray, nil:
+            return nil
+        }
+    }
+
+    @inline(__always)
+    internal static func withExactArrayElements<R>(
+        _ value: Any,
+        _ body: (_ count: Int, _ visit: (@escaping (_ index: Int, _ child: Any?) -> Void) -> Void) -> R
+    ) -> R? {
+        switch exactContainer(value) {
+        case .arrayAny(let array):
+            return body(array.count) { visit in
+                for (index, element) in array.enumerated() {
+                    visit(index, eraseOptionalLike(element))
+                }
+            }
+        case .arrayOptional(let array):
+            return body(array.count) { visit in
+                for (index, element) in array.enumerated() {
+                    visit(index, eraseOptionalLike(element))
+                }
+            }
+        case .foundationArray(let array):
+            return body(array.count) { visit in
+                for (index, element) in array.enumerated() {
+                    visit(index, eraseOptionalLike(element))
+                }
+            }
+        case .genericArray(let array):
+            return body(array._qsCount) { visit in
+                array._qsForEachElement { index, child in
+                    visit(index, child)
+                }
+            }
+        case .stringAny, .stringOptional, .anyHashableAny, .anyHashableOptional,
+            .foundationDictionary, .genericDictionary, nil:
+            return nil
+        }
+    }
+
     // MARK: - Is Empty Check
 
     /// Checks if a value is empty. A value is considered empty if it is nil, Undefined, an empty
@@ -169,7 +572,13 @@ internal enum Utils {
 
     @inline(never)
     internal static func deepBridgeToAnyIterative(_ root: Any?) -> Any {
-        final class DictBox { var dict: [String: Any] = [:] }
+        final class DictBox {
+            var dict: [String: Any]
+            init(_ capacity: Int) {
+                self.dict = [:]
+                self.dict.reserveCapacity(capacity)
+            }
+        }
         final class ArrayBox {
             var arr: [Any]
             init(_ count: Int) { self.arr = Array(repeating: NSNull(), count: count) }
@@ -178,76 +587,180 @@ internal enum Utils {
         typealias Assign = (Any) -> Void
         enum Task {
             case build(node: Any?, assign: Assign)
-            case commitDict(DictBox, Assign)
-            case commitArray(ArrayBox, Assign)
+            case commitDict(DictBox, ObjectIdentifier?, Assign)
+            case commitArray(ArrayBox, ObjectIdentifier?, Assign)
         }
 
         var result: Any = NSNull()
         var stack: [Task] = [.build(node: root, assign: { result = $0 })]
+        var activeFoundationContainers: Set<ObjectIdentifier> = []
+        var completedFoundationContainers: [ObjectIdentifier: Any] = [:]
+
+        @inline(__always)
+        func scheduleDictionaryEntries(
+            _ entries: [(String, Any?)],
+            assign: @escaping Assign,
+            foundationID: ObjectIdentifier? = nil
+        ) {
+            let box = DictBox(entries.count)
+            stack.append(.commitDict(box, foundationID, assign))
+            // The traversal stack is LIFO, so we enqueue children in reverse to preserve the
+            // original logical insertion order in the final dictionary.
+            for (key, child) in entries.reversed() {
+                stack.append(.build(node: Utils.eraseOptionalLike(child), assign: { value in box.dict[key] = value }))
+            }
+        }
+
+        @inline(__always)
+        func scheduleStringDictionary<Value>(
+            _ dict: [String: Value],
+            assign: @escaping Assign
+        ) {
+            var entries: [(String, Any?)] = []
+            entries.reserveCapacity(dict.count)
+            for (key, child) in dict {
+                entries.append((key, Utils.eraseOptionalLike(child)))
+            }
+            scheduleDictionaryEntries(entries, assign: assign)
+        }
+
+        @inline(__always)
+        func scheduleAnyHashableDictionary<Value>(
+            _ dict: [AnyHashable: Value],
+            assign: @escaping Assign
+        ) {
+            scheduleDictionaryEntries(
+                Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict),
+                assign: assign
+            )
+        }
+
+        @inline(__always)
+        func scheduleFoundationDictionary(
+            _ dict: NSDictionary,
+            assign: @escaping Assign
+        ) {
+            let foundationID = ObjectIdentifier(dict)
+            // Foundation containers can be self-referential. While a node is actively being built,
+            // a recursive reference collapses to `NSNull()`. Once completed, sibling references
+            // can reuse the cached bridged value instead of rebuilding the subtree.
+            if let cached = completedFoundationContainers[foundationID] {
+                assign(cached)
+                return
+            }
+            guard activeFoundationContainers.insert(foundationID).inserted else {
+                assign(NSNull())
+                return
+            }
+
+            scheduleDictionaryEntries(
+                Utils.stringifiedEntriesPreservingStringKeyPrecedence(dict),
+                assign: assign,
+                foundationID: foundationID
+            )
+        }
+
+        @inline(__always)
+        func scheduleFoundationArray(
+            _ array: NSArray,
+            assign: @escaping Assign
+        ) {
+            let foundationID = ObjectIdentifier(array)
+            if let cached = completedFoundationContainers[foundationID] {
+                assign(cached)
+                return
+            }
+            guard activeFoundationContainers.insert(foundationID).inserted else {
+                assign(NSNull())
+                return
+            }
+
+            let box = ArrayBox(array.count)
+            stack.append(.commitArray(box, foundationID, assign))
+            for (index, child) in array.enumerated() {
+                stack.append(.build(node: Utils.eraseOptionalLike(child), assign: { value in box.arr[index] = value }))
+            }
+        }
 
         while let task = stack.popLast() {
             switch task {
             case .build(let node, let assign):
-                guard let node else {
+                guard let node = Utils.eraseOptionalLike(node) else {
                     assign(NSNull())
                     continue
                 }
 
-                if let dict = node as? [String: Any?] {
-                    let box = DictBox()
-                    stack.append(.commitDict(box, assign))
-                    for (key, child) in dict {
-                        stack.append(.build(node: child, assign: { value in box.dict[key] = value }))
-                    }
+                switch exactContainer(node) {
+                case .stringOptional(let dict):
+                    scheduleStringDictionary(dict, assign: assign)
                     continue
-                }
-
-                if let dictAHOpt = node as? [AnyHashable: Any?] {
-                    let box = DictBox()
-                    stack.append(.commitDict(box, assign))
-                    for (keyHash, child) in dictAHOpt {
-                        if Utils.isOverflowKey(keyHash) { continue }
-                        let keyString = String(describing: keyHash)
-                        stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
-                    }
+                case .stringAny(let dict):
+                    scheduleStringDictionary(dict, assign: assign)
                     continue
-                }
-
-                if let dictAH = node as? [AnyHashable: Any] {
-                    let box = DictBox()
-                    stack.append(.commitDict(box, assign))
-                    for (keyHash, child) in dictAH {
-                        if Utils.isOverflowKey(keyHash) { continue }
-                        let keyString = String(describing: keyHash)
-                        stack.append(.build(node: child, assign: { value in box.dict[keyString] = value }))
-                    }
+                case .anyHashableOptional(let dictAHOpt):
+                    scheduleAnyHashableDictionary(dictAHOpt, assign: assign)
                     continue
-                }
-
-                if let arr = node as? [Any] {
+                case .anyHashableAny(let dictAH):
+                    scheduleAnyHashableDictionary(dictAH, assign: assign)
+                    continue
+                case .arrayAny(let arr):
                     let box = ArrayBox(arr.count)
-                    stack.append(.commitArray(box, assign))
+                    stack.append(.commitArray(box, nil, assign))
                     for (index, child) in arr.enumerated() {
-                        stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
+                        stack.append(
+                            .build(node: Utils.eraseOptionalLike(child), assign: { value in box.arr[index] = value }))
                     }
                     continue
-                }
-
-                if let arrOpt = node as? [Any?] {
+                case .arrayOptional(let arrOpt):
                     let box = ArrayBox(arrOpt.count)
-                    stack.append(.commitArray(box, assign))
+                    stack.append(.commitArray(box, nil, assign))
                     for (index, child) in arrOpt.enumerated() {
+                        stack.append(
+                            .build(node: Utils.eraseOptionalLike(child), assign: { value in box.arr[index] = value }))
+                    }
+                    continue
+                case .foundationDictionary(let dict):
+                    scheduleFoundationDictionary(dict, assign: assign)
+                    continue
+                case .foundationArray(let array):
+                    scheduleFoundationArray(array, assign: assign)
+                    continue
+                case .genericDictionary(let dict):
+                    var rawEntries: [(AnyHashable, Any?)] = []
+                    rawEntries.reserveCapacity(dict._qsCount)
+                    dict._qsForEachEntry { keyHash, child in
+                        rawEntries.append((keyHash, child))
+                    }
+                    scheduleDictionaryEntries(
+                        Utils.stringifiedEntriesPreservingStringKeyPrecedence(rawEntries),
+                        assign: assign
+                    )
+                    continue
+                case .genericArray(let array):
+                    let box = ArrayBox(array._qsCount)
+                    stack.append(.commitArray(box, nil, assign))
+                    array._qsForEachElement { index, child in
                         stack.append(.build(node: child, assign: { value in box.arr[index] = value }))
                     }
                     continue
+                case nil:
+                    break
                 }
 
                 assign(node)
 
-            case .commitDict(let box, let assign):
+            case .commitDict(let box, let foundationID, let assign):
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                    completedFoundationContainers[foundationID] = box.dict
+                }
                 assign(box.dict)
 
-            case .commitArray(let box, let assign):
+            case .commitArray(let box, let foundationID, let assign):
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                    completedFoundationContainers[foundationID] = box.arr
+                }
                 assign(box.arr)
             }
         }
@@ -260,18 +773,56 @@ internal enum Utils {
         @inline(__always)
     #endif
     internal static func containsUndefined(_ root: Any?) -> Bool {
-        var stack: [Any?] = [root]
-        while let node = stack.popLast() {
-            if node is Undefined { return true }
+        var stack: [Any?] = [eraseOptionalLike(root)]
+        var visitedFoundationContainers: Set<ObjectIdentifier> = []
 
-            if let dict = node as? [String: Any?] {
-                stack.append(contentsOf: dict.values)  // values are Any?
-            } else if let dict = node as? [AnyHashable: Any] {
-                stack.append(contentsOf: dict.values.map { Optional($0) })  // wrap Any → Any?
-            } else if let array = node as? [Any?] {
-                stack.append(contentsOf: array)  // already Any?
-            } else if let array = node as? [Any] {
-                stack.append(contentsOf: array.map { Optional($0) })  // wrap Any → Any?
+        @inline(__always)
+        func push(_ child: Any?) {
+            stack.append(eraseOptionalLike(child))
+        }
+
+        while let node = stack.popLast() {
+            let node = eraseOptionalLike(node)
+            if node is Undefined { return true }
+            guard let node else { continue }
+
+            // Swift value containers cannot form true retain cycles on their own, but Foundation
+            // collections can, so only the Foundation branches need identity-based cycle guards.
+            switch exactContainer(node) {
+            case .stringOptional(let dict):
+                stack.reserveCapacity(stack.count + dict.count)
+                for child in dict.values { push(child) }
+            case .stringAny(let dict):
+                stack.reserveCapacity(stack.count + dict.count)
+                for child in dict.values { push(child) }
+            case .anyHashableOptional(let dict):
+                stack.reserveCapacity(stack.count + dict.count)
+                for child in dict.values { push(child) }
+            case .anyHashableAny(let dict):
+                stack.reserveCapacity(stack.count + dict.count)
+                for child in dict.values { push(child) }
+            case .arrayOptional(let array):
+                stack.reserveCapacity(stack.count + array.count)
+                for child in array { push(child) }
+            case .arrayAny(let array):
+                stack.reserveCapacity(stack.count + array.count)
+                for child in array { push(child) }
+            case .foundationDictionary(let dict):
+                guard visitedFoundationContainers.insert(ObjectIdentifier(dict)).inserted else { continue }
+                stack.reserveCapacity(stack.count + dict.count)
+                for (_, child) in dict { push(child) }
+            case .foundationArray(let array):
+                guard visitedFoundationContainers.insert(ObjectIdentifier(array)).inserted else { continue }
+                stack.reserveCapacity(stack.count + array.count)
+                for child in array { push(child) }
+            case .genericDictionary(let dict):
+                stack.reserveCapacity(stack.count + dict._qsCount)
+                dict._qsForEachEntry { _, child in push(child) }
+            case .genericArray(let array):
+                stack.reserveCapacity(stack.count + array._qsCount)
+                array._qsForEachElement { _, child in push(child) }
+            case nil:
+                break
             }
         }
         return false
@@ -283,24 +834,35 @@ internal enum Utils {
     @inline(__always)
     internal static func estimateSingleKeyChainDepth(_ value: Any?, cap: Int = 20_000) -> Int {
         var depth = 0
-        var current = value
+        var current = eraseOptionalLike(value)
         while depth < cap {
-            if let dict = current as? [String: Any?], dict.count == 1, let next = dict.first?.value {
-                current = next
-                depth += 1
-                continue
+            guard let currentValue = eraseOptionalLike(current) else { return depth }
+
+            // Follow only the logically single child after overflow-bookkeeping keys and
+            // string/non-string key collisions have been normalized away.
+            switch exactContainer(currentValue) {
+            case .stringOptional(let dict):
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
+            case .stringAny(let dict):
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
+            case .anyHashableOptional(let dict):
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
+            case .anyHashableAny(let dict):
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
+            case .foundationDictionary(let dict):
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
+            case .genericDictionary(let dict):
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
+            case .arrayAny, .arrayOptional, .foundationArray, .genericArray, nil:
+                return depth
             }
-            if let dict = current as? [AnyHashable: Any?], dict.count == 1, let next = dict.first?.value {
-                current = next
-                depth += 1
-                continue
-            }
-            if let dict = current as? [AnyHashable: Any], dict.count == 1, let next = dict.first?.value {
-                current = next
-                depth += 1
-                continue
-            }
-            return depth
+            depth += 1
         }
         return depth
     }

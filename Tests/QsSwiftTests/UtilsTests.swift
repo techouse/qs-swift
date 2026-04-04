@@ -8,6 +8,8 @@ import OrderedCollections
     #error("The swift-testing package is required to build tests on Swift 5.x")
 #endif
 
+private let deterministicHashing = ProcessInfo.processInfo.environment["SWIFT_DETERMINISTIC_HASHING"] == "1"
+
 struct UtilsTests {
     // MARK: - Utils.encode tests
 
@@ -1268,8 +1270,8 @@ struct UtilsTests {
     // while keeping CI stable.
     @Test("deep maps do not time out (safe depth)")
     func testDecode_DeepMaps_NoTimeout_Safe() throws {
-        /// Conservative depth to avoid ARC’s recursive deinit on worker-thread stacks.
-        let depth = 2500
+        /// Keep the worker-thread safety test aligned with production's main-drop heuristic.
+        let depth = Qs.MAIN_DROP_THRESHOLD
         var s = "foo"
         for _ in 0..<depth { s += "[p]" }
         s += "=bar"
@@ -1319,10 +1321,39 @@ struct UtilsTests {
             "optional": [Optional<Any>.none, Optional<Any>.some(undefined), Optional<Any>.some("tail")] as [Any?]
         ]
         let optionalCompacted = Utils.compact(&optionalRoot, allowSparseLists: false)
-        if let optional = optionalCompacted["optional"] {
+        if let optional = optionalCompacted["optional"] as? [Any] {
             #expect(!Utils.containsUndefined(optional))
+            #expect(optional.count == 2)
+            #expect(optional.first is NSNull)
+            #expect(optional.last as? String == "tail")
         } else {
             Issue.record("Expected optional array branch result")
+        }
+    }
+
+    @Test("Utils.compact preserves nil entries in typed dictionaries while dropping Undefined")
+    func utils_compact_preservesNilInTypedDictionaries() {
+        var root: [String: Any?] = [
+            "typed": [1: Optional<String>.none] as [Int: String?],
+            "drop": Undefined.instance,
+        ]
+
+        let compacted = Utils.compact(&root, allowSparseLists: false)
+        #expect(compacted.keys.contains("drop") == false)
+
+        if let typed = compacted["typed"] as? [String: Any?] {
+            #expect(typed.keys.contains("1"))
+            let preservesNilEntry: Bool
+            if case .some(.none) = typed["1"] {
+                preservesNilEntry = true
+            } else {
+                preservesNilEntry = false
+            }
+            if !preservesNilEntry {
+                Issue.record("Expected typed dictionary nil entry to be preserved")
+            }
+        } else {
+            Issue.record("Expected compacted typed dictionary")
         }
     }
 
@@ -1385,7 +1416,7 @@ struct UtilsTests {
         let out = Utils.compactToAny(input, allowSparseLists: true)
         if let array = out["array"] as? [Any] {
             #expect(array.first is NSNull)
-            if let nested = array.last as? [Any] {
+            if let nested = array.dropFirst().first.flatMap(anyArray) {
                 #expect(nested.first is NSNull)
                 #expect(nested.last as? String == "value")
             } else {
@@ -1422,7 +1453,7 @@ struct UtilsTests {
         let compacted = Utils.compact(&root, allowSparseLists: true)
         if let arr = compacted["opt"] as? [Any] {
             #expect(arr.count == 3)
-            let inner = arr.first as? [Any]
+            let inner = anyArray(arr[0])
             #expect(inner?.count == 3)
             #expect(inner?[0] as? String == "inner")
             #expect(inner?[1] is NSNull)
@@ -1446,7 +1477,7 @@ struct UtilsTests {
             #expect(list.count == 3)
             #expect(list[0] as? String == "value")
             #expect(list[1] is NSNull)
-            let dict = list[2] as? [String: Any]
+            let dict = list[2] as? [String: Any?]
             #expect(dict?.isEmpty == true)
         } else {
             Issue.record("Swift [Any] branch not exercised")
@@ -1463,8 +1494,8 @@ struct UtilsTests {
         let compacted = Utils.compact(&root)
         if let list = compacted["list"] as? [Any] {
             #expect(list.count == 2)
-            #expect(list.first as? String == "keep")
-            let nested = list.last as? [String: Any]
+            #expect(list[0] as? String == "keep")
+            let nested = list[1] as? [String: Any?]
             #expect(nested?.isEmpty == true)
         } else {
             Issue.record("Swift [Any] allowSparse=false branch not exercised")
@@ -1477,7 +1508,7 @@ struct UtilsTests {
         var root: [String: Any?] = ["list": [Any](arrayLiteral: nested)]
 
         let compacted = Utils.compact(&root, allowSparseLists: true)
-        if let list = compacted["list"] as? [Any], let inner = list.first as? [Any] {
+        if let list = compacted["list"] as? [Any], let inner = anyArray(list[0]) {
             #expect(inner.count == 2)
             #expect(inner[0] as? String == "inner")
             #expect(inner[1] is NSNull)
@@ -1495,7 +1526,7 @@ struct UtilsTests {
         let compacted = Utils.compact(&root, allowSparseLists: true)
         if let list = compacted["list"] as? [Any] {
             #expect(list.count == 2)
-            let nested = list.first as? [Any]
+            let nested = anyArray(list[0])
             #expect(nested?.contains { ($0 as? String) == "leaf" } == true)
             #expect(nested?.contains { $0 is NSNull } == true)
             #expect(list.last is NSNull)
@@ -1515,8 +1546,8 @@ struct UtilsTests {
         let compacted = Utils.compact(&root)
         if let list = compacted["list"] as? [Any] {
             #expect(list.count == 2)
-            #expect((list.first as? [String: Any])?.isEmpty == true)
-            #expect(list.last as? String == "tail")
+            #expect((list[0] as? [String: Any?])?.isEmpty == true)
+            #expect(list[1] as? String == "tail")
         } else {
             Issue.record("Dense Swift [Any] branch not compacted as expected")
         }
@@ -1545,7 +1576,7 @@ struct UtilsTests {
         var root: [String: Any?] = ["list": [Any?](arrayLiteral: optionalInner, nil)]
 
         let compacted = Utils.compact(&root, allowSparseLists: true)
-        if let list = compacted["list"] as? [Any], let nested = list.first as? [Any] {
+        if let list = compacted["list"] as? [Any], let nested = anyArray(list[0]) {
             #expect(nested.count == 3)
             #expect(nested.first is NSNull)
             #expect(nested[1] as? String == "leaf")
@@ -1581,9 +1612,9 @@ struct UtilsTests {
 
         if let foundation = sparse["foundation"] as? [Any] {
             #expect(foundation.first is NSNull)
-            let emptied = foundation.compactMap { $0 as? [String: Any] }.first
+            let emptied = foundation.compactMap(compactDict).first
             #expect(emptied?.isEmpty == true)
-            let nested = foundation.compactMap { $0 as? [Any] }.first
+            let nested = foundation.compactMap(anyArray).first
             #expect(nested?.first is NSNull)
         } else {
             Issue.record("Foundation-backed array branch not exercised")
@@ -1591,9 +1622,9 @@ struct UtilsTests {
 
         if let optional = sparse["optional"] as? [Any] {
             #expect(optional.first is NSNull)
-            if let nested = optional.dropFirst().first as? [Any] {
+            if let nested: [Any] = optional.dropFirst().first.flatMap(anyArray) {
                 #expect(nested.first is NSNull)
-                let nestedDict = nested.compactMap { $0 as? [String: Any] }.first
+                let nestedDict = nested.compactMap(compactDict).first
                 #expect(nestedDict?.keys.contains("keep") == true)
                 #expect(nested.last as? String == "leaf")
             } else {
@@ -1684,6 +1715,255 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.compactToAny normalizes Foundation and AnyHashable containers inside arrays")
+    func utils_compactToAny_arrayElementsBridgeFoundationAndHashableContainers() {
+        let input: [String: Any?] = [
+            "list": [
+                NSDictionary(dictionary: [1: "x", "drop": Undefined.instance]),
+                [AnyHashable(2): "y"] as [AnyHashable: Any],
+                NSArray(array: [Undefined.instance, "z"]),
+            ]
+        ]
+
+        let sparse = Utils.compactToAny(input, allowSparseLists: true)
+        if let list = sparse["list"] as? [Any] {
+            #expect(list.count == 3)
+
+            let foundationDict = list.first as? [String: Any]
+            #expect(foundationDict?["1"] as? String == "x")
+            #expect(foundationDict?["drop"] == nil)
+
+            let hashableDict = list.dropFirst().first as? [String: Any]
+            #expect(hashableDict?["2"] as? String == "y")
+
+            let foundationArray = list.dropFirst(2).first as? [Any]
+            #expect(foundationArray?.count == 2)
+            #expect(foundationArray?.first is NSNull)
+            #expect(foundationArray?.dropFirst().first as? String == "z")
+        } else {
+            Issue.record("Expected normalized list from compactToAny")
+        }
+
+        let dense = Utils.compactToAny(input, allowSparseLists: false)
+        if let list = dense["list"] as? [Any] {
+            #expect(list.count == 3)
+
+            let foundationArray = list.dropFirst(2).first as? [Any]
+            #expect(foundationArray?.count == 1)
+            #expect(foundationArray?.first as? String == "z")
+        } else {
+            Issue.record("Expected dense normalized list from compactToAny")
+        }
+    }
+
+    @Test("Utils.compact and compactToAny normalize deep Foundation and pure-Swift containers consistently")
+    func utils_compact_deepFoundationMatchesPureSwift() {
+        let undefined = Undefined.instance
+        let swiftNested: [Any] = [
+            [1: [undefined, "x"]] as [Int: [Any]],
+            ["inner": [undefined, ["deep": undefined, "keep": "leaf"] as [String: Any?], nil] as [Any?]]
+                as [String: [Any?]],
+        ]
+        let foundationNested = NSArray(array: [
+            NSDictionary(dictionary: [1: NSArray(array: [undefined, "x"])]),
+            NSDictionary(dictionary: [
+                "inner": NSArray(array: [
+                    undefined,
+                    NSDictionary(dictionary: ["deep": undefined, "keep": "leaf"]),
+                    NSNull(),
+                ])
+            ]),
+        ])
+
+        func expectDeepNormalizedShape(_ value: Any?, label: String) {
+            guard let array = value as? [Any] else {
+                Issue.record("Expected normalized array for \(label), got: \(String(describing: value))")
+                return
+            }
+
+            guard array.count == 2 else {
+                Issue.record("Expected 2 elements for \(label), got \(array.count)")
+                return
+            }
+
+            guard let first = anyDict(array.first) else {
+                Issue.record("Expected first dictionary for \(label)")
+                return
+            }
+            guard let firstInner = anyArray(first["1"]) else {
+                Issue.record("Expected first inner array for \(label)")
+                return
+            }
+            guard firstInner.count == 2 else {
+                Issue.record("Expected first inner array count 2 for \(label), got \(firstInner.count)")
+                return
+            }
+            #expect(firstInner.first is NSNull)
+            #expect(firstInner.dropFirst().first as? String == "x")
+
+            guard let second = anyDict(array.dropFirst().first) else {
+                Issue.record("Expected second dictionary for \(label)")
+                return
+            }
+            guard let secondInner = anyArray(second["inner"]) else {
+                Issue.record("Expected second inner array for \(label)")
+                return
+            }
+            guard secondInner.count == 3 else {
+                Issue.record("Expected second inner array count 3 for \(label), got \(secondInner.count)")
+                return
+            }
+            #expect(secondInner.first is NSNull)
+            guard let deepDict = anyDict(secondInner.dropFirst().first) else {
+                Issue.record("Expected deep dictionary for \(label)")
+                return
+            }
+            #expect(deepDict["deep"] == nil)
+            #expect(deepDict["keep"] as? String == "leaf")
+            #expect(secondInner.dropFirst(2).first is NSNull)
+        }
+
+        var compactRoot: [String: Any?] = [
+            "swift": swiftNested,
+            "foundation": foundationNested,
+        ]
+        let compacted = Utils.compact(&compactRoot, allowSparseLists: true)
+        expectDeepNormalizedShape(compacted["swift"] ?? nil, label: "compact swift")
+        expectDeepNormalizedShape(compacted["foundation"] ?? nil, label: "compact foundation")
+
+        let compactedAny = Utils.compactToAny(
+            [
+                "swift": swiftNested,
+                "foundation": foundationNested,
+            ], allowSparseLists: true)
+        expectDeepNormalizedShape(compactedAny["swift"], label: "compactToAny swift")
+        expectDeepNormalizedShape(compactedAny["foundation"], label: "compactToAny foundation")
+    }
+
+    @Test("Utils.compact and compactToAny handle deep typed and Foundation chains")
+    func utils_compact_deepExactContainerChains() {
+        let depth = Qs.MAIN_DROP_THRESHOLD + 50
+        let undefined = Undefined.instance
+
+        func buildTypedChain(depth: Int, leaf: Any) -> Any {
+            var current: Any = leaf
+            for _ in 0..<depth {
+                current = [1: current] as [Int: Any]
+            }
+            return current
+        }
+
+        func buildFoundationChain(depth: Int, leaf: Any) -> Any {
+            var current: Any = leaf
+            for _ in 0..<depth {
+                current = NSDictionary(dictionary: [1: current])
+            }
+            return current
+        }
+
+        func descendStringifiedChain(_ value: Any?, depth: Int) -> [String: Any]? {
+            var current = value
+            for _ in 0..<depth {
+                current = anyDict(current)?["1"]
+            }
+            return anyDict(current)
+        }
+
+        let typedChain = buildTypedChain(
+            depth: depth,
+            leaf: ["keep": "typed", "drop": undefined] as [String: Any?]
+        )
+        let foundationChain = buildFoundationChain(
+            depth: depth,
+            leaf: NSDictionary(dictionary: ["keep": "foundation", "drop": undefined])
+        )
+
+        var compactRoot: [String: Any?] = [
+            "typed": typedChain,
+            "foundation": foundationChain,
+        ]
+        let compacted = Utils.compact(&compactRoot, allowSparseLists: false)
+
+        let compactedTypedLeaf = descendStringifiedChain(compacted["typed"] ?? nil, depth: depth)
+        #expect(compactedTypedLeaf?["keep"] as? String == "typed")
+        #expect(compactedTypedLeaf?["drop"] == nil)
+
+        let compactedFoundationLeaf = descendStringifiedChain(compacted["foundation"] ?? nil, depth: depth)
+        #expect(compactedFoundationLeaf?["keep"] as? String == "foundation")
+        #expect(compactedFoundationLeaf?["drop"] == nil)
+
+        let compactedAny = Utils.compactToAny(
+            [
+                "typed": typedChain,
+                "foundation": foundationChain,
+            ],
+            allowSparseLists: false
+        )
+
+        let compactedAnyTypedLeaf = descendStringifiedChain(compactedAny["typed"], depth: depth)
+        #expect(compactedAnyTypedLeaf?["keep"] as? String == "typed")
+        #expect(compactedAnyTypedLeaf?["drop"] == nil)
+
+        let compactedAnyFoundationLeaf = descendStringifiedChain(compactedAny["foundation"], depth: depth)
+        #expect(compactedAnyFoundationLeaf?["keep"] as? String == "foundation")
+        #expect(compactedAnyFoundationLeaf?["drop"] == nil)
+    }
+
+    @Test("Utils.compact and compactToAny tolerate Foundation self-cycles")
+    func utils_compact_foundationSelfCycles() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
+                #expect(
+                    Bool(false),
+                    Comment("Skipped: cannot safely build a cyclic Foundation container on Linux"))
+            }
+        #else
+            let cyclicDict = NSMutableDictionary()
+            cyclicDict["self"] = cyclicDict
+            cyclicDict["leaf"] = "x"
+
+            var compactRoot: [String: Any?] = ["dict": cyclicDict]
+            let compacted = Utils.compact(&compactRoot, allowSparseLists: true)
+            if let dict = compacted["dict"] as? [String: Any?] {
+                #expect(dict["leaf"] as? String == "x")
+                #expect((dict["self"] ?? nil) is NSNull)
+            } else {
+                Issue.record("Expected compacted cyclic dictionary")
+            }
+
+            let compactedAny = Utils.compactToAny(["dict": cyclicDict], allowSparseLists: true)
+            if let dict = compactedAny["dict"] as? [String: Any] {
+                #expect(dict["leaf"] as? String == "x")
+                #expect(dict["self"] is NSNull)
+            } else {
+                Issue.record("Expected compactToAny cyclic dictionary")
+            }
+
+            let cyclicArray = NSMutableArray()
+            cyclicArray.add(cyclicArray)
+            cyclicArray.add("y")
+
+            var compactArrayRoot: [String: Any?] = ["array": cyclicArray]
+            let compactedArray = Utils.compact(&compactArrayRoot, allowSparseLists: true)
+            if let array = compactedArray["array"] as? [Any] {
+                #expect(array.count == 2)
+                #expect(array[0] is NSNull)
+                #expect(array[1] as? String == "y")
+            } else {
+                Issue.record("Expected compacted cyclic array")
+            }
+
+            let compactedAnyArray = Utils.compactToAny(["array": cyclicArray], allowSparseLists: true)
+            if let array = compactedAnyArray["array"] as? [Any] {
+                #expect(array.count == 2)
+                #expect(array[0] is NSNull)
+                #expect(array[1] as? String == "y")
+            } else {
+                Issue.record("Expected compactToAny cyclic array")
+            }
+        #endif
+    }
+
     @Test("Utils.containsUndefined detects sentinel in nested structures")
     func utils_containsUndefined_detects() {
         let undefined = Undefined.instance
@@ -1705,6 +1985,54 @@ struct UtilsTests {
         #expect(Utils.containsUndefined(payload))
     }
 
+    @Test("Utils.containsUndefined detects boxed optional sentinels in Swift [Any]")
+    func utils_containsUndefined_boxedOptionalSwiftArrayRoot() {
+        let payload: [Any] = [Optional<Undefined>.some(Undefined.instance) as Any, "value"]
+        #expect(Utils.containsUndefined(payload))
+    }
+
+    @Test("Utils.containsUndefined inspects Foundation containers")
+    func utils_containsUndefined_foundationContainers() {
+        let payload = NSDictionary(dictionary: [
+            "array": NSArray(array: [Undefined.instance, "x"])
+        ])
+        #expect(Utils.containsUndefined(payload))
+    }
+
+    @Test("Utils.containsUndefined detects boxed optional sentinels in Foundation containers")
+    func utils_containsUndefined_boxedOptionalFoundationContainers() {
+        let payload = NSDictionary(dictionary: [
+            "array": NSArray(array: [Optional<Undefined>.some(Undefined.instance) as Any, "x"])
+        ])
+        #expect(Utils.containsUndefined(payload))
+    }
+
+    @Test("Utils.containsUndefined tolerates Foundation self-cycles")
+    func utils_containsUndefined_foundationSelfCycles() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
+                #expect(
+                    Bool(false),
+                    Comment("Skipped: cannot safely build a cyclic Foundation container on Linux"))
+            }
+        #else
+            let cyclic = NSMutableDictionary()
+            cyclic["self"] = cyclic
+            #expect(!Utils.containsUndefined(cyclic))
+
+            cyclic["sentinel"] = Undefined.instance
+            #expect(Utils.containsUndefined(cyclic))
+        #endif
+    }
+
+    @Test("Utils.containsUndefined inspects typed Swift containers")
+    func utils_containsUndefined_typedSwiftContainers() {
+        let payload: [Int: [String: Undefined]] = [
+            1: ["drop": Undefined.instance]
+        ]
+        #expect(Utils.containsUndefined(payload))
+    }
+
     @Test("Utils.containsUndefined reports true for direct sentinel input")
     func utils_containsUndefined_directSentinel() {
         #expect(Utils.containsUndefined(Undefined.instance))
@@ -1723,6 +2051,48 @@ struct UtilsTests {
         let child: [AnyHashable: Any] = [AnyHashable(2): "end"]
         let root: [AnyHashable: Any] = [AnyHashable(1): child]
         #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
+    }
+
+    @Test("Utils.estimateSingleKeyChainDepth traverses typed Swift dictionary chains")
+    func utils_estimateSingleKeyChainDepth_typedSwiftChain() {
+        let child: [Int: String] = [2: "end"]
+        let root: [Int: [Int: String]] = [1: child]
+        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
+    }
+
+    @Test("Utils.estimateSingleKeyChainDepth ignores overflow bookkeeping in AnyHashable dictionaries")
+    func utils_estimateSingleKeyChainDepth_ignoresOverflowMetadata() {
+        let child: [AnyHashable: Any] = [
+            AnyHashable("b"): "end",
+            AnyHashable(Utils.overflowKey): 9,
+        ]
+        let root: [AnyHashable: Any] = [
+            AnyHashable("a"): child,
+            AnyHashable(Utils.overflowKey): 3,
+        ]
+
+        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
+    }
+
+    @Test("Utils.estimateSingleKeyChainDepth ignores overflow bookkeeping in OrderedDictionary chains")
+    func utils_estimateSingleKeyChainDepth_ignoresOverflowMetadataInOrderedDictionary() {
+        var child = OrderedDictionary<AnyHashable, Any>()
+        child[AnyHashable("b")] = "end"
+        child[AnyHashable(Utils.overflowKey)] = 9
+
+        var root = OrderedDictionary<AnyHashable, Any>()
+        root[AnyHashable("a")] = child
+        root[AnyHashable(Utils.overflowKey)] = 3
+
+        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
+    }
+
+    @Test("Utils.estimateSingleKeyChainDepth unwraps boxed optional dictionary links")
+    func utils_estimateSingleKeyChainDepth_boxedOptionalChain() {
+        let level2: [String: Any] = ["c": "end"]
+        let level1: [String: Any] = ["b": Optional<[String: Any]>.some(level2) as Any]
+        let root: [String: Any] = ["a": Optional<[String: Any]>.some(level1) as Any]
+        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 3)
     }
 
     @Test("Utils.merge handles heterogeneous containers")
@@ -1919,6 +2289,14 @@ struct UtilsTests {
         let bridgedNil = Utils.deepBridgeToAnyIterative(nil)
         #expect(bridgedNil is NSNull)
 
+        let boxedRoot = Optional<[String: Any]>.some(["leaf": "value"]) as Any
+        let bridgedBoxedRoot = Utils.deepBridgeToAnyIterative(boxedRoot)
+        #expect((bridgedBoxedRoot as? [String: Any])?["leaf"] as? String == "value")
+
+        let boxedNilRoot = Optional<[String: Any]>.none as Any
+        let bridgedBoxedNilRoot = Utils.deepBridgeToAnyIterative(boxedNilRoot)
+        #expect(bridgedBoxedNilRoot is NSNull)
+
         let dict: [AnyHashable: Any] = [
             1: ["nested": NSNull()],
             "two": 2,
@@ -1933,11 +2311,14 @@ struct UtilsTests {
 
         let optionalArray: [Any?] = [nil, "value"]
         let bridgedArray = Utils.deepBridgeToAnyIterative(optionalArray)
-        if let arrOpt = bridgedArray as? [Any?] {
-            switch arrOpt.first {
-            case .some(.none):
-                #expect(true)
-            default:
+        if Swift.type(of: bridgedArray) == [Any?].self, let arrOpt = bridgedArray as? [Any?] {
+            let firstElementIsNone: Bool
+            if case .some(.none) = arrOpt.first {
+                firstElementIsNone = true
+            } else {
+                firstElementIsNone = false
+            }
+            if !firstElementIsNone {
                 Issue.record("Expected first element to be .none")
             }
 
@@ -1962,11 +2343,151 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.deepBridgeToAnyIterative bridges Foundation containers")
+    func utils_deepBridge_foundationContainers() {
+        let foundation: NSDictionary = [
+            1: "x",
+            "nested": NSArray(array: ["y"]),
+        ]
+
+        let bridged = Utils.deepBridgeToAnyIterative(foundation)
+        let dict = bridged as? [String: Any]
+        #expect(dict?["1"] as? String == "x")
+        #expect((dict?["nested"] as? [Any])?.first as? String == "y")
+    }
+
+    @Test("Utils.deepBridgeToAnyIterative unwraps boxed optionals in raw array containers")
+    func utils_deepBridge_unwrapsBoxedOptionalsInRawArrays() {
+        func expectNormalizedArray(_ bridged: Any, expectedValues: [Any?], label: String) {
+            guard let array = bridged as? [Any] else {
+                Issue.record("Expected bridged array for \(label), got: \(type(of: bridged))")
+                return
+            }
+
+            #expect(array.count == expectedValues.count)
+            for (index, expected) in expectedValues.enumerated() {
+                let actual = array[index]
+                if let expected {
+                    switch expected {
+                    case let string as String:
+                        #expect(actual as? String == string)
+                    case let int as Int:
+                        #expect(actual as? Int == int)
+                    default:
+                        Issue.record("Unhandled expected value for \(label) at index \(index): \(expected)")
+                    }
+                } else {
+                    #expect(actual is NSNull)
+                }
+            }
+        }
+
+        let boxedNil: Any = Optional<String>.none as Any
+        let boxedSome: Any = Optional<String>.some("x") as Any
+        let boxedInt: Any = Optional<Int>.some(42) as Any
+
+        expectNormalizedArray(
+            Utils.deepBridgeToAnyIterative([boxedNil, boxedSome, boxedInt] as [Any]),
+            expectedValues: [nil, "x", 42],
+            label: "[Any]"
+        )
+
+        expectNormalizedArray(
+            Utils.deepBridgeToAnyIterative([boxedNil, boxedSome, nil, boxedInt] as [Any?]),
+            expectedValues: [nil, "x", nil, 42],
+            label: "[Any?]"
+        )
+    }
+
+    @Test(
+        "Utils.deepBridgeToAnyIterative preserves OrderedDictionary entry order",
+        .enabled(if: deterministicHashing, "requires SWIFT_DETERMINISTIC_HASHING=1 for stable dictionary iteration")
+    )
+    func utils_deepBridge_preservesOrderedDictionaryOrder() {
+        let entries: [(AnyHashable, Any)] = [
+            (AnyHashable("first"), 1),
+            (AnyHashable(2), "two"),
+            (AnyHashable("third"), 3),
+        ]
+        let ordered = OrderedDictionary<AnyHashable, Any>(uniqueKeysWithValues: entries)
+
+        let bridged = Utils.deepBridgeToAnyIterative(ordered)
+        if let dict = bridged as? [String: Any] {
+            // This is intentionally implementation-sensitive: it guards against reversing
+            // OrderedDictionary scheduling in deepBridgeToAnyIterative when hashing is deterministic.
+            #expect(Array(dict.keys) == ["first", "2", "third"])
+            #expect(dict["2"] as? String == "two")
+        } else {
+            Issue.record("Expected bridged ordered dictionary, got: \(type(of: bridged))")
+        }
+    }
+
+    @Test("Utils.deepBridgeToAnyIterative tolerates Foundation self-cycles")
+    func utils_deepBridge_foundationSelfCycles() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
+                #expect(
+                    Bool(false),
+                    Comment("Skipped: cannot safely build a cyclic Foundation container on Linux"))
+            }
+        #else
+            let cyclicDict = NSMutableDictionary()
+            cyclicDict["self"] = cyclicDict
+            cyclicDict["leaf"] = "x"
+
+            let bridgedDict = Utils.deepBridgeToAnyIterative(cyclicDict)
+            if let dict = bridgedDict as? [String: Any] {
+                #expect(dict["leaf"] as? String == "x")
+                #expect(dict["self"] is NSNull)
+            } else {
+                Issue.record("Expected bridged cyclic dictionary, got: \(type(of: bridgedDict))")
+            }
+
+            let cyclicArray = NSMutableArray()
+            cyclicArray.add(cyclicArray)
+            cyclicArray.add("y")
+
+            let bridgedArray = Utils.deepBridgeToAnyIterative(cyclicArray)
+            if let array = bridgedArray as? [Any] {
+                #expect(array.count == 2)
+                #expect(array[0] is NSNull)
+                #expect(array[1] as? String == "y")
+            } else {
+                Issue.record("Expected bridged cyclic array, got: \(type(of: bridgedArray))")
+            }
+        #endif
+    }
+
+    @Test("Utils.deepBridgeToAnyIterative bridges typed Swift containers")
+    func utils_deepBridge_typedSwiftContainers() {
+        let typed: [String: Any] = [
+            "dict": [1: "x"] as [Int: String],
+            "array": [nil, "y"] as [String?],
+        ]
+
+        let bridged = Utils.deepBridgeToAnyIterative(typed)
+        let dict = bridged as? [String: Any]
+        let nestedDict = dict?["dict"] as? [String: Any]
+        let nestedArray = dict?["array"] as? [Any]
+        #expect(nestedDict?["1"] as? String == "x")
+        #expect(nestedArray?.count == 2)
+        #expect(nestedArray?.first is NSNull)
+        #expect(nestedArray?[1] as? String == "y")
+    }
+
     @Test("Utils.needsMainDrop short-circuits when threshold is non-positive")
     func utils_needsMainDrop_thresholdShortCircuit() {
         let root: [String: Any?] = ["k": nil]
         #expect(!Utils.needsMainDrop(root, threshold: 0))
         #expect(!Utils.needsMainDrop(root, threshold: -3))
+    }
+
+    @Test("Utils.needsMainDrop sees boxed optional single-key chains")
+    func utils_needsMainDrop_boxedOptionalChain() {
+        let level2: [String: Any] = ["c": "end"]
+        let level1: [String: Any] = ["b": Optional<[String: Any]>.some(level2) as Any]
+        let root: [String: Any?] = ["a": Optional<[String: Any]>.some(level1) as Any]
+        #expect(Utils.needsMainDrop(root, threshold: 2))
     }
 
     @Test("Utils.dropOnMainThread tolerates nil payloads")
@@ -2020,6 +2541,38 @@ struct UtilsTests {
 }
 
 // MARK: - Helpers
+
+private func compactDict(_ value: Any) -> [String: Any?]? {
+    value as? [String: Any?]
+}
+
+private func anyArray(_ value: Any?) -> [Any]? {
+    if let array = value as? [Any] {
+        return array
+    }
+    if let array = value as? [Any?] {
+        return array.map { $0 ?? NSNull() }
+    }
+    if let array = value as? NSArray {
+        return array.map { $0 }
+    }
+    return nil
+}
+
+private func anyDict(_ value: Any?) -> [String: Any]? {
+    if let dict = value as? [String: Any] {
+        return dict
+    }
+    if let dict = value as? [String: Any?] {
+        var bridged: [String: Any] = [:]
+        bridged.reserveCapacity(dict.count)
+        for (key, child) in dict {
+            bridged[key] = child ?? NSNull()
+        }
+        return bridged
+    }
+    return nil
+}
 
 private final class Holder: CustomStringConvertible {
     var payload: Any?
