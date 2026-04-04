@@ -1,3 +1,10 @@
+## 1.3.5
+
+- [FIX] harden deep direct-map decode paths for Swift `6.3`: replace broad recursive container casts with exact container classification plus iterative traversal for Swift, generic, and Foundation collections, preventing worker-thread stack overflows/crashes on long chains and tolerating self-referential `NSDictionary` / `NSArray` graphs.
+- [FIX] restore shape-preserving decode/compaction semantics for typed and Foundation-backed containers: preserve string-key precedence during key stringification, compact nested `Undefined` consistently, keep explicit `nil` entries/elements as `NSNull()` where appropriate, and lower the deep-graph main-thread teardown threshold to `1_200`.
+- [TEST] expand regression coverage for Swift `6.3` edge cases across `DecodeTests` and `UtilsTests`, including typed Swift containers, Foundation containers/cycles, boxed optionals, deep single-key chains, ordered-dictionary scheduling, and dense vs sparse compaction parity.
+- [DOCS] clarify internal traversal/testing guidance around exact-container handling and deterministic-hashing order-sensitive regressions.
+
 ## 1.3.4
 
 - [CHORE] broaden toolchain compatibility: lower `Package.swift` to `swift-tools-version: 6.0`, update `swift-collections` to `1.4.0` and `swift-docc-plugin` to `1.4.6`, and align `Package@swift-5.10.swift` with `QsTestSupport` plus 5.10-specific test target exclusions for perf guardrail files.
