@@ -70,7 +70,7 @@ Please include relevant logs:
 - SwiftPM build + tests (CLI):
   ```bash
   swift build -v
-  swift test -v --enable-code-coverage
+  SWIFT_DETERMINISTIC_HASHING=1 swift test -v --enable-code-coverage
   ```
 
 - If you created a small demo package, include the full console output from the failing run.
