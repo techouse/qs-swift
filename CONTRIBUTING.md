@@ -33,13 +33,13 @@ cd QsSwift
 swift build
 
 # Run the full test suite (debug)
-swift test
+SWIFT_DETERMINISTIC_HASHING=1 swift test
 
 # Run a single test case or method (XCTest filter)
 # by test case type name
-swift test --filter QsTests.EncodeTests
+SWIFT_DETERMINISTIC_HASHING=1 swift test --filter QsTests.EncodeTests
 # by test method name
-swift test --filter QsTests.EncodeTests/testArrayFormatComma
+SWIFT_DETERMINISTIC_HASHING=1 swift test --filter QsTests.EncodeTests/testArrayFormatComma
 
 # Build (release, without tests)
 swift build -c release
@@ -92,9 +92,9 @@ We use XCTest for unit tests. When you change code paths that touch parsing or e
 
 Common commands:
 
-- Run all tests: `swift test`
-- Fail fast: `swift test --filter` to scope down to the failing area
-- With verbose logs: `swift test -v`
+- Run all tests: `SWIFT_DETERMINISTIC_HASHING=1 swift test`
+- Fail fast: `SWIFT_DETERMINISTIC_HASHING=1 swift test --filter` to scope down to the failing area
+- With verbose logs: `SWIFT_DETERMINISTIC_HASHING=1 swift test -v`
 - Generate an HTML report in Xcode: run tests via the Test action (⌘U) and open the report navigator
 
 ### Coverage
@@ -103,7 +103,7 @@ You can get coverage from the CLI:
 
 ```bash
 # Quick coverage (debug)
-swift test --enable-code-coverage
+SWIFT_DETERMINISTIC_HASHING=1 swift test --enable-code-coverage
 
 # Helper script that exports LCOV and (optionally) HTML
 ./scripts/coverage.sh          # writes coverage/info.lcov
@@ -185,7 +185,7 @@ Use a short, descriptive branch: `fix/latin1-entities`, `feat/weakmap-sidechanne
 ## Releasing (maintainers)
 
 1. Prepare release notes (Added/Changed/Fixed; document behavior differences if any).
-2. Ensure `swift test` passes in clean state (optionally, run coverage script).
+2. Ensure `SWIFT_DETERMINISTIC_HASHING=1 swift test` passes in clean state (optionally, run coverage script).
 3. Tag a semantic version: `git tag -a vX.Y.Z -m "Release vX.Y.Z" && git push --tags`.
 4. Create a GitHub Release and attach notes.
 5. Update README usage examples if coordinates or API changed.
