@@ -1564,6 +1564,25 @@ struct DecodeTests {
         #expect(decoded["drop"] == nil)
     }
 
+    @Test("decode - preserves explicit nil entries in dense direct-map optional dictionaries during compaction")
+    func testDecode_DirectMapDenseOptionalDictionaryKeepsNil() throws {
+        let input: [String: Any?] = [
+            "dict": [
+                "keep": Optional<String>.some("x"),
+                "nil": Optional<String>.none,
+            ] as [String: String?],
+            "drop": Undefined.instance,
+        ]
+
+        let decoded = try Qs.decode(input)
+        let dict = decoded["dict"] as? [String: Any]
+        #expect(dict?.keys.contains("keep") == true)
+        #expect(dict?["keep"] as? String == "x")
+        #expect(dict?.keys.contains("nil") == true)
+        #expect(dict?["nil"] is NSNull)
+        #expect(decoded["drop"] == nil)
+    }
+
     @Test("decode - AnyHashable key collisions are deterministic (String wins)")
     func testDecode_AnyHashableKeyCollision_StringWins() throws {
         // Different literal orders, same outcome.
