@@ -2031,6 +2031,33 @@ struct UtilsTests {
         #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
     }
 
+    @Test("Utils.estimateSingleKeyChainDepth ignores overflow bookkeeping in AnyHashable dictionaries")
+    func utils_estimateSingleKeyChainDepth_ignoresOverflowMetadata() {
+        let child: [AnyHashable: Any] = [
+            AnyHashable("b"): "end",
+            AnyHashable(Utils.overflowKey): 9,
+        ]
+        let root: [AnyHashable: Any] = [
+            AnyHashable("a"): child,
+            AnyHashable(Utils.overflowKey): 3,
+        ]
+
+        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
+    }
+
+    @Test("Utils.estimateSingleKeyChainDepth ignores overflow bookkeeping in OrderedDictionary chains")
+    func utils_estimateSingleKeyChainDepth_ignoresOverflowMetadataInOrderedDictionary() {
+        var child = OrderedDictionary<AnyHashable, Any>()
+        child[AnyHashable("b")] = "end"
+        child[AnyHashable(Utils.overflowKey)] = 9
+
+        var root = OrderedDictionary<AnyHashable, Any>()
+        root[AnyHashable("a")] = child
+        root[AnyHashable(Utils.overflowKey)] = 3
+
+        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
+    }
+
     @Test("Utils.estimateSingleKeyChainDepth unwraps boxed optional dictionary links")
     func utils_estimateSingleKeyChainDepth_boxedOptionalChain() {
         let level2: [String: Any] = ["c": "end"]
@@ -2232,6 +2259,14 @@ struct UtilsTests {
     func utils_deepBridge_nilAndHashable() {
         let bridgedNil = Utils.deepBridgeToAnyIterative(nil)
         #expect(bridgedNil is NSNull)
+
+        let boxedRoot = Optional<[String: Any]>.some(["leaf": "value"]) as Any
+        let bridgedBoxedRoot = Utils.deepBridgeToAnyIterative(boxedRoot)
+        #expect((bridgedBoxedRoot as? [String: Any])?["leaf"] as? String == "value")
+
+        let boxedNilRoot = Optional<[String: Any]>.none as Any
+        let bridgedBoxedNilRoot = Utils.deepBridgeToAnyIterative(boxedNilRoot)
+        #expect(bridgedBoxedNilRoot is NSNull)
 
         let dict: [AnyHashable: Any] = [
             1: ["nested": NSNull()],
