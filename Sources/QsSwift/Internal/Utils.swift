@@ -252,6 +252,10 @@ internal enum Utils {
         }
     }
 
+    private struct SingleLogicalEntry {
+        let value: Any?
+    }
+
     @inline(__always)
     private static func mergeStringifiedEntry(
         _ keyString: String,
@@ -326,6 +330,77 @@ internal enum Utils {
         }
 
         return state.entries
+    }
+
+    @inline(__always)
+    private static func singleValueIfSingleLogicalEntry<Value>(
+        _ dict: [String: Value]
+    ) -> SingleLogicalEntry? {
+        guard dict.count == 1, let entry = dict.first else { return nil }
+        return SingleLogicalEntry(value: eraseOptionalLike(entry.value))
+    }
+
+    @inline(__always)
+    private static func singleValueIfSingleLogicalEntry<Value>(
+        _ dict: [AnyHashable: Value]
+    ) -> SingleLogicalEntry? {
+        var state = EntryMergeState(capacity: min(dict.count, 2))
+
+        for (keyHash, child) in dict {
+            if Utils.isOverflowKey(keyHash) { continue }
+            mergeStringifiedEntry(
+                String(describing: keyHash),
+                rank: keyHash.base is String ? 2 : 1,
+                value: eraseOptionalLike(child),
+                state: &state
+            )
+            if state.entries.count > 1 { return nil }
+        }
+
+        guard state.entries.count == 1 else { return nil }
+        return SingleLogicalEntry(value: state.entries[0].1)
+    }
+
+    @inline(__always)
+    private static func singleValueIfSingleLogicalEntry(
+        _ dict: NSDictionary
+    ) -> SingleLogicalEntry? {
+        var state = EntryMergeState(capacity: min(dict.count, 2))
+
+        for (rawKey, child) in dict {
+            if let keyHash = rawKey as? AnyHashable, Utils.isOverflowKey(keyHash) { continue }
+            mergeStringifiedEntry(
+                String(describing: rawKey),
+                rank: rawKey is String ? 2 : 1,
+                value: eraseOptionalLike(child),
+                state: &state
+            )
+            if state.entries.count > 1 { return nil }
+        }
+
+        guard state.entries.count == 1 else { return nil }
+        return SingleLogicalEntry(value: state.entries[0].1)
+    }
+
+    @inline(__always)
+    private static func singleValueIfSingleLogicalEntry(
+        _ dict: any QsErasedDictionaryContainer
+    ) -> SingleLogicalEntry? {
+        var state = EntryMergeState(capacity: min(dict._qsCount, 2))
+
+        dict._qsForEachEntry { keyHash, child in
+            guard state.entries.count <= 1 else { return }
+            if Utils.isOverflowKey(keyHash) { return }
+            mergeStringifiedEntry(
+                String(describing: keyHash),
+                rank: keyHash.base is String ? 2 : 1,
+                value: eraseOptionalLike(child),
+                state: &state
+            )
+        }
+
+        guard state.entries.count == 1 else { return nil }
+        return SingleLogicalEntry(value: state.entries[0].1)
     }
 
     @inline(__always)
@@ -589,7 +664,7 @@ internal enum Utils {
         while let task = stack.popLast() {
             switch task {
             case .build(let node, let assign):
-                guard let node else {
+                guard let node = Utils.eraseOptionalLike(node) else {
                     assign(NSNull())
                     continue
                 }
@@ -742,23 +817,23 @@ internal enum Utils {
 
             switch exactContainer(currentValue) {
             case .stringOptional(let dict):
-                guard dict.count == 1, let entry = dict.first else { return depth }
-                current = eraseOptionalLike(entry.value)
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
             case .stringAny(let dict):
-                guard dict.count == 1, let next = dict.first?.value else { return depth }
-                current = eraseOptionalLike(next)
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
             case .anyHashableOptional(let dict):
-                guard dict.count == 1, let entry = dict.first else { return depth }
-                current = eraseOptionalLike(entry.value)
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
             case .anyHashableAny(let dict):
-                guard dict.count == 1, let next = dict.first?.value else { return depth }
-                current = eraseOptionalLike(next)
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
             case .foundationDictionary(let dict):
-                guard dict.count == 1, let next = dict.objectEnumerator().nextObject() else { return depth }
-                current = eraseOptionalLike(next)
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
             case .genericDictionary(let dict):
-                guard dict._qsCount == 1, let entry = dict._qsFirstEntry() else { return depth }
-                current = eraseOptionalLike(entry.value)
+                guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
+                current = eraseOptionalLike(next.value)
             case .arrayAny, .arrayOptional, .foundationArray, .genericArray, nil:
                 return depth
             }
