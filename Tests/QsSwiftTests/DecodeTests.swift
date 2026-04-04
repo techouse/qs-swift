@@ -1535,6 +1535,21 @@ struct DecodeTests {
         #expect(anyMap["b"] as? Int == 2)
     }
 
+    @Test("decode - preserves explicit nil elements in dense direct-map optional arrays during compaction")
+    func testDecode_DirectMapDenseOptionalArrayKeepsNil() throws {
+        let input: [String: Any?] = [
+            "list": [Optional<String>.none, Optional<String>.some("x")] as [String?],
+            "drop": Undefined.instance,
+        ]
+
+        let decoded = try Qs.decode(input)
+        let list = decoded["list"] as? [Any]
+        #expect(list?.count == 2)
+        #expect(list?.first is NSNull)
+        #expect(list?.last as? String == "x")
+        #expect(decoded["drop"] == nil)
+    }
+
     @Test("decode - AnyHashable key collisions are deterministic (String wins)")
     func testDecode_AnyHashableKeyCollision_StringWins() throws {
         // Different literal orders, same outcome.
