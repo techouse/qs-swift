@@ -58,12 +58,17 @@ extension Utils {
             let box = DictBox(entries.count)
             stack.append(.commitDict(box, foundationID, assign))
             for (key, child) in entries.reversed() {
+                let value = Utils.eraseOptionalLike(child)
+                if value is Undefined { continue }
+                if value == nil {
+                    box.dict.updateValue(nil, forKey: key)
+                    continue
+                }
                 stack.append(
                     .build(
-                        node: child,
+                        node: value,
                         assign: { value in
-                            guard let value else { return }
-                            box.dict[key] = value
+                            box.dict.updateValue(value, forKey: key)
                         }))
             }
         }
