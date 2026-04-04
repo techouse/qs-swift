@@ -2413,6 +2413,8 @@ struct UtilsTests {
 
         let bridged = Utils.deepBridgeToAnyIterative(ordered)
         if let dict = bridged as? [String: Any] {
+            // This is intentionally implementation-sensitive: it guards against reversing
+            // OrderedDictionary scheduling in deepBridgeToAnyIterative when hashing is deterministic.
             #expect(Array(dict.keys) == ["first", "2", "third"])
             #expect(dict["2"] as? String == "two")
         } else {
