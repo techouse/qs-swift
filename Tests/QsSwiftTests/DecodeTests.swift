@@ -1206,9 +1206,13 @@ struct DecodeTests {
         do {
             let r = try Qs.decode("a[1][b][2][c]=1", options: DecodeOptions(listLimit: 20))
             let a = arrayElements(r["a"])
-            let level1 = a.flatMap { asDictString($0[0]) }
+            let level1 = a.flatMap { elements in
+                elements.first.flatMap(asDictString)
+            }
             let bArr = arrayElements(level1?["b"])
-            let firstMap = bArr.flatMap { asDictString($0[0]) }
+            let firstMap = bArr.flatMap { elements in
+                elements.first.flatMap(asDictString)
+            }
             #expect((firstMap?["c"] as? String) == "1")
         }
 
@@ -1216,9 +1220,15 @@ struct DecodeTests {
         do {
             let r = try Qs.decode("a[1][2][3][c]=1", options: DecodeOptions(listLimit: 20))
             let a = arrayElements(r["a"])
-            let l1 = a.flatMap { arrayElements($0[0]) }
-            let l2 = l1.flatMap { arrayElements($0[0]) }
-            let l3 = l2.flatMap { asDictString($0[0]) }
+            let l1 = a.flatMap { elements in
+                elements.first.flatMap(arrayElements)
+            }
+            let l2 = l1.flatMap { elements in
+                elements.first.flatMap(arrayElements)
+            }
+            let l3 = l2.flatMap { elements in
+                elements.first.flatMap(asDictString)
+            }
             #expect((l3?["c"] as? String) == "1")
         }
 
@@ -1226,9 +1236,15 @@ struct DecodeTests {
         do {
             let r = try Qs.decode("a[1][2][3][c][1]=1", options: DecodeOptions(listLimit: 20))
             let a = arrayElements(r["a"])
-            let l1 = a.flatMap { arrayElements($0[0]) }
-            let l2 = l1.flatMap { arrayElements($0[0]) }
-            let l3 = l2.flatMap { asDictString($0[0]) }
+            let l1 = a.flatMap { elements in
+                elements.first.flatMap(arrayElements)
+            }
+            let l2 = l1.flatMap { elements in
+                elements.first.flatMap(arrayElements)
+            }
+            let l3 = l2.flatMap { elements in
+                elements.first.flatMap(asDictString)
+            }
             #expect(asStrings(l3?["c"]) == ["1"])
         }
     }
