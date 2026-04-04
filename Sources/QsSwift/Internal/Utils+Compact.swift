@@ -22,98 +22,157 @@ extension Utils {
         _ root: inout [String: Any?],
         allowSparseLists: Bool = false
     ) -> [String: Any?] {
+        final class DictBox {
+            var dict: [String: Any?]
+            init(_ capacity: Int) {
+                self.dict = [:]
+                self.dict.reserveCapacity(capacity)
+            }
+        }
+        final class ArrayBox {
+            var arr: [Any]
+            init(_ capacity: Int) {
+                self.arr = []
+                self.arr.reserveCapacity(capacity)
+            }
+        }
+
+        typealias Assign = (Any?) -> Void
+        enum Task {
+            case build(node: Any?, assign: Assign)
+            case commitDict(DictBox, ObjectIdentifier?, Assign)
+            case commitArray(ArrayBox, ObjectIdentifier?, Assign)
+        }
+
         var activeFoundationContainers: Set<ObjectIdentifier> = []
+        var result: Any?
+        var stack: [Task] = [.build(node: root, assign: { result = $0 })]
 
         @inline(__always)
-        func compactEntries(
+        func scheduleEntries(
             _ entries: [(String, Any?)],
-            allowSparse: Bool
-        ) -> [String: Any?] {
-            var out: [String: Any?] = [:]
-            out.reserveCapacity(entries.count)
-            for (key, rawValue) in entries {
-                if let compacted = compactValue(rawValue, allowSparse: allowSparse) {
-                    out[key] = compacted
-                }
+            foundationID: ObjectIdentifier?,
+            assign: @escaping Assign
+        ) {
+            let box = DictBox(entries.count)
+            stack.append(.commitDict(box, foundationID, assign))
+            for (key, child) in entries.reversed() {
+                stack.append(
+                    .build(
+                        node: child,
+                        assign: { value in
+                            guard let value else { return }
+                            box.dict[key] = value
+                        }))
             }
-            return out
         }
 
         @inline(__always)
-        func compactElements(
+        func scheduleArray(
             count: Int,
-            allowSparse: Bool,
-            _ visit: (@escaping (Any?) -> Void) -> Void
-        ) -> [Any] {
-            var out: [Any] = []
-            out.reserveCapacity(count)
-            visit { rawElement in
+            foundationID: ObjectIdentifier?,
+            assign: @escaping Assign,
+            visit: (@escaping (Any?) -> Void) -> Void
+        ) {
+            let box = ArrayBox(count)
+            stack.append(.commitArray(box, foundationID, assign))
+
+            var elements: [Any?] = []
+            elements.reserveCapacity(count)
+            visit { elements.append($0) }
+
+            for rawElement in elements.reversed() {
                 let element = Utils.eraseOptionalElement(rawElement)
                 if element is Undefined {
-                    if allowSparse { out.append(NSNull()) }
-                    return
+                    if allowSparseLists {
+                        stack.append(
+                            .build(
+                                node: NSNull(),
+                                assign: { value in
+                                    guard let value else { return }
+                                    box.arr.append(value)
+                                }))
+                    }
+                    continue
                 }
                 guard let element else {
-                    out.append(NSNull())
-                    return
+                    if allowSparseLists {
+                        stack.append(
+                            .build(
+                                node: NSNull(),
+                                assign: { value in
+                                    guard let value else { return }
+                                    box.arr.append(value)
+                                }))
+                    }
+                    continue
                 }
-                if let compacted = compactValue(element, allowSparse: allowSparse) {
-                    out.append(compacted)
-                }
+                stack.append(
+                    .build(
+                        node: element,
+                        assign: { value in
+                            guard let value else { return }
+                            box.arr.append(value)
+                        }))
             }
-            return out
         }
 
-        @inline(__always)
-        func compactValue(_ rawValue: Any?, allowSparse: Bool) -> Any? {
-            let value = Utils.eraseOptionalLike(rawValue)
-
-            // Drop Undefined entirely
-            if value is Undefined { return nil }
-            guard let value else { return nil }
-
-            let foundationID = Utils.foundationContainerID(value)
-            if let foundationID {
-                guard activeFoundationContainers.insert(foundationID).inserted else {
-                    return NSNull()
+        while let task = stack.popLast() {
+            switch task {
+            case .build(let rawNode, let assign):
+                let node = Utils.eraseOptionalLike(rawNode)
+                if node is Undefined {
+                    assign(nil)
+                    continue
                 }
-            }
-            defer {
+                guard let node else {
+                    assign(nil)
+                    continue
+                }
+
+                let foundationID = Utils.foundationContainerID(node)
+                if let foundationID {
+                    guard activeFoundationContainers.insert(foundationID).inserted else {
+                        assign(NSNull())
+                        continue
+                    }
+                }
+
+                if Utils.withExactStringifiedEntries(
+                    node,
+                    { entries in
+                        scheduleEntries(entries, foundationID: foundationID, assign: assign)
+                    }) != nil
+                {
+                    continue
+                }
+
+                if Utils.withExactArrayElements(
+                    node,
+                    { count, visit in
+                        scheduleArray(count: count, foundationID: foundationID, assign: assign, visit: visit)
+                    }) != nil
+                {
+                    continue
+                }
+
+                assign(node)
+
+            case .commitDict(let box, let foundationID, let assign):
                 if let foundationID {
                     activeFoundationContainers.remove(foundationID)
                 }
-            }
+                assign(box.dict)
 
-            if let compacted = Utils.withExactStringifiedEntries(
-                value,
-                { entries in
-                    compactEntries(entries, allowSparse: allowSparse)
-                })
-            {
-                return compacted
-            }
-
-            if let compacted = Utils.withExactArrayElements(
-                value,
-                { count, visit in
-                    compactElements(count: count, allowSparse: allowSparse, visit)
-                })
-            {
-                return compacted
-            }
-
-            // Primitive (String/Number/Bool/Date/URL/NSNull/etc)
-            return value
-        }
-
-        var newRoot: [String: Any?] = [:]
-        newRoot.reserveCapacity(root.count)
-        for (key, value) in root {
-            if let cv = compactValue(value, allowSparse: allowSparseLists) {
-                newRoot[key] = cv
+            case .commitArray(let box, let foundationID, let assign):
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                }
+                assign(box.arr)
             }
         }
-        root = newRoot
+
+        root = result as? [String: Any?] ?? [:]
         return root
     }
 
@@ -124,88 +183,144 @@ extension Utils {
         _ root: [String: Any?],
         allowSparseLists: Bool
     ) -> [String: Any] {
-        var activeFoundationContainers: Set<ObjectIdentifier> = []
-
-        func normalizeEntries(_ entries: [(String, Any?)]) -> [String: Any] {
-            var out: [String: Any] = [:]
-            out.reserveCapacity(entries.count)
-            for (key, child) in entries {
-                guard let normalized = normalizeValue(child) else { continue }
-                out[key] = normalized
+        final class DictBox {
+            var dict: [String: Any]
+            init(_ capacity: Int) {
+                self.dict = [:]
+                self.dict.reserveCapacity(capacity)
             }
-            return out
+        }
+        final class ArrayBox {
+            var arr: [Any]
+            init(_ capacity: Int) {
+                self.arr = []
+                self.arr.reserveCapacity(capacity)
+            }
         }
 
-        func normalizeArray(
-            count: Int,
-            _ visit: (@escaping (Any?) -> Void) -> Void
-        ) -> [Any] {
-            var out: [Any] = []
-            out.reserveCapacity(count)
+        typealias Assign = (Any?) -> Void
+        enum Task {
+            case build(node: Any?, assign: Assign)
+            case commitDict(DictBox, ObjectIdentifier?, Assign)
+            case commitArray(ArrayBox, ObjectIdentifier?, Assign)
+        }
 
-            visit { rawElement in
+        var activeFoundationContainers: Set<ObjectIdentifier> = []
+        var result: Any?
+        var stack: [Task] = [.build(node: root, assign: { result = $0 })]
+
+        @inline(__always)
+        func scheduleEntries(
+            _ entries: [(String, Any?)],
+            foundationID: ObjectIdentifier?,
+            assign: @escaping Assign
+        ) {
+            let box = DictBox(entries.count)
+            stack.append(.commitDict(box, foundationID, assign))
+            for (key, child) in entries.reversed() {
+                stack.append(
+                    .build(
+                        node: child,
+                        assign: { value in
+                            guard let value else { return }
+                            box.dict[key] = value
+                        }))
+            }
+        }
+
+        @inline(__always)
+        func scheduleArray(
+            count: Int,
+            foundationID: ObjectIdentifier?,
+            assign: @escaping Assign,
+            visit: (@escaping (Any?) -> Void) -> Void
+        ) {
+            let box = ArrayBox(count)
+            stack.append(.commitArray(box, foundationID, assign))
+
+            var elements: [Any?] = []
+            elements.reserveCapacity(count)
+            visit { elements.append($0) }
+
+            for rawElement in elements.reversed() {
                 let element = Utils.eraseOptionalElement(rawElement)
                 if element is Undefined {
-                    if allowSparseLists { out.append(NSNull()) }
-                    return
+                    if allowSparseLists {
+                        stack.append(
+                            .build(
+                                node: NSNull(),
+                                assign: { value in
+                                    guard let value else { return }
+                                    box.arr.append(value)
+                                }))
+                    }
+                    continue
                 }
-
-                guard let normalized = normalizeValue(element) else { return }
-                out.append(normalized)
+                stack.append(
+                    .build(
+                        node: element,
+                        assign: { value in
+                            guard let value else { return }
+                            box.arr.append(value)
+                        }))
             }
-            return out
         }
 
-        func normalizeValue(_ rawValue: Any?) -> Any? {
-            let value = Utils.eraseOptionalLike(rawValue)
+        while let task = stack.popLast() {
+            switch task {
+            case .build(let rawNode, let assign):
+                let node = Utils.eraseOptionalLike(rawNode)
+                if node is Undefined {
+                    assign(nil)
+                    continue
+                }
+                guard let node else {
+                    assign(NSNull())
+                    continue
+                }
 
-            switch value {
-            case is Undefined:
-                return nil
-            case let value?:
-                let foundationID = Utils.foundationContainerID(value)
+                let foundationID = Utils.foundationContainerID(node)
                 if let foundationID {
                     guard activeFoundationContainers.insert(foundationID).inserted else {
-                        return NSNull()
-                    }
-                }
-                defer {
-                    if let foundationID {
-                        activeFoundationContainers.remove(foundationID)
+                        assign(NSNull())
+                        continue
                     }
                 }
 
-                if let normalized = Utils.withExactStringifiedEntries(
-                    value,
+                if Utils.withExactStringifiedEntries(
+                    node,
                     { entries in
-                        normalizeEntries(entries)
-                    })
+                        scheduleEntries(entries, foundationID: foundationID, assign: assign)
+                    }) != nil
                 {
-                    return normalized
+                    continue
                 }
 
-                if let normalized = Utils.withExactArrayElements(
-                    value,
+                if Utils.withExactArrayElements(
+                    node,
                     { count, visit in
-                        normalizeArray(count: count, visit)
-                    })
+                        scheduleArray(count: count, foundationID: foundationID, assign: assign, visit: visit)
+                    }) != nil
                 {
-                    return normalized
+                    continue
                 }
 
-                return value
-            case .none:
-                return NSNull()
+                assign(node)
+
+            case .commitDict(let box, let foundationID, let assign):
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                }
+                assign(box.dict)
+
+            case .commitArray(let box, let foundationID, let assign):
+                if let foundationID {
+                    activeFoundationContainers.remove(foundationID)
+                }
+                assign(box.arr)
             }
         }
 
-        var out: [String: Any] = [:]
-        out.reserveCapacity(root.count)
-
-        for (key, value) in root {
-            guard let normalized = normalizeValue(value) else { continue }
-            out[key] = normalized
-        }
-        return out
+        return result as? [String: Any] ?? [:]
     }
 }
