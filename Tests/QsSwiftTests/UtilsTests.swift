@@ -1698,24 +1698,28 @@ struct UtilsTests {
 
         let sparse = Utils.compactToAny(input, allowSparseLists: true)
         if let list = sparse["list"] as? [Any] {
-            let foundationDict = list[0] as? [String: Any]
+            #expect(list.count == 3)
+
+            let foundationDict = list.first as? [String: Any]
             #expect(foundationDict?["1"] as? String == "x")
             #expect(foundationDict?["drop"] == nil)
 
-            let hashableDict = list[1] as? [String: Any]
+            let hashableDict = list.dropFirst().first as? [String: Any]
             #expect(hashableDict?["2"] as? String == "y")
 
-            let foundationArray = list[2] as? [Any]
+            let foundationArray = list.dropFirst(2).first as? [Any]
             #expect(foundationArray?.count == 2)
             #expect(foundationArray?.first is NSNull)
-            #expect(foundationArray?[1] as? String == "z")
+            #expect(foundationArray?.dropFirst().first as? String == "z")
         } else {
             Issue.record("Expected normalized list from compactToAny")
         }
 
         let dense = Utils.compactToAny(input, allowSparseLists: false)
         if let list = dense["list"] as? [Any] {
-            let foundationArray = list[2] as? [Any]
+            #expect(list.count == 3)
+
+            let foundationArray = list.dropFirst(2).first as? [Any]
             #expect(foundationArray?.count == 1)
             #expect(foundationArray?.first as? String == "z")
         } else {
