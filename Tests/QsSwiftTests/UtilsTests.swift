@@ -1783,6 +1783,75 @@ struct UtilsTests {
         expectDeepNormalizedShape(compactedAny["foundation"], label: "compactToAny foundation")
     }
 
+    @Test("Utils.compact and compactToAny handle deep typed and Foundation chains")
+    func utils_compact_deepExactContainerChains() {
+        let depth = Qs.MAIN_DROP_THRESHOLD + 50
+        let undefined = Undefined.instance
+
+        func buildTypedChain(depth: Int, leaf: Any) -> Any {
+            var current: Any = leaf
+            for _ in 0..<depth {
+                current = [1: current] as [Int: Any]
+            }
+            return current
+        }
+
+        func buildFoundationChain(depth: Int, leaf: Any) -> Any {
+            var current: Any = leaf
+            for _ in 0..<depth {
+                current = NSDictionary(dictionary: [1: current])
+            }
+            return current
+        }
+
+        func descendStringifiedChain(_ value: Any?, depth: Int) -> [String: Any]? {
+            var current = value
+            for _ in 0..<depth {
+                current = anyDict(current)?["1"]
+            }
+            return anyDict(current)
+        }
+
+        let typedChain = buildTypedChain(
+            depth: depth,
+            leaf: ["keep": "typed", "drop": undefined] as [String: Any?]
+        )
+        let foundationChain = buildFoundationChain(
+            depth: depth,
+            leaf: NSDictionary(dictionary: ["keep": "foundation", "drop": undefined])
+        )
+
+        var compactRoot: [String: Any?] = [
+            "typed": typedChain,
+            "foundation": foundationChain,
+        ]
+        let compacted = Utils.compact(&compactRoot, allowSparseLists: false)
+
+        let compactedTypedLeaf = descendStringifiedChain(compacted["typed"] ?? nil, depth: depth)
+        #expect(compactedTypedLeaf?["keep"] as? String == "typed")
+        #expect(compactedTypedLeaf?["drop"] == nil)
+
+        let compactedFoundationLeaf = descendStringifiedChain(compacted["foundation"] ?? nil, depth: depth)
+        #expect(compactedFoundationLeaf?["keep"] as? String == "foundation")
+        #expect(compactedFoundationLeaf?["drop"] == nil)
+
+        let compactedAny = Utils.compactToAny(
+            [
+                "typed": typedChain,
+                "foundation": foundationChain,
+            ],
+            allowSparseLists: false
+        )
+
+        let compactedAnyTypedLeaf = descendStringifiedChain(compactedAny["typed"], depth: depth)
+        #expect(compactedAnyTypedLeaf?["keep"] as? String == "typed")
+        #expect(compactedAnyTypedLeaf?["drop"] == nil)
+
+        let compactedAnyFoundationLeaf = descendStringifiedChain(compactedAny["foundation"], depth: depth)
+        #expect(compactedAnyFoundationLeaf?["keep"] as? String == "foundation")
+        #expect(compactedAnyFoundationLeaf?["drop"] == nil)
+    }
+
     @Test("Utils.compact and compactToAny tolerate Foundation self-cycles")
     func utils_compact_foundationSelfCycles() throws {
         #if os(Linux)
