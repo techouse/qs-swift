@@ -1752,22 +1752,46 @@ struct UtilsTests {
                 return
             }
 
-            #expect(array.count == 2)
+            guard array.count == 2 else {
+                Issue.record("Expected 2 elements for \(label), got \(array.count)")
+                return
+            }
 
-            let first = anyDict(array[0])
-            let firstInner = anyArray(first?["1"])
-            #expect(firstInner?.count == 2)
-            #expect(firstInner?.first is NSNull)
-            #expect(firstInner?[1] as? String == "x")
+            guard let first = anyDict(array.first) else {
+                Issue.record("Expected first dictionary for \(label)")
+                return
+            }
+            guard let firstInner = anyArray(first["1"]) else {
+                Issue.record("Expected first inner array for \(label)")
+                return
+            }
+            guard firstInner.count == 2 else {
+                Issue.record("Expected first inner array count 2 for \(label), got \(firstInner.count)")
+                return
+            }
+            #expect(firstInner.first is NSNull)
+            #expect(firstInner.dropFirst().first as? String == "x")
 
-            let second = anyDict(array[1])
-            let secondInner = anyArray(second?["inner"])
-            #expect(secondInner?.count == 3)
-            #expect(secondInner?.first is NSNull)
-            let deepDict = anyDict(secondInner?[1])
-            #expect(deepDict?["deep"] == nil)
-            #expect(deepDict?["keep"] as? String == "leaf")
-            #expect(secondInner?[2] is NSNull)
+            guard let second = anyDict(array.dropFirst().first) else {
+                Issue.record("Expected second dictionary for \(label)")
+                return
+            }
+            guard let secondInner = anyArray(second["inner"]) else {
+                Issue.record("Expected second inner array for \(label)")
+                return
+            }
+            guard secondInner.count == 3 else {
+                Issue.record("Expected second inner array count 3 for \(label), got \(secondInner.count)")
+                return
+            }
+            #expect(secondInner.first is NSNull)
+            guard let deepDict = anyDict(secondInner.dropFirst().first) else {
+                Issue.record("Expected deep dictionary for \(label)")
+                return
+            }
+            #expect(deepDict["deep"] == nil)
+            #expect(deepDict["keep"] as? String == "leaf")
+            #expect(secondInner.dropFirst(2).first is NSNull)
         }
 
         var compactRoot: [String: Any?] = [
