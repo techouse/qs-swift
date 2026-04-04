@@ -1206,46 +1206,70 @@ struct DecodeTests {
         do {
             let r = try Qs.decode("a[1][b][2][c]=1", options: DecodeOptions(listLimit: 20))
             let a = arrayElements(r["a"])
-            let level1 = a.flatMap { elements in
-                elements.first.flatMap(asDictString)
+            #expect(a?.count == 1)
+
+            if let level1 = a?.first.flatMap(asDictString) {
+                let bArr = arrayElements(level1["b"])
+                #expect(bArr?.count == 1)
+
+                if let firstMap = bArr?.first.flatMap(asDictString) {
+                    #expect((firstMap["c"] as? String) == "1")
+                } else {
+                    Issue.record("Expected nested map at a[0].b[0]")
+                }
+            } else {
+                Issue.record("Expected dictionary at a[0]")
             }
-            let bArr = arrayElements(level1?["b"])
-            let firstMap = bArr.flatMap { elements in
-                elements.first.flatMap(asDictString)
-            }
-            #expect((firstMap?["c"] as? String) == "1")
         }
 
         // a[1][2][3][c]=1 -> ["a": [[[ { "c": "1" } ]]]]
         do {
             let r = try Qs.decode("a[1][2][3][c]=1", options: DecodeOptions(listLimit: 20))
             let a = arrayElements(r["a"])
-            let l1 = a.flatMap { elements in
-                elements.first.flatMap(arrayElements)
+            #expect(a?.count == 1)
+
+            if let l1 = a?.first.flatMap(arrayElements) {
+                #expect(l1.count == 1)
+
+                if let l2 = l1.first.flatMap(arrayElements) {
+                    #expect(l2.count == 1)
+
+                    if let l3 = l2.first.flatMap(asDictString) {
+                        #expect((l3["c"] as? String) == "1")
+                    } else {
+                        Issue.record("Expected dictionary at a[0][0][0]")
+                    }
+                } else {
+                    Issue.record("Expected array at a[0][0]")
+                }
+            } else {
+                Issue.record("Expected array at a[0]")
             }
-            let l2 = l1.flatMap { elements in
-                elements.first.flatMap(arrayElements)
-            }
-            let l3 = l2.flatMap { elements in
-                elements.first.flatMap(asDictString)
-            }
-            #expect((l3?["c"] as? String) == "1")
         }
 
         // a[1][2][3][c][1]=1 -> ["a": [[[ { "c": ["1"] } ]]]]
         do {
             let r = try Qs.decode("a[1][2][3][c][1]=1", options: DecodeOptions(listLimit: 20))
             let a = arrayElements(r["a"])
-            let l1 = a.flatMap { elements in
-                elements.first.flatMap(arrayElements)
+            #expect(a?.count == 1)
+
+            if let l1 = a?.first.flatMap(arrayElements) {
+                #expect(l1.count == 1)
+
+                if let l2 = l1.first.flatMap(arrayElements) {
+                    #expect(l2.count == 1)
+
+                    if let l3 = l2.first.flatMap(asDictString) {
+                        #expect(asStrings(l3["c"]) == ["1"])
+                    } else {
+                        Issue.record("Expected dictionary at a[0][0][0]")
+                    }
+                } else {
+                    Issue.record("Expected array at a[0][0]")
+                }
+            } else {
+                Issue.record("Expected array at a[0]")
             }
-            let l2 = l1.flatMap { elements in
-                elements.first.flatMap(arrayElements)
-            }
-            let l3 = l2.flatMap { elements in
-                elements.first.flatMap(asDictString)
-            }
-            #expect(asStrings(l3?["c"]) == ["1"])
         }
     }
 
