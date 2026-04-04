@@ -43,6 +43,7 @@ When implementing a new option or behavior:
 - In this toolchain, do not assume leading-dot tag filters (for example, `.smoke`) are supported by `swift test --filter`; prefer regex filters.
 - Add new fixtures beside similar ones; for end-to-end cases, mutate `EndToEndTestCases.swift` only with `OrderedDictionary`.
 - Prefer explicit assertion helpers over vague equality when validating ordering or null semantics.
+- Order-sensitive regression tests that are explicitly gated on `SWIFT_DETERMINISTIC_HASHING=1` may intentionally assert raw `Dictionary` iteration order; do not weaken them to sorted-key or membership-only checks unless the test is meant to be order-agnostic.
 - For ObjC bridge tests (`QsObjCTests`) use swift-testing; for host-level ObjC E2E tests use `ObjCE2ETests` (XCTest). Ensure key-ordering assertions avoid relying on `NSDictionary` enumeration order unless you explicitly sort first.
 
 ## 7. Bench & Comparison
