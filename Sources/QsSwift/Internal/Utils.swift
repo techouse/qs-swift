@@ -2,6 +2,8 @@
 import Foundation
 import OrderedCollections
 
+// Cheap protocol-based optional erasure used throughout decode hot paths.
+// This lets us unwrap Optional values hidden behind `Any` without paying for Mirror.
 private protocol QsOptionalValue {
     var _qsWrappedAny: Any? { get }
 }
@@ -17,6 +19,9 @@ extension Optional: QsOptionalValue {
     }
 }
 
+// Type-erased traversal hooks for generic Array/Dictionary/OrderedDictionary values.
+// These preserve support for typed Swift containers like `[Int: String]` without falling
+// back to the broad runtime casts that became unsafe on Swift 6.3 for deep graphs.
 private protocol QsErasedDictionaryContainer {
     var _qsCount: Int { get }
     func _qsForEachEntry(_ body: (AnyHashable, Any?) -> Void)
@@ -240,6 +245,9 @@ internal enum Utils {
         return eraseOptionalLike(value)
     }
 
+    // Tracks stringified dictionary entries while resolving collisions such as `1` vs `"1"`.
+    // We keep the first stable insertion slot for a logical key, but allow a higher-ranked
+    // string key to replace the value later.
     private struct EntryMergeState {
         var entries: [(String, Any?)] = []
         var indexByKey: [String: Int] = [:]
@@ -263,6 +271,8 @@ internal enum Utils {
         value: Any?,
         state: inout EntryMergeState
     ) {
+        // Higher rank means "more string-like". This preserves the public collision policy
+        // where real string keys win over non-string keys with the same textual form.
         if let existingIndex = state.indexByKey[keyString] {
             guard let existingRank = state.ranksByKey[keyString], rank >= existingRank else { return }
             state.entries[existingIndex] = (keyString, value)
@@ -409,6 +419,9 @@ internal enum Utils {
 
         @inline(__always)
         func exactCast<T>(_ type: T.Type) -> T? {
+            // `value as? T` alone is too permissive here: it can trigger recursive bridging
+            // between container shapes such as `[String: Any]` and `[String: Any?]`.
+            // Matching the runtime type first keeps traversal classification exact.
             guard valueType == type else { return nil }
             guard let typed = value as? T else {
                 assertionFailure("Exact cast failed for runtime type \(valueType)")
@@ -456,6 +469,9 @@ internal enum Utils {
         _ value: Any,
         _ body: ([(String, Any?)]) -> R
     ) -> R? {
+        // Normalize every dictionary-like input into a single `[(String, Any?)]` view so the
+        // traversal/compaction code can apply one collision policy for Swift, generic, and
+        // Foundation-backed maps.
         switch exactContainer(value) {
         case .stringOptional(let dict):
             var entries: [(String, Any?)] = []
@@ -588,6 +604,8 @@ internal enum Utils {
         ) {
             let box = DictBox(entries.count)
             stack.append(.commitDict(box, foundationID, assign))
+            // The traversal stack is LIFO, so we enqueue children in reverse to preserve the
+            // original logical insertion order in the final dictionary.
             for (key, child) in entries.reversed() {
                 stack.append(.build(node: Utils.eraseOptionalLike(child), assign: { value in box.dict[key] = value }))
             }
@@ -623,6 +641,9 @@ internal enum Utils {
             assign: @escaping Assign
         ) {
             let foundationID = ObjectIdentifier(dict)
+            // Foundation containers can be self-referential. While a node is actively being built,
+            // a recursive reference collapses to `NSNull()`. Once completed, sibling references
+            // can reuse the cached bridged value instead of rebuilding the subtree.
             if let cached = completedFoundationContainers[foundationID] {
                 assign(cached)
                 return
@@ -765,6 +786,8 @@ internal enum Utils {
             if node is Undefined { return true }
             guard let node else { continue }
 
+            // Swift value containers cannot form true retain cycles on their own, but Foundation
+            // collections can, so only the Foundation branches need identity-based cycle guards.
             switch exactContainer(node) {
             case .stringOptional(let dict):
                 stack.reserveCapacity(stack.count + dict.count)
@@ -815,6 +838,8 @@ internal enum Utils {
         while depth < cap {
             guard let currentValue = eraseOptionalLike(current) else { return depth }
 
+            // Follow only the logically single child after overflow-bookkeeping keys and
+            // string/non-string key collisions have been normalized away.
             switch exactContainer(currentValue) {
             case .stringOptional(let dict):
                 guard let next = singleValueIfSingleLogicalEntry(dict) else { return depth }
