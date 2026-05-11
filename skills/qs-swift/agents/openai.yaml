@@ -1,0 +1,4 @@
+interface:
+  display_name: "qs-swift"
+  short_description: "Encode and decode nested Swift query strings"
+  default_prompt: "Use $qs-swift to parse or build a Swift or Objective-C query string with QsSwift."
