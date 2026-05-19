@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  XCODE_VERSION: '26.2'
-  SWIFT_VERSION: '6.2'
+  XCODE_VERSION: '26.4'
+  SWIFT_VERSION: '6.3'
 
 jobs:
   analyze:
@@ -81,6 +81,10 @@ jobs:
           - runner: macos-26
             xcode: '26.2'
             swift: '6.2'
+            experimental: false
+          - runner: macos-26
+            xcode: '26.4'
+            swift: '6.3'
             experimental: false
 
     env:
@@ -342,7 +346,8 @@ jobs:
             experimental: false
           - swift: '6.2'
             experimental: false
-
+          - swift: '6.3'
+            experimental: false
     env:
       SWIFT_VERSION: ${{ matrix.swift }}
 
