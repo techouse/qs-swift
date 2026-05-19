@@ -347,7 +347,7 @@ jobs:
           - swift: '6.2'
             experimental: false
           - swift: '6.3'
-            experimental: false
+            experimental: true
     env:
       SWIFT_VERSION: ${{ matrix.swift }}
 
