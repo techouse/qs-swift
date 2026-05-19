@@ -432,12 +432,18 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: Tools/QsSwiftComparison/js/package-lock.json
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: Tools/QsSwiftComparison/js/package.json
+          run_install: false
+          cache: true
+          cache_dependency_path: Tools/QsSwiftComparison/js/pnpm-lock.yaml
 
       - name: Install qs.js
         working-directory: Tools/QsSwiftComparison/js
-        run: npm ci --no-audit --no-fund
+        run: pnpm install --frozen-lockfile
 
       - name: Show qs.js version
         working-directory: Tools/QsSwiftComparison/js
