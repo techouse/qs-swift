@@ -843,7 +843,7 @@ struct DecodeTests {
             #expect(asStrings(r["a"]) == ["c"])
         }
         do {
-            // listLimit = 0 → only index 0 can arrayify; index 1 stays a map key
+            // listLimit = 0 → all explicit numeric indices stay map keys
             let r = try Qs.decode("a[1]=c", options: DecodeOptions(listLimit: 0))
             let a = asDictString(r["a"])
             #expect((a?["1"] as? String) == "c")
@@ -878,22 +878,31 @@ struct DecodeTests {
     @Test("decode - limits specific list indices to listLimit")
     func testDecode_ListIndexLimit() async throws {
         do {
-            let r = try Qs.decode("a[20]=a", options: DecodeOptions(listLimit: 20))
+            let r = try Qs.decode("a[19]=a", options: DecodeOptions(listLimit: 20))
             #expect(asStrings(r["a"]) == ["a"])
         }
         do {
-            let r = try Qs.decode("a[21]=a", options: DecodeOptions(listLimit: 20))
+            let r = try Qs.decode("a[20]=a", options: DecodeOptions(listLimit: 20))
             let a = asDictString(r["a"])
-            #expect((a?["21"] as? String) == "a")
+            #expect((a?["20"] as? String) == "a")
         }
         do {
             let r = try Qs.decode("a[20]=a")
-            #expect(asStrings(r["a"]) == ["a"])
+            let a = asDictString(r["a"])
+            #expect((a?["20"] as? String) == "a")
         }
         do {
             let r = try Qs.decode("a[21]=a")
             let a = asDictString(r["a"])
             #expect((a?["21"] as? String) == "a")
+        }
+        do {
+            #expect(throws: DecodeError.listLimitExceeded(limit: 20)) {
+                _ = try Qs.decode(
+                    "a[20]=a",
+                    options: DecodeOptions(listLimit: 20, throwOnLimitExceeded: true)
+                )
+            }
         }
     }
 
@@ -1383,7 +1392,8 @@ struct DecodeTests {
         }
         do {
             let r = try Qs.decode("a[0]=b", options: DecodeOptions(listLimit: 0))
-            #expect(asStrings(r["a"]) == ["b"])
+            let a = r["a"] as? [String: Any]
+            #expect((a?["0"] as? String) == "b")
         }
         do {
             let r = try Qs.decode("a[-1]=b", options: DecodeOptions(listLimit: -1))
@@ -2504,6 +2514,86 @@ struct DuplicatesTests {
         let r = try Qs.decode("foo=bar&foo=baz", options: .init(duplicates: .last))
         #expect(r["foo"] as? String == "baz")
     }
+
+    @Test("duplicates: [] notation always combines")
+    func dupBracketNotationAlwaysCombines() throws {
+        let first = try Qs.decode("foo[]=bar&foo[]=baz", options: .init(duplicates: .first))
+        #expect(first["foo"] as? [String] == ["bar", "baz"])
+
+        let last = try Qs.decode("foo[]=bar&foo[]=baz", options: .init(duplicates: .last))
+        #expect(last["foo"] as? [String] == ["bar", "baz"])
+    }
+}
+
+// MARK: - qs 6.15.2 parse parity
+
+@Suite("qs 6.15.2 parse parity")
+struct Qs6152DecodeParityTests {
+    @Test("strictMerge wraps object/scalar conflicts by default and keeps legacy escape hatch")
+    func strictMergeObjectScalarConflict() throws {
+        let r = try Qs.decode("a[b]=c&a=d")
+        let a = r["a"] as? [Any]
+        let first = a?.first as? [String: Any]
+        #expect(first?["b"] as? String == "c")
+        #expect(a?[1] as? String == "d")
+
+        let legacy = try Qs.decode("a[b]=c&a=d", options: .init(strictMerge: false))
+        let legacyA = legacy["a"] as? [String: Any]
+        #expect(legacyA?["b"] as? String == "c")
+        #expect(legacyA?["d"] as? Bool == true)
+    }
+
+    @Test("empty scalar object conflicts are ignored")
+    func emptyScalarObjectConflictsAreIgnored() throws {
+        let empty = try Qs.decode("a[b]=c&a=")
+        #expect((empty["a"] as? [String: Any])?["b"] as? String == "c")
+
+        let strictNull = try Qs.decode("a[b]=c&a", options: .init(strictNullHandling: true))
+        #expect((strictNull["a"] as? [String: Any])?["b"] as? String == "c")
+    }
+
+    @Test("allowDots is normalized before depth zero")
+    func allowDotsDepthZeroNormalizesKey() throws {
+        let r = try Qs.decode("a.b=c", options: .init(allowDots: true, depth: 0))
+        #expect(r["a[b]"] as? String == "c")
+    }
+
+    @Test("nested and literal bracket groups remain key content")
+    func nestedLiteralBracketGroups() throws {
+        let search = try Qs.decode("search[withbracket[]]=foobar")
+        #expect((search["search"] as? [String: Any])?["withbracket[]"] as? String == "foobar")
+
+        let nested = try Qs.decode("a[b[c[]]]=d")
+        #expect((nested["a"] as? [String: Any])?["b[c[]]"] as? String == "d")
+
+        let list = try Qs.decode("list[][x[]]=y")
+        let first = (list["list"] as? [Any])?.first as? [String: Any]
+        #expect(first?["x[]"] as? String == "y")
+
+        let unterminated = try Qs.decode("a[[]b=c")
+        #expect((unterminated["a"] as? [String: Any])?["[[]b"] as? String == "c")
+    }
+
+    @Test("percent-encoded bracket text is not treated as structure after one decode")
+    func encodedBracketRegressions() throws {
+        let top = try Qs.decode("a%25255Bb=c")
+        #expect(top["a%255Bb"] as? String == "c")
+
+        let nested = try Qs.decode("a%5Bb%25255Bc%5D=d")
+        #expect((nested["a"] as? [String: Any])?["b%255Bc"] as? String == "d")
+    }
+
+    @Test("custom key decoder nil skips the pair in the full parser")
+    func customKeyDecoderNilSkipsPair() throws {
+        let options = DecodeOptions(decoder: { value, _, kind in
+            if kind == .key, value == "drop" { return nil }
+            return value
+        })
+
+        let r = try Qs.decode("drop=x&keep=y", options: options)
+        #expect(r["drop"] == nil)
+        #expect(r["keep"] as? String == "y")
+    }
 }
 
 // MARK: - strictDepth option
@@ -3029,22 +3119,22 @@ extension DecodeTests {
         let optDefault = DecodeOptions()  // listLimit = 20
         let opt20 = DecodeOptions(listLimit: 20)
 
-        // index == listLimit ⇒ still an array (compacted to one element)
-        var r = try Qs.decode("a[20]=a", options: opt20)
+        // highest valid index is listLimit - 1
+        var r = try Qs.decode("a[19]=a", options: opt20)
         #expect((r["a"] as? [Any])?.count == 1)
         #expect((r["a"] as? [Any])?.first as? String == "a")
 
-        // index > listLimit ⇒ becomes a map keyed by the index
-        r = try Qs.decode("a[21]=a", options: opt20)
-        #expect(((r["a"] as? [String: Any])?["21"] as? String) == "a")
+        // index == listLimit ⇒ becomes a map keyed by the index
+        r = try Qs.decode("a[20]=a", options: opt20)
+        #expect(((r["a"] as? [String: Any])?["20"] as? String) == "a")
 
         // Same expectations with default options (listLimit defaults to 20)
-        r = try Qs.decode("a[20]=a", options: optDefault)
+        r = try Qs.decode("a[19]=a", options: optDefault)
         #expect((r["a"] as? [Any])?.count == 1)
         #expect((r["a"] as? [Any])?.first as? String == "a")
 
-        r = try Qs.decode("a[21]=a", options: optDefault)
-        #expect(((r["a"] as? [String: Any])?["21"] as? String) == "a")
+        r = try Qs.decode("a[20]=a", options: optDefault)
+        #expect(((r["a"] as? [String: Any])?["20"] as? String) == "a")
     }
 
     // MARK: numeric-leading keys
@@ -3621,9 +3711,15 @@ extension DecodeTests {
     @Test("parse: add keys to objects")
     func parse_addKeys() throws {
         let r = try Qs.decode("a[b]=c&a=d")
-        let a = r["a"] as? [String: Any]
-        #expect(a?["b"] as? String == "c")
-        #expect(a?["d"] as? Bool == true)
+        let a = r["a"] as? [Any]
+        let first = a?.first as? [String: Any]
+        #expect(first?["b"] as? String == "c")
+        #expect(a?[1] as? String == "d")
+
+        let legacy = try Qs.decode("a[b]=c&a=d", options: .init(strictMerge: false))
+        let legacyA = legacy["a"] as? [String: Any]
+        #expect(legacyA?["b"] as? String == "c")
+        #expect(legacyA?["d"] as? Bool == true)
     }
 
     // MARK: custom encoding (Shift_JIS)
@@ -4110,10 +4206,10 @@ struct EncodedDotKeyBehaviorTests {
         #expect((a?["b"] as? String) == "")
     }
 
-    @Test("depth=0 with allowDots=true: do not split key")
+    @Test("depth=0 with allowDots=true: normalize dots without bracket splitting")
     func depthZero_disablesTopLevelDotSplitting() throws {
         let r = try Qs.decode("a.b=c", options: .init(allowDots: true, depth: 0))
-        #expect(r["a.b"] as? String == "c")
+        #expect(r["a[b]"] as? String == "c")
     }
 
     @Test("top-level dot→bracket conversion guardrails: leading/trailing/double dots")
@@ -4361,7 +4457,7 @@ struct RemainderWrappingStrictDepthTests {
         #expect(didThrow)
     }
 
-    @Test("depth=0: never split; return the original key as a single segment")
+    @Test("depth=0: normalize dots but never split brackets")
     func depthZero_neverSplit() throws {
         var segs = try QsSwift.Decoder.splitKeyIntoSegments(
             originalKey: "a.b.c",
@@ -4369,7 +4465,7 @@ struct RemainderWrappingStrictDepthTests {
             maxDepth: 0,
             strictDepth: false
         )
-        #expect(segs == ["a.b.c"])  // depth=0: never split
+        #expect(segs == ["a[b][c]"])  // depth=0: dot-normalized but not split
 
         segs = try QsSwift.Decoder.splitKeyIntoSegments(
             originalKey: "a[b][c]",

@@ -185,10 +185,12 @@ d.duplicates = QsDuplicatesCombine;    // combine | first | last
 // Limits and strictness
 
 d.parameterLimit = 1000;                // must be > 0 (defensive cap on number of pairs)
-d.listLimit      = 20;                  // max *index* to materialize as array; 0 ⇒ use a map for all indices
+d.listLimit      = 20;                  // max array element count; index 20+ falls back to a map
 d.depth          = 5;                   // maximum bracket nesting (≥ 0)
 
 d.strictDepth          = NO;            // YES: throw when over depth; NO (default): collapse the remainder into a literal key
+
+d.strictMerge          = YES;           // YES: qs-compatible object/scalar conflicts wrap into arrays
 
 d.strictNullHandling   = NO;            // if YES, keys with no value → NSNull instead of ""
 

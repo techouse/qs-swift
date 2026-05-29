@@ -352,6 +352,20 @@
             #expect(first?["b"] as? String == "c")
         }
 
+        @Test("objc-decode: strictMerge default and legacy mode")
+        func strictMergeDefaultAndLegacyMode() throws {
+            let strict = decode("a[b]=c&a=d")
+            let strictA = strict["a"] as? [Any]
+            let first = strictA?.first as? NSDictionary
+            #expect(first?["b"] as? String == "c")
+            #expect(strictA?[1] as? String == "d")
+
+            let legacy = decode("a[b]=c&a=d") { o in o.strictMerge = false }
+            let legacyA = legacy["a"] as? NSDictionary
+            #expect(legacyA?["b"] as? String == "c")
+            #expect(legacyA?["d"] as? Bool == true)
+        }
+
         // MARK: - Duplicates policy
 
         @Test("objc-decode: duplicates first/last/combine")

@@ -41,7 +41,9 @@ struct DecodeFastPathTests {
         #expect((a1?[1] as? [String: Any])?["b"] as? String == "2")
 
         let structuredBeforeFlat = try Qs.decode("a[b]=2&a=1")
-        #expect((structuredBeforeFlat["a"] as? [String: Any])?["b"] as? String == "2")
+        let aStructuredFirst = structuredBeforeFlat["a"] as? [Any]
+        #expect((aStructuredFirst?.first as? [String: Any])?["b"] as? String == "2")
+        #expect(aStructuredFirst?[1] as? String == "1")
 
         let flatZeroThenArrayRoot = try Qs.decode("0=y&[]=x")
         #expect(flatZeroThenArrayRoot["0"] != nil)
