@@ -44,7 +44,7 @@ extension QsSwift.Decoder {
     ///
     /// Steps:
     /// 1. If `allowDots == true`, rewrite top‑level `.segment` into `[segment]` (dots inside brackets are ignored).
-    /// 2. If `maxDepth == 0`, never split (return the whole key as a single segment).
+    /// 2. If `maxDepth == 0`, never split brackets (return the normalized key as a single segment).
     /// 3. Otherwise, extract up to `maxDepth` **balanced** bracket groups (including the brackets).
     /// 4. If there is a remainder:
     ///     • when `strictDepth == true` **and** all processed groups were well‑formed, throw `.depthExceeded`.
@@ -73,13 +73,13 @@ extension QsSwift.Decoder {
         maxDepth: Int,
         strictDepth: Bool
     ) throws -> [String] {
-        // Depth 0 semantics: never split, never transform (qs/Kotlin parity).
-        if maxDepth <= 0 {
-            return [originalKey]
-        }
-
-        // Apply top-level dot→bracket only when allowDots is enabled.
+        // Apply top-level dot→bracket before depth handling. qs normalizes dots even when depth is 0.
         let key: String = allowDots ? dotToBracket(originalKey) : originalKey
+
+        // Depth 0 semantics: never split bracket syntax.
+        if maxDepth <= 0 {
+            return [key]
+        }
 
         // Prepare result; reserve based on '[' count.
         var segments: [String] = []

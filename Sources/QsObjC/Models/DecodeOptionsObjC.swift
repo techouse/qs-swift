@@ -71,6 +71,7 @@
         public var allowSparseLists: Bool = false
 
         /// Maximum number of items parsed into a single list (defensive cap).
+        /// The highest numeric bracket index that can materialize as an array is `listLimit - 1`.
         public var listLimit: Int = 20
 
         /// When `true`, treat commas as element separators inside a single key (e.g. `a=b,c`).
@@ -83,6 +84,9 @@
         /// If `true`, enforce the exact nesting depth limit below; otherwise the core
         /// may best‑effort parse past the limit for compatibility.
         public var strictDepth: Bool = false
+
+        /// If `true`, object/scalar conflicts use qs-compatible array wrapping.
+        public var strictMerge: Bool = true
 
         /// If `true`, `a` without value is `NSNull` rather than empty string. Mirrors Swift.
         public var strictNullHandling: Bool = false
@@ -198,6 +202,7 @@
                 interpretNumericEntities: interpretNumericEntities,
                 parseLists: parseLists,
                 strictDepth: strictDepth,
+                strictMerge: strictMerge,
                 strictNullHandling: strictNullHandling,
                 throwOnLimitExceeded: throwOnLimitExceeded
             )

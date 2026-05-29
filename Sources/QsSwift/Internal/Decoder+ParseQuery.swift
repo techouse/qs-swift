@@ -106,13 +106,19 @@ extension QsSwift.Decoder {
             var value: Any?
 
             if pos == -1 {
-                key = options.decodeKey(part, charset: charset) ?? part
+                guard let decodedKey = decodeQueryKey(part, options: options, charset: charset) else {
+                    continue
+                }
+                key = decodedKey
                 value = options.strictNullHandling ? NSNull() : ""
             } else {
                 let keyRaw = String(part.prefix(pos))
                 let rhs = String(part.dropFirst(pos + 1))
 
-                key = options.decodeKey(keyRaw, charset: charset) ?? keyRaw
+                guard let decodedKey = decodeQueryKey(keyRaw, options: options, charset: charset) else {
+                    continue
+                }
+                key = decodedKey
                 let isFirstOccurrence = (obj[key] == nil)
 
                 // Determine current list length for limit checks (only if key already has a list)
@@ -199,8 +205,8 @@ extension QsSwift.Decoder {
 
             // Duplicates handling (only arrayify on subsequent duplicates, like Kotlin)
             let exists = (obj[key] != nil)
-            switch options.duplicates {
-            case .combine:
+            let shouldCombine = options.duplicates == .combine || (exists && hadBracketedEmpty)
+            if shouldCombine {
                 if exists {
                     let prev: Any? = obj[key] ?? nil
                     let combined = Utils.combine(prev, value, listLimit: options.listLimit)
@@ -214,14 +220,29 @@ extension QsSwift.Decoder {
                 } else {
                     obj[key] = value ?? NSNull()
                 }
-            case .last:
-                obj[key] = value ?? NSNull()
-            case .first:
-                if !exists { obj[key] = value ?? NSNull() }
+            } else {
+                switch options.duplicates {
+                case .combine:
+                    preconditionFailure("combine duplicates must be handled before duplicate policy switch")
+                case .last:
+                    obj[key] = value ?? NSNull()
+                case .first:
+                    if !exists { obj[key] = value ?? NSNull() }
+                }
             }
         }
 
         return obj
+    }
+
+    @inline(__always)
+    private static func decodeQueryKey(
+        _ raw: String,
+        options: DecodeOptions,
+        charset: String.Encoding
+    ) -> String? {
+        let decoded = options.decodeKey(raw, charset: charset)
+        return (options._decoder == nil && !options.hasLegacyDecoder) ? (decoded ?? raw) : decoded
     }
 
     /// Attempts a fast, allocation-light decode path for *flat* query strings.

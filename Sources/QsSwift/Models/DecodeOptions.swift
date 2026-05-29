@@ -39,6 +39,7 @@ public typealias LegacyDecoder = @Sendable (_ value: String?, _ charset: String.
 ///   `utf8=✓` or its numeric-entity variant flips the charset automatically.
 /// - **Limits:** `parameterLimit` and `listLimit` guard against pathological inputs.
 /// - **Duplicates:** Choose how duplicate keys merge via `duplicates`.
+/// - **Merge behavior:** `strictMerge` matches `qs` object/scalar conflict handling by default.
 ///
 /// ### Safety & Performance Notes
 /// - Keep `depth` small for untrusted input. Extremely deep chains create large nested
@@ -92,9 +93,9 @@ public struct DecodeOptions: @unchecked Sendable {
     /// When compacted, holes may be removed unless `allowSparseLists` is true.
     public let allowSparseLists: Bool
 
-    /// Maximum *index* that will be materialized as a list element before falling back
-    /// to a dictionary. For example, with the default `20`, `a[21]=x` decodes as
-    /// `["a": ["21": "x"]]` instead of allocating a 22-element list.
+    /// Maximum number of elements that will be materialized as a list before falling back
+    /// to a dictionary. For example, with the default `20`, `a[20]=x` decodes as
+    /// `["a": ["20": "x"]]` instead of allocating a 21-element list.
     public let listLimit: Int
 
     /// Character encoding to use (`.utf8` or `.isoLatin1`). May be overridden by the charset sentinel.
@@ -136,6 +137,10 @@ public struct DecodeOptions: @unchecked Sendable {
 
     /// If `true`, exceeding `depth` throws instead of collapsing the remainder.
     public let strictDepth: Bool
+
+    /// If `true`, object/scalar conflicts are wrapped into arrays instead of merging the scalar
+    /// as a property name. This matches Node `qs`'s `strictMerge` default.
+    public let strictMerge: Bool
 
     /// If `true`, values without `=` decode to `nil` (vs `""` by default).
     public let strictNullHandling: Bool
@@ -186,6 +191,7 @@ public struct DecodeOptions: @unchecked Sendable {
         interpretNumericEntities: Bool = false,
         parseLists: Bool = true,
         strictDepth: Bool = false,
+        strictMerge: Bool = true,
         strictNullHandling: Bool = false,
         throwOnLimitExceeded: Bool = false
     ) {
@@ -213,6 +219,7 @@ public struct DecodeOptions: @unchecked Sendable {
         self.interpretNumericEntities = interpretNumericEntities
         self.parseLists = parseLists
         self.strictDepth = strictDepth
+        self.strictMerge = strictMerge
         self.strictNullHandling = strictNullHandling
         self.throwOnLimitExceeded = throwOnLimitExceeded
 
@@ -310,6 +317,7 @@ public struct DecodeOptions: @unchecked Sendable {
         interpretNumericEntities: Bool? = nil,
         parseLists: Bool? = nil,
         strictDepth: Bool? = nil,
+        strictMerge: Bool? = nil,
         strictNullHandling: Bool? = nil,
         throwOnLimitExceeded: Bool? = nil
     ) -> DecodeOptions {
@@ -337,6 +345,7 @@ public struct DecodeOptions: @unchecked Sendable {
             interpretNumericEntities: interpretNumericEntities ?? self.interpretNumericEntities,
             parseLists: parseLists ?? self.parseLists,
             strictDepth: strictDepth ?? self.strictDepth,
+            strictMerge: strictMerge ?? self.strictMerge,
             strictNullHandling: strictNullHandling ?? self.strictNullHandling,
             throwOnLimitExceeded: throwOnLimitExceeded ?? self.throwOnLimitExceeded
         )

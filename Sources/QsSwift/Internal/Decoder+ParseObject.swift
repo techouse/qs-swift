@@ -10,7 +10,7 @@ extension QsSwift.Decoder {
     ///     * otherwise wraps scalars into single‑element lists
     ///   - When `parseLists == false`: treat as a dictionary with string key "0"
     /// - Numeric bracket segments like "[0]":
-    ///   - When `parseLists == true` and index ≤ `listLimit`, produces a list shell filled with
+    ///   - When `parseLists == true` and index < `listLimit`, produces a list shell filled with
     ///     `Undefined` up to the index, then assigns the leaf at that index.
     ///   - Otherwise produces a dictionary with the string key.
     /// - Key dot mapping: when `options.getDecodeDotInKeys == true`, `"%2E"/"%2e"` inside key segments
@@ -104,13 +104,20 @@ extension QsSwift.Decoder {
                     idx >= 0,
                     root != decodedRoot,  // must have been "[0]"
                     String(idx) == decodedRoot,
-                    options.parseLists,
-                    idx <= options.listLimit
+                    options.parseLists
                 {
-                    // valid bracketed numeric index ⇒ array shell
-                    var list = Array(repeating: Undefined.instance as Any, count: idx + 1)
-                    list[idx] = (leaf ?? NSNull())
-                    obj = list
+                    if idx < options.listLimit {
+                        // valid bracketed numeric index ⇒ array shell
+                        var list = Array(repeating: Undefined.instance as Any, count: idx + 1)
+                        list[idx] = (leaf ?? NSNull())
+                        obj = list
+                    } else {
+                        if options.throwOnLimitExceeded {
+                            throw DecodeError.listLimitExceeded(limit: options.listLimit)
+                        }
+                        mutableObj[decodedRoot] = (leaf ?? NSNull())
+                        obj = mutableObj
+                    }
                 } else {
                     // default: dictionary with *string* key
                     mutableObj[decodedRoot] = (leaf ?? NSNull())

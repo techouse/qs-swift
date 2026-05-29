@@ -183,6 +183,22 @@ try Qs.decode("foo=bar&foo=baz", options: .init(duplicates: .last))
 // ["foo": "baz"]
 ```
 
+### Object/scalar conflicts (`strictMerge`, default: `true`)
+
+By default, QsSwift matches Node `qs` and wraps object/scalar conflicts into an array:
+
+```swift
+try Qs.decode("a[b]=c&a=d")
+// ["a": [["b": "c"], "d"]]
+```
+
+Set `strictMerge: false` to preserve the legacy behavior that merges the scalar as a property name:
+
+```swift
+try Qs.decode("a[b]=c&a=d", options: .init(strictMerge: false))
+// ["a": ["b": "c", "d": true]]
+```
+
 ### Charset & sentinel
 
 ```swift

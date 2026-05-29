@@ -1987,6 +1987,18 @@ struct EncodeTests {
                 ["a": "æ"], options: EncodeOptions(charset: .isoLatin1, charsetSentinel: true))
                 == "utf8=%26%2310003%3B&a=%E6"
         )
+        #expect(
+            try Qs.encode(
+                ["a": "1", "b": "2"],
+                options: EncodeOptions(charsetSentinel: true, delimiter: ";")
+            ) == "utf8=%E2%9C%93;a=1;b=2"
+        )
+        #expect(
+            try Qs.encode(
+                ["a": NSNull()],
+                options: EncodeOptions(charsetSentinel: true, skipNulls: true)
+            ).isEmpty
+        )
     }
 
     @Test("encode - does not mutate the options argument")
@@ -3269,6 +3281,34 @@ struct EncodeTests {
         #expect(try Qs.encode(payload, options: opts) == "a=c%2Cd,e%25")
     }
 
+    @Test("encode: .comma keeps null slots with encodeValuesOnly")
+    func comma_nullSlots_encodeValuesOnly() throws {
+        let payload: [String: Any] = ["a": [NSNull(), "b"]]
+        let opts = EncodeOptions(listFormat: .comma, encodeValuesOnly: true)
+        #expect(try Qs.encode(payload, options: opts) == "a=,b")
+    }
+
+    @Test("encode: .comma skipNulls omits single empty comma output")
+    func comma_skipNulls_omits_single_empty_output() throws {
+        let payload: [String: Any] = ["a": [NSNull()]]
+        let opts = EncodeOptions(listFormat: .comma, skipNulls: true)
+        #expect(try Qs.encode(payload, options: opts).isEmpty)
+    }
+
+    @Test("encode: .comma strictNullHandling renders single null as bare key")
+    func comma_strictNullHandling_single_null_key_only() throws {
+        let payload: [String: Any] = ["a": [NSNull()]]
+        let opts = EncodeOptions(listFormat: .comma, strictNullHandling: true)
+        #expect(try Qs.encode(payload, options: opts) == "a")
+    }
+
+    @Test("encode: .comma skipNulls preserves multi-null comma output")
+    func comma_skipNulls_preserves_multi_null_slots() throws {
+        let payload: [String: Any] = ["a": [NSNull(), NSNull()]]
+        let opts = EncodeOptions(listFormat: .comma, skipNulls: true)
+        #expect(try Qs.encode(payload, options: opts) == "a=%2C")
+    }
+
     @Test("encode: allowEmptyLists renders foo[] for empty arrays")
     func empty_list_emits_brackets() throws {
         let opts = EncodeOptions(allowEmptyLists: true)
@@ -3288,6 +3328,27 @@ struct EncodeTests {
         #expect(out == "a")
     }
 
+    @Test("encode: strict null key-only output uses configured formatter")
+    func strictNull_keyOnly_applies_formatter() throws {
+        let out = try Qs.encode(
+            ["a b": NSNull(), "c d": "e f"],
+            options: .init(format: .rfc1738, strictNullHandling: true)
+        )
+        #expect(out == "a+b&c+d=e+f")
+
+        let custom = try Qs.encode(
+            ["a b": NSNull()],
+            options: .init(
+                encoder: { value, _, _ in
+                    String(describing: value ?? "").replacingOccurrences(of: " ", with: "%20")
+                },
+                format: .rfc1738,
+                strictNullHandling: true
+            )
+        )
+        #expect(custom == "a+b")
+    }
+
     @Test("encode: skipNulls drops NSNull leaf")
     func skip_nulls_drops() throws {
         let opts = EncodeOptions(skipNulls: true)
@@ -3301,6 +3362,14 @@ struct EncodeTests {
         let filter = IterableFilter(["c", "a", "b"])  // desired order
         let out = try Qs.encode(payload, options: .init(filter: filter))
         #expect(out == "c=3&a=1&b=2")
+    }
+
+    @Test("encode: IterableFilter skips null entries")
+    func iterable_filter_skips_null_entries() throws {
+        let payload: [String: Any] = ["a": ["b": "c", "d": "e"]]
+        let filter = IterableFilter(["a", "b", NSNull(), "d"])
+        let out = try Qs.encode(payload, options: .init(filter: filter))
+        #expect(out == "a%5Bb%5D=c&a%5Bd%5D=e")
     }
 
     @Test("encode: FunctionFilter adopts container only when original was a container")
@@ -3846,7 +3915,10 @@ struct EncodeTests {
         )
         #expect(noEncoder as? String == "flag")
 
-        let identity: ValueEncoder = { value, _, _ in String(describing: value ?? "") }
+        let identity: ValueEncoder = { value, charset, format in
+            let unexpectedContext = charset != nil || format != nil
+            return String(describing: value ?? "") + (unexpectedContext ? ":unexpected" : "")
+        }
         let withEncoder = try Encoder.encode(
             data: nil,
             undefined: false,
