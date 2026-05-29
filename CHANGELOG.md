@@ -1,3 +1,13 @@
+## 1.3.6
+
+- [FEAT] add `DecodeOptions.strictMerge` and `QsDecodeOptions.strictMerge`, defaulting to `true`, so object/scalar parse conflicts now match Node `qs` by wrapping into arrays; set `strictMerge: false` to preserve the legacy map-merge behavior.
+- [FIX] align decode semantics with `qs@6.15.2`: object/scalar conflict handling, `[]` duplicate combine behavior under `.first` / `.last`, dot normalization before `depth == 0`, list-limit equality overflow, balanced/literal bracket parsing, percent-encoded bracket regressions, and custom key decoder `nil` pair skipping.
+- [FIX] align encode semantics with `qs@6.15.2`: charset sentinel uses the configured delimiter, strict-null key-only output applies RFC1738/RFC3986 formatting through custom encoder paths, comma-list null slots are preserved by default, all-empty comma output respects `skipNulls`, and null/undefined iterable filter entries are skipped.
+- [TEST] expand Swift, ObjC bridge, ObjC E2E, and JS comparison fixtures for qs `6.15.2` parity edge cases.
+- [DOCS] document Swift and ObjC `strictMerge` behavior and migration guidance for the new default object/scalar conflict shape.
+- [CI] skip the known macos-26 / Swift `6.2` Address Sanitizer hang for the deep Swift encode regression while keeping normal Swift `6.2` coverage and ASan coverage on Swift `6.0` / `6.1`.
+- [CHORE] update the JavaScript comparison fixture dependency from `qs@6.15.1` to `qs@6.15.2`.
+
 ## 1.3.5
 
 - [FIX] harden deep direct-map decode paths for Swift `6.3`: replace broad recursive container casts with exact container classification plus iterative traversal for Swift, generic, and Foundation collections, preventing worker-thread stack overflows/crashes on long chains and tolerating self-referential `NSDictionary` / `NSArray` graphs.
