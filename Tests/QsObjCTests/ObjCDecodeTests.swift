@@ -364,6 +364,25 @@
             let legacyA = legacy["a"] as? NSDictionary
             #expect(legacyA?["b"] as? String == "c")
             #expect(legacyA?["d"] as? Bool == true)
+
+            let bracketFirst = decode("foo[]=bar&foo[]=baz") { o in
+                o.duplicates = .first
+            }
+            #expect(stringArray(bracketFirst["foo"]) == ["bar", "baz"])
+
+            let bracketLast = decode("foo[]=bar&foo[]=baz") { o in
+                o.duplicates = .last
+            }
+            #expect(stringArray(bracketLast["foo"]) == ["bar", "baz"])
+
+            let droppedKey = decode("drop=x&keep=y") { o in
+                o.decoderBlock = { token, _, kind in
+                    guard kind?.intValue == 0, let key = token as String? else { return token }
+                    return key == "drop" ? nil : token
+                }
+            }
+            #expect(droppedKey["drop"] == nil)
+            #expect(droppedKey["keep"] as? String == "y")
         }
 
         // MARK: - Duplicates policy

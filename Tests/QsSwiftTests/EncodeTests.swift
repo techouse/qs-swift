@@ -3915,7 +3915,10 @@ struct EncodeTests {
         )
         #expect(noEncoder as? String == "flag")
 
-        let identity: ValueEncoder = { value, _, _ in String(describing: value ?? "") }
+        let identity: ValueEncoder = { value, charset, format in
+            let unexpectedContext = charset != nil || format != nil
+            return String(describing: value ?? "") + (unexpectedContext ? ":unexpected" : "")
+        }
         let withEncoder = try Encoder.encode(
             data: nil,
             undefined: false,

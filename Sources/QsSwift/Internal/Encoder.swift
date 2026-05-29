@@ -180,7 +180,7 @@ internal enum Encoder {
                         if let enc = config.encoder, !config.encodeValuesOnly {
                             finishFrame(
                                 config.formatter.apply(
-                                    enc(materializedPath(), config.charset, config.format)
+                                    enc(materializedPath(), nil, nil)
                                 )
                             )
                         } else {

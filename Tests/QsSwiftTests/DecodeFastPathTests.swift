@@ -42,6 +42,7 @@ struct DecodeFastPathTests {
 
         let structuredBeforeFlat = try Qs.decode("a[b]=2&a=1")
         let aStructuredFirst = structuredBeforeFlat["a"] as? [Any]
+        #expect(aStructuredFirst?.count == 2)
         #expect((aStructuredFirst?.first as? [String: Any])?["b"] as? String == "2")
         #expect(aStructuredFirst?[1] as? String == "1")
 
