@@ -15,15 +15,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  XCODE_VERSION: '26.2'
-  SWIFT_VERSION: '6.2'
+  XCODE_VERSION: '26.4'
+  SWIFT_VERSION: '6.3'
 
 jobs:
   analyze:
     permissions:
       contents: read
     name: SwiftLint
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -81,6 +81,10 @@ jobs:
           - runner: macos-26
             xcode: '26.2'
             swift: '6.2'
+            experimental: false
+          - runner: macos-26
+            xcode: '26.4'
+            swift: '6.3'
             experimental: false
 
     env:
@@ -179,7 +183,7 @@ jobs:
       contents: read
     name: Objective-C E2E tests (macOS, Xcode)
     timeout-minutes: 45
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: [ analyze, macos-tests ]
     steps:
       - name: Checkout
@@ -303,8 +307,8 @@ jobs:
           files: |
             ${{ github.workspace }}/ObjC-Tests.xcresult.zip
             ${{ github.workspace }}/objc-coverage.json
-          flags: objc,macos-latest,xcode-${{ env.XCODE_VERSION }}
-          name: QsSwift-ObjC-macos-latest-xcode-${{ env.XCODE_VERSION }}
+          flags: objc,macos-26,xcode-${{ env.XCODE_VERSION }}
+          name: QsSwift-ObjC-macos-26-xcode-${{ env.XCODE_VERSION }}
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -325,7 +329,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v7
         with:
-          name: macOS-crashlogs-objc-xcode-${{ env.XCODE_VERSION }}-macos-latest
+          name: macOS-crashlogs-objc-xcode-${{ env.XCODE_VERSION }}-macos-26
           path: crashlogs-objc
           if-no-files-found: ignore
 
@@ -348,7 +352,9 @@ jobs:
             experimental: false
           - swift: '6.2'
             experimental: false
-
+          # not yet available
+          # - swift: '6.3'
+          #   experimental: false
     env:
       SWIFT_VERSION: ${{ matrix.swift }}
 
@@ -401,7 +407,7 @@ jobs:
   ensure-compatibility:
     name: Ensure compatibility with qs.js
     needs: [ analyze, macos-tests ]
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 15
     steps:
       - name: Checkout

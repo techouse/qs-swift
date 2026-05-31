@@ -22,7 +22,7 @@ jobs:
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '26.2'
+          xcode-version: '26.4'
       - name: Generate docs (QsSwift + QsObjC)
         env:
           OUT: 'docs'
