@@ -372,17 +372,17 @@
     XCTAssertEqualObjects(r[@"K:x"], @"K:y");
 }
 
-#pragma mark - 18) Decode: depth=0 disables top-level dot splitting (allowDots=true)
+#pragma mark - 18) Decode: depth=0 normalizes dots without bracket splitting
 
-- (void)test_decode_depth_zero_disables_dot_splitting_when_allowDots_true {
+- (void)test_decode_depth_zero_normalizes_dots_without_bracket_splitting {
     QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
     d.allowDots = YES;
-    d.depth = 0; // never split
+    d.depth = 0; // normalize dots, but never split bracket syntax
     
     NSError *err = nil;
     NSDictionary *m = [Qs decode:@"a.b=c" options:d error:&err];
     XCTAssertNil(err);
-    XCTAssertEqualObjects(m[@"a.b"], @"c");
+    XCTAssertEqualObjects(m[@"a[b]"], @"c");
 }
 
 #pragma mark - 19) Decode: top-level dot guardrails (leading/trailing/double)

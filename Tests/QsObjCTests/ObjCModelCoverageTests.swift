@@ -184,6 +184,7 @@
                 $0.interpretNumericEntities = true
                 $0.parseLists = false
                 $0.strictDepth = true
+                $0.strictMerge = false
                 $0.strictNullHandling = true
                 $0.throwOnLimitExceeded = true
             }
@@ -205,6 +206,7 @@
             #expect(swift.interpretNumericEntities)
             #expect(swift.parseLists == false)
             #expect(swift.strictDepth)
+            #expect(swift.strictMerge == false)
             #expect(swift.strictNullHandling)
             #expect(swift.throwOnLimitExceeded)
         }

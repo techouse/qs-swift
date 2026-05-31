@@ -186,7 +186,10 @@ extension QsSwift.Utils {
                     for (index, item) in seq.enumerated() where !(item is Undefined) {
                         mutableTarget[index] = item
                     }
-                } else if !(source is Undefined) {
+                } else if !isFalsyMergeSource(source) {
+                    if options.strictMerge {
+                        return [targetDict, source]
+                    }
                     let key = String(describing: source)
                     if !key.isEmpty { mutableTarget[key] = true }
                 }
@@ -301,6 +304,15 @@ extension QsSwift.Utils {
         if let orderedSet = value as? OrderedSet<AnyHashable> { return Array(orderedSet) }
         if let setValues = value as? Set<AnyHashable> { return Array(setValues) }
         return nil
+    }
+
+    @inline(__always)
+    private static func isFalsyMergeSource(_ value: Any) -> Bool {
+        if value is Undefined || value is NSNull { return true }
+        if let string = value as? String { return string.isEmpty }
+        if let bool = value as? Bool { return !bool }
+        if let number = value as? NSNumber { return number.doubleValue == 0 }
+        return false
     }
 
     @inline(__always)

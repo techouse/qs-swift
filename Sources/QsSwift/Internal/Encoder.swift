@@ -178,7 +178,11 @@ internal enum Encoder {
                 if !frame.undefined && obj == nil {
                     if config.strictNullHandling {
                         if let enc = config.encoder, !config.encodeValuesOnly {
-                            finishFrame(enc(materializedPath(), config.charset, config.format))
+                            finishFrame(
+                                config.formatter.apply(
+                                    enc(materializedPath(), nil, nil)
+                                )
+                            )
                         } else {
                             finishFrame(materializedPath())
                         }
@@ -272,13 +276,20 @@ internal enum Encoder {
                     if !elements.isEmpty {
                         let joined = elements.map { describeForComma($0, charset: config.charset) }.joined(
                             separator: ",")
-                        let valueForJoin: Any = joined.isEmpty ? (config.strictNullHandling ? NSNull() : "") : joined
+                        let valueForJoin: Any
+                        if config.skipNulls && joined.isEmpty {
+                            valueForJoin = Undefined.instance
+                        } else if joined.isEmpty {
+                            valueForJoin = config.strictNullHandling ? NSNull() as Any : ""
+                        } else {
+                            valueForJoin = joined
+                        }
                         nextKeyState = .single(["value": valueForJoin])
                     } else {
                         nextKeyState = .single(["value": Undefined.instance])
                     }
                 } else if let iterableFilter = config.filter as? IterableFilter {
-                    nextKeyState = keyState(from: iterableFilter.iterable)
+                    nextKeyState = keyState(from: filterIterableKeys(iterableFilter.iterable))
                 } else {
                     nextKeyState = objectKeyState(for: obj, seqList: seqList, config: config, depth: frame.depth)
                 }
@@ -583,6 +594,17 @@ extension QsSwift.Encoder {
             return .single(keys[0])
         default:
             return .many(keys)
+        }
+    }
+
+    private static func filterIterableKeys(_ keys: [Any]) -> [Any] {
+        keys.compactMap { key in
+            if key is NSNull || key is Undefined { return nil }
+            if isOptional(key) {
+                guard let unwrapped = unwrapOptional(key) else { return nil }
+                return (unwrapped is NSNull || unwrapped is Undefined) ? nil : unwrapped
+            }
+            return key
         }
     }
 

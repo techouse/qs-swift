@@ -62,6 +62,49 @@
     },
     {
         "data": {
+            "a": [
+                {
+                    "b": "c"
+                },
+                "d"
+            ]
+        },
+        "encoded": "a[b]=c&a=d"
+    },
+    {
+        "data": {
+            "search": {
+                "withbracket[]": "foobar"
+            }
+        },
+        "encoded": "search[withbracket[]]=foobar"
+    },
+    {
+        "data": {
+            "list": [
+                {
+                    "x[]": "y"
+                }
+            ]
+        },
+        "encoded": "list[][x[]]=y"
+    },
+    {
+        "data": {
+            "a%255Bb": "c"
+        },
+        "encoded": "a%25255Bb=c"
+    },
+    {
+        "data": {
+            "a": {
+                "b%255Bc": "d"
+            }
+        },
+        "encoded": "a%5Bb%25255Bc%5D=d"
+    },
+    {
+        "data": {
             "a": {
                 "b": {
                     "c": "d"

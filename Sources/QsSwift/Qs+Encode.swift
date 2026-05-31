@@ -232,6 +232,7 @@ extension Qs {
 
         // Join with the chosen delimiter
         let joined = parts.lazy.map { String(describing: $0) }.joined(separator: options.delimiter)
+        guard !joined.isEmpty else { return "" }
 
         // Build final string with optional '?' and charset sentinel
         var out = ""
@@ -242,19 +243,17 @@ extension Qs {
             case .isoLatin1:
                 // encodeURIComponent('&#10003;') ("numeric entity" of checkmark)
                 out.append(Sentinel.isoString)
-                out.append("&")
+                out.append(options.delimiter)
             case .utf8:
                 // encodeURIComponent('✓')
                 out.append(Sentinel.charsetString)
-                out.append("&")
+                out.append(options.delimiter)
             default:
                 break
             }
         }
 
-        if !joined.isEmpty {
-            out.append(joined)
-        }
+        out.append(joined)
 
         return out
     }
