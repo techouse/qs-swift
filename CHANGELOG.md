@@ -1,3 +1,7 @@
+## 1.4.0-dev
+
+- [FEAT] add Foundation `URLComponents` and `URL` helpers for appending QsSwift-encoded nested query strings without double-encoding bracket notation.
+
 ## 1.3.6
 
 - [FEAT] add `DecodeOptions.strictMerge` and `QsDecodeOptions.strictMerge`, defaulting to `true`, so object/scalar parse conflicts now match Node `qs` by wrapping into arrays; set `strictMerge: false` to preserve the legacy map-merge behavior.

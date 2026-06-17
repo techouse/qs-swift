@@ -455,6 +455,64 @@ try Qs.encode(["a": "b c"], options: .init(format: .rfc1738)) // "a=b+c"
 
 ---
 
+## Foundation URL helpers
+
+Use the Foundation helpers when you want to append QsSwift output to `URLComponents` or `URL` without routing already
+encoded bracket notation through Foundation's decoded query APIs.
+
+```swift
+import Foundation
+import QsSwift
+
+var components = URLComponents(string: "https://api.example.com/products")!
+try components.appendQsQueryItems([
+    "filter": [
+        "where": [
+            "name": "John",
+            "age": ["gte": 30],
+        ],
+    ],
+    "tags": ["a", "b"],
+])
+
+components.url?.absoluteString
+// "https://api.example.com/products?filter%5Bwhere%5D%5Bname%5D=John&filter%5Bwhere%5D%5Bage%5D%5Bgte%5D=30&tags%5B0%5D=a&tags%5B1%5D=b"
+```
+
+Immutable `URL` usage returns a new URL and preserves the original:
+
+```swift
+let url = URL(string: "https://api.example.com/products?existing=x#details")!
+let next = try url.appendingQsQueryItems([
+    "filter": ["where": ["name": "John"]],
+    "tags": ["a", "b"],
+])
+
+next.absoluteString
+// "https://api.example.com/products?existing=x&filter%5Bwhere%5D%5Bname%5D=John&tags%5B0%5D=a&tags%5B1%5D=b#details"
+```
+
+Repeated keys and custom delimiters are preserved:
+
+```swift
+var semicolon = URLComponents(string: "https://api.example.com/products?existing=x")!
+try semicolon.appendQsQueryItems(
+    ["tag": ["swift", "ios"]],
+    options: .init(listFormat: .repeatKey, delimiter: ";")
+)
+
+semicolon.percentEncodedQuery
+// "existing=x;tag=swift;tag=ios"
+```
+
+The helpers append to `percentEncodedQuery`, not `queryItems`. `queryItems` treats names and values as decoded text and
+can double-encode QsSwift output (`%5B` becoming `%255B`). The URL helpers force URL-safe QsSwift encoding internally,
+even if the supplied options use `encode: false` or `encodeValuesOnly: true`.
+
+Non-goal: this integration does not add Alamofire, Vapor, AsyncHTTPClient, or other framework-specific helpers.
+
+---
+
 ## `nil`, `NSNull`, and `Undefined` (null semantics)
 
 Query strings don’t have a native null concept, so Qs uses a few conventions to mirror “JSON-style” semantics as
