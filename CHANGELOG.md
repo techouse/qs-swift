@@ -1,4 +1,4 @@
-## 1.4.0-dev
+## 1.4.0
 
 - [FEAT] add Foundation `URLComponents` and `URL` helpers for appending QsSwift-encoded nested query strings without double-encoding bracket notation.
 
