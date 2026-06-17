@@ -1,6 +1,6 @@
 ---
 name: qs-swift
-description: Use this skill whenever a user wants to install, configure, troubleshoot, or write Swift, SwiftPM, Apple-platform, Linux Swift, or Objective-C application code for encoding and decoding nested query strings with the QsSwift package. This skill helps produce practical Qs.decode, Qs.encode, decodeAsync, QsObjC, DecodeOptions, and EncodeOptions snippets, explain option tradeoffs, and avoid QsSwift edge-case pitfalls around lists, dot notation, duplicates, nil and NSNull handling, charset sentinels, depth limits, Objective-C bridging, deterministic ordering, and untrusted input.
+description: Use this skill whenever a user wants to install, configure, troubleshoot, or write Swift, SwiftPM, Apple-platform, Linux Swift, or Objective-C application code for encoding and decoding nested query strings with the QsSwift package. This skill helps produce practical Qs.decode, Qs.encode, decodeAsync, QsObjC, URLComponents.appendQsQueryItems, URL.appendingQsQueryItems, DecodeOptions, and EncodeOptions snippets, explain option tradeoffs, and avoid QsSwift edge-case pitfalls around lists, dot notation, duplicates, nil and NSNull handling, charset sentinels, depth limits, Objective-C bridging, Foundation URL query encoding, deterministic ordering, and untrusted input.
 ---
 
 # QsSwift Usage Assistant
@@ -98,6 +98,23 @@ NSDictionary *values = [Qs decode:@"a[b]=c" options:nil error:&error];
 NSString *query = [Qs encode:@{ @"a": @{ @"b": @"c" } } options:nil error:&error];
 ```
 
+When appending QsSwift output to Foundation URL types, prefer the built-in URL
+helpers over hand-building `URLQueryItem` values:
+
+```swift
+import Foundation
+import QsSwift
+
+var components = URLComponents(string: "https://api.example.com/products")!
+try components.appendQsQueryItems([
+    "filter": ["name": "John"],
+    "tags": ["swift", "ios"],
+])
+
+let url = URL(string: "https://api.example.com/products?existing=x#details")!
+let next = try url.appendingQsQueryItems(["filter": ["name": "John"]])
+```
+
 ## Base Patterns
 
 Decode a query string into nested Swift values:
@@ -150,8 +167,90 @@ let values = try Qs.decode(
 If the input may include the leading question mark, set `ignoreQueryPrefix:
 true`.
 
-When encoding into a URL, use `addQueryPrefix: true` only when the caller wants
-the leading question mark:
+When appending encoded values to an existing `URLComponents` or `URL`, use the
+Foundation helpers introduced for the 1.4.0 development line:
+
+```swift
+import Foundation
+import QsSwift
+
+let lexicalSort: Sorter = { lhs, rhs in
+    let left = String(describing: lhs ?? "")
+    let right = String(describing: rhs ?? "")
+    return left.compare(right).rawValue
+}
+
+var components = URLComponents(string: "https://api.example.com/products")!
+try components.appendQsQueryItems([
+    "filter": [
+        "where": [
+            "name": "John",
+            "age": ["gte": 30],
+        ],
+    ],
+    "tags": ["a", "b"],
+], options: .init(sort: lexicalSort))
+
+components.url?.absoluteString
+// https://api.example.com/products?filter%5Bwhere%5D%5Bage%5D%5Bgte%5D=30&filter%5Bwhere%5D%5Bname%5D=John&tags%5B0%5D=a&tags%5B1%5D=b
+```
+
+For immutable URLs, call `appendingQsQueryItems`; it returns a new URL and
+preserves the original URL, existing query text, relative URL shape, and
+fragment:
+
+```swift
+let lexicalSort: Sorter = { lhs, rhs in
+    let left = String(describing: lhs ?? "")
+    let right = String(describing: rhs ?? "")
+    return left.compare(right).rawValue
+}
+
+let url = URL(string: "https://api.example.com/products?existing=x#details")!
+let next = try url.appendingQsQueryItems([
+    "filter": ["where": ["name": "John"]],
+    "tags": ["a", "b"],
+], options: .init(sort: lexicalSort))
+
+next.absoluteString
+// https://api.example.com/products?existing=x&filter%5Bwhere%5D%5Bname%5D=John&tags%5B0%5D=a&tags%5B1%5D=b#details
+```
+
+Use the non-throwing variants only when failure can be collapsed safely:
+`URLComponents.appendQsQueryItemsIfPossible` returns `false` and restores the
+original `percentEncodedQuery`; `URL.appendingQsQueryItemsOrNil` returns `nil`.
+
+The helpers append to `percentEncodedQuery`, not `queryItems`, so bracket
+notation stays encoded once as `%5B` / `%5D` instead of becoming `%255B` /
+`%255D`. They normalize `EncodeOptions` with `addQueryPrefix: false`, `encode:
+true`, and `encodeValuesOnly: false`, while preserving structural options such
+as delimiter, list format, sorting, null handling, dates, filters, charset
+formatting, and custom encoders. Passing `nil` or an input that encodes to an
+empty query is a no-op.
+
+Repeated keys and custom delimiters are preserved when appending to an existing
+query:
+
+```swift
+var semicolon = URLComponents(string: "https://api.example.com/products?existing=x")!
+try semicolon.appendQsQueryItems(
+    ["tag": ["swift", "ios"]],
+    options: .init(listFormat: .repeatKey, delimiter: ";")
+)
+
+semicolon.percentEncodedQuery
+// existing=x;tag=swift;tag=ios
+```
+
+If a custom encoder returns raw Unicode, malformed percent escapes, or other
+text that is not valid for `URLComponents.percentEncodedQuery`, the throwing
+helpers raise `QsURLQueryError.invalidPercentEncodedQuery`. `URL` helpers can
+also throw `QsURLQueryError.invalidURL` when Foundation cannot rebuild the URL.
+Do not claim that QsSwift has Alamofire, Vapor, AsyncHTTPClient, or other
+framework-specific URL append helpers unless those integrations are added later.
+
+When encoding a standalone query string, use `addQueryPrefix: true` only when
+the caller wants the leading question mark:
 
 ```swift
 let query = try Qs.encode(
@@ -248,6 +347,9 @@ Use these options with `Qs.encode(data, options: .init(...))`:
 - Custom behavior: use `encoder`, `dateSerializer`, `sort`, or `filter` when
   the target API needs special scalar encoding, date formatting, stable key
   order, or selected fields.
+- URL-safe appending: use `URLComponents.appendQsQueryItems` or
+  `URL.appendingQsQueryItems` instead of feeding QsSwift output through
+  Foundation `queryItems`.
 
 Example for an API that expects repeated keys:
 
@@ -310,6 +412,12 @@ Warn or adjust before giving code for these cases:
 - `EncodeOptions.encoder` is ignored when `encode: false`.
 - Combining `encodeValuesOnly: true` and `encodeDotInKeys: true` encodes only
   dots in keys; values are otherwise handled by the values-only encoder path.
+- URL helper calls ignore `addQueryPrefix` and force URL-safe encoding even
+  if supplied options use `encode: false` or `encodeValuesOnly: true`.
+- Custom encoders used with URL helpers must return valid percent-encoded query
+  text; invalid raw characters or malformed percent escapes throw
+  `QsURLQueryError.invalidPercentEncodedQuery` and the non-throwing
+  `URLComponents` helper restores the original query.
 - `DecodeOptions.comma` parses simple comma-separated values, but does not
   decode nested map syntax such as `a={b:1},{c:d}`.
 - `Qs.encode(nil)`, scalar roots, empty dictionaries, and empty containers
@@ -317,9 +425,9 @@ Warn or adjust before giving code for these cases:
 - `NSNull()` is the explicit null-like value; `Undefined()` always omits a key.
   To round-trip bare-key nulls, encode and decode with `strictNullHandling:
   true`.
-- Foundation and URL helper APIs may flatten, sort, or normalize query items.
-  Prefer `Qs.decode` on the raw query string when qs-style nested or repeated
-  values matter.
+- Generic Foundation `queryItems` / `URLQueryItem` paths may flatten or
+  double-encode qs-style keys. Prefer `Qs.decode` on the raw query string for
+  decoding and the QsSwift URL helpers for appending encoded nested query data.
 
 ## Response Shape
 
@@ -329,7 +437,8 @@ For code-generation requests, answer with:
    product, list format, null handling, charset, prefix handling, ordering, and
    whether input is trusted.
 2. One concrete Swift or Objective-C snippet using `Qs.decode`, `Qs.encode`,
-   `decodeAsync`, `decodeAsyncOnMain`, or the `QsObjC` bridge.
+   `decodeAsync`, `decodeAsyncOnMain`, the `QsObjC` bridge,
+   `URLComponents.appendQsQueryItems`, or `URL.appendingQsQueryItems`.
 3. A brief explanation of only the options used.
 4. A small verification example, such as an expected dictionary shape, expected
    query string, XCTest assertion, `#expect`, or Objective-C assertion.
