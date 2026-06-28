@@ -113,7 +113,7 @@ jobs:
 
       - name: Cache SwiftPM artifacts
         if: ${{ matrix.swift != '5.10' }}
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.swiftpm
@@ -235,7 +235,7 @@ jobs:
           ls -lah "$EXPECTED" || true
 
       - name: Cache SPM (Xcode)
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.swiftpm
@@ -373,7 +373,7 @@ jobs:
         run: echo "::warning::Running Linux tests with Swift ${{ env.SWIFT_VERSION }} (experimental). This job is allowed to fail."
 
       - name: Cache SwiftPM artifacts (Linux)
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.swiftpm
@@ -417,7 +417,7 @@ jobs:
           swift --version
 
       - name: Cache SwiftPM artifacts
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.swiftpm
