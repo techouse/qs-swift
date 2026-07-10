@@ -214,11 +214,7 @@ extension Qs {
             }
         }()
 
-        // If there are too many top-level params, match Kotlin: disable list parsing
-        var finalOptions = options
-        if options.parseLists, options.listLimit > 0, tmp.count > options.listLimit {
-            finalOptions = options.copy(parseLists: false)
-        }
+        let finalOptions = options
 
         let decodeFromString = (input is String)
         let structuredScan: StructuredKeyScan = {
@@ -260,7 +256,7 @@ extension Qs {
                 {
                     if let existing = obj[key] {
                         obj[key] =
-                            Utils.merge(target: existing, source: value, options: finalOptions)
+                            try Utils.merge(target: existing, source: value, options: finalOptions)
                             ?? existing
                     } else {
                         obj[key] = value
@@ -309,21 +305,33 @@ extension Qs {
                     for (index, element) in list.enumerated() where !(element is Undefined) {
                         indexed[String(index)] = element
                     }
-                    if let merged = Utils.merge(target: obj, source: indexed, options: finalOptions)
+                    if let merged = try Utils.merge(
+                        target: obj,
+                        source: indexed,
+                        options: finalOptions
+                    )
                         as? [String: Any]
                     {
                         obj = merged
                     }
                 } else if let overflow = parsed as? [AnyHashable: Any], Utils.isOverflow(overflow) {
                     let indexed = objectifyOverflow(overflow)
-                    if let merged = Utils.merge(target: obj, source: indexed, options: finalOptions)
+                    if let merged = try Utils.merge(
+                        target: obj,
+                        source: indexed,
+                        options: finalOptions
+                    )
                         as? [String: Any]
                     {
                         obj = merged
                     }
                 } else if let parsed = parsed {
                     // Non-array, non-nil fragment → merge as-is
-                    if let merged = Utils.merge(target: obj, source: parsed, options: finalOptions)
+                    if let merged = try Utils.merge(
+                        target: obj,
+                        source: parsed,
+                        options: finalOptions
+                    )
                         as? [String: Any]
                     {
                         obj = merged

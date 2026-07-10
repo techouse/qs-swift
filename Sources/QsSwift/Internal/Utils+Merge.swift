@@ -13,51 +13,39 @@ extension QsSwift.Utils {
     ///   - source: The source object to merge from.
     ///   - options: Optional decode options for merging behavior.
     /// - Returns: The merged object.
+    /// - Throws: `DecodeError.listLimitExceeded` when strict limit enforcement rejects growth.
     @usableFromInline
-    static func merge(target: Any?, source: Any?, options: DecodeOptions = DecodeOptions()) -> Any? {
+    static func merge(
+        target: Any?,
+        source: Any?,
+        options: DecodeOptions = DecodeOptions()
+    ) throws -> Any? {
         guard let source = source else { return target }
 
         if let tArr = target as? [Any?], let sDict = source as? [AnyHashable: Any] {
             var tDict: [AnyHashable: Any] = [:]
-            var maxIndex = -1
 
             for (idx, element) in tArr.enumerated() where !(element is Undefined) {
                 tDict[idx] = element ?? NSNull()
-                if idx > maxIndex { maxIndex = idx }
             }
 
-            for (key, value) in sDict where !Utils.isOverflowKey(key) {
-                tDict[key] = value
-                if let idx = Utils.intIndex(key), idx > maxIndex {
-                    maxIndex = idx
-                }
-            }
-
-            if Utils.isOverflow(sDict) {
-                if let sourceMax = Utils.overflowMaxIndex(sDict), sourceMax > maxIndex {
-                    maxIndex = sourceMax
-                }
-                Utils.setOverflowMaxIndex(&tDict, maxIndex)
-            }
-            return tDict
+            return try mergeDictionariesIterative(
+                target: tDict,
+                source: sDict,
+                options: options
+            )
         }
 
         if let tDict = target as? [AnyHashable: Any], let sArr = source as? [Any?] {
-            if Utils.isOverflow(tDict) {
-                var overflow = tDict
-                var maxIndex = Utils.overflowMaxIndex(overflow) ?? -1
-                for element in sArr where !(element is Undefined) {
-                    maxIndex += 1
-                    overflow[maxIndex] = element ?? NSNull()
-                }
-                Utils.setOverflowMaxIndex(&overflow, maxIndex)
-                return overflow
-            }
             var sDict: [AnyHashable: Any] = [:]
             for (idx, element) in sArr.enumerated() where !(element is Undefined) {
                 sDict[idx] = element ?? NSNull()
             }
-            return merge(target: tDict, source: sDict, options: options)
+            return try mergeDictionariesIterative(
+                target: tDict,
+                source: sDict,
+                options: options
+            )
         }
 
         if !(source is [AnyHashable: Any]) {
@@ -121,11 +109,12 @@ extension QsSwift.Utils {
                             guard let value = mutableTarget[idx] else { return nil }
                             return (value is Undefined) ? nil : value
                         }
-                        return pruned
+                        return try enforceListLimit(pruned, options: options)
                     }
 
                     // We’re in the Array-target branch. `target` cannot be a Set/OrderedSet here.
-                    return mutableTarget.sorted { $0.key < $1.key }.map(\.value)
+                    let merged = mutableTarget.sorted { $0.key < $1.key }.map(\.value)
+                    return try enforceListLimit(merged, options: options)
                 } else {
                     if let seq = asSequence(source) {
                         let targetMaps = targetArray.allSatisfy {
@@ -144,25 +133,29 @@ extension QsSwift.Utils {
 
                             for (index, item) in seq.enumerated() {
                                 if let existing = mutableTarget[index] {
-                                    mutableTarget[index] = mergeValues(
+                                    mutableTarget[index] = try mergeValues(
                                         target: existing, source: item, options: options)
                                 } else {
                                     mutableTarget[index] = item
                                 }
                             }
 
-                            return mutableTarget.sorted { $0.key < $1.key }.map(\.value)
+                            let merged = mutableTarget.sorted { $0.key < $1.key }.map(\.value)
+                            return try enforceListLimit(merged, options: options)
                         } else {
                             let filtered = seq.filter { !($0 is Undefined) }
-                            return targetArray + filtered
+                            return try enforceListLimit(targetArray + filtered, options: options)
                         }
                     } else {
                         // source is not a sequence and we are in the Array-target branch; target cannot be any Set/OrderedSet here.
-                        return targetArray + [source]
+                        return try enforceListLimit(targetArray + [source], options: options)
                     }
                 }
             } else if let targetDict = target as? [AnyHashable: Any] {
                 if Utils.isOverflow(targetDict) {
+                    if options.throwOnLimitExceeded {
+                        throw DecodeError.listLimitExceeded(limit: options.listLimit)
+                    }
                     var overflow = targetDict
                     var maxIndex = Utils.overflowMaxIndex(overflow) ?? -1
 
@@ -200,14 +193,20 @@ extension QsSwift.Utils {
                     let filtered = seq.filter { !($0 is Undefined) }
                     var result: [Any?] = [target]  // preserve nil at index 0
                     result.append(contentsOf: filtered)
-                    return result
+                    return try enforceListLimit(result, options: options)
                 }
+                // qs returns the scalar pair directly here. Limit enforcement
+                // applies to array/primitive directions, while scalar collisions
+                // inside an overflow map remain a nested two-element value.
                 return [target as Any?, source as Any?]
             }
         }
 
         if target == nil || !(target is [AnyHashable: Any]) {
             if let sourceDict = source as? [AnyHashable: Any], Utils.isOverflow(sourceDict) {
+                if options.throwOnLimitExceeded {
+                    throw DecodeError.listLimitExceeded(limit: options.listLimit)
+                }
                 if let targetArray = target as? [Any] {
                     var mutableTarget: [AnyHashable: Any] = [:]
                     var maxIndex = -1
@@ -268,7 +267,7 @@ extension QsSwift.Utils {
                     mutableTarget.append(source)
                 }
 
-                return mutableTarget
+                return try enforceListLimit(mutableTarget, options: options)
             }
         }
 
@@ -290,7 +289,11 @@ extension QsSwift.Utils {
         }
 
         if let sourceDict = source as? [AnyHashable: Any] {
-            return mergeDictionariesIterative(target: mergeTarget, source: sourceDict, options: options)
+            return try mergeDictionariesIterative(
+                target: mergeTarget,
+                source: sourceDict,
+                options: options
+            )
         }
 
         return mergeTarget
@@ -316,11 +319,19 @@ extension QsSwift.Utils {
     }
 
     @inline(__always)
-    private static func mergeValues(target: Any?, source: Any?, options: DecodeOptions) -> Any? {
+    private static func mergeValues(
+        target: Any?,
+        source: Any?,
+        options: DecodeOptions
+    ) throws -> Any? {
         if let targetDict = target as? [AnyHashable: Any], let sourceDict = source as? [AnyHashable: Any] {
-            return mergeDictionariesIterative(target: targetDict, source: sourceDict, options: options)
+            return try mergeDictionariesIterative(
+                target: targetDict,
+                source: sourceDict,
+                options: options
+            )
         }
-        return merge(target: target, source: source, options: options)
+        return try merge(target: target, source: source, options: options)
     }
 
     private struct DictionaryMergeFrame {
@@ -363,7 +374,13 @@ extension QsSwift.Utils {
         target: [AnyHashable: Any],
         source: [AnyHashable: Any],
         options: DecodeOptions
-    ) -> [AnyHashable: Any] {
+    ) throws -> [AnyHashable: Any] {
+        if options.throwOnLimitExceeded,
+            Utils.isOverflow(target) || Utils.isOverflow(source)
+        {
+            throw DecodeError.listLimitExceeded(limit: options.listLimit)
+        }
+
         var stack: [DictionaryMergeFrame] = [makeDictionaryMergeFrame(target: target, source: source)]
         var completed: [AnyHashable: Any]?
 
@@ -382,6 +399,11 @@ extension QsSwift.Utils {
                     if let existingDict = existingValue as? [AnyHashable: Any],
                         let valueDict = value as? [AnyHashable: Any]
                     {
+                        if options.throwOnLimitExceeded,
+                            Utils.isOverflow(existingDict) || Utils.isOverflow(valueDict)
+                        {
+                            throw DecodeError.listLimitExceeded(limit: options.listLimit)
+                        }
                         frame.pendingKey = key
                         stack.append(frame)
                         stack.append(
@@ -389,7 +411,11 @@ extension QsSwift.Utils {
                         )
                         continue
                     }
-                    frame.target[key] = mergeValues(target: existingValue, source: value, options: options)
+                    frame.target[key] = try mergeValues(
+                        target: existingValue,
+                        source: value,
+                        options: options
+                    )
                 } else {
                     frame.target[key] = value
                 }

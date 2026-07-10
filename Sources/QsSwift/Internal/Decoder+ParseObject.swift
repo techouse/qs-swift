@@ -51,7 +51,7 @@ extension QsSwift.Decoder {
                 value,
                 options: options,
                 currentListLength: currentListLength,
-                isFirstOccurrence: true
+                isFlatListValue: true
             )
 
         // Walk backwards from leaf to root
@@ -72,7 +72,7 @@ extension QsSwift.Decoder {
                         if let arrOpt = leaf as? [Any?] { return arrOpt }
                         return leaf ?? NSNull()
                     }()
-                    obj = Utils.combine([], valueForCombine, listLimit: options.listLimit)
+                    obj = try Utils.combine([], valueForCombine, options: options)
                 }
             } else {
                 var mutableObj: [AnyHashable: Any] = [:]

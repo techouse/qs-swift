@@ -115,6 +115,118 @@
     },
     {
         "data": {
+            "a": {
+                "[bc": "v"
+            }
+        },
+        "encoded": "a[bc=v"
+    },
+    {
+        "data": {
+            "a": {
+                "[": "v"
+            }
+        },
+        "encoded": "a[=v"
+    },
+    {
+        "data": {
+            "a": {
+                "b": {
+                    "[c": "v"
+                }
+            }
+        },
+        "encoded": "a[b][c=v"
+    },
+    {
+        "data": {
+            "a": {
+                "b": {
+                    "[d": "v"
+                }
+            }
+        },
+        "encoded": "a[b]c[d=v"
+    },
+    {
+        "data": {
+            "filters": {
+                "[customtags:Env: Prod": "v"
+            }
+        },
+        "encoded": "filters[customtags:Env: Prod=v"
+    },
+    {
+        "data": {
+            "]": {
+                "[a": "v"
+            }
+        },
+        "encoded": "][a=v"
+    },
+    {
+        "data": {
+            "a]": {
+                "[b": "v"
+            }
+        },
+        "encoded": "a][b=v"
+    },
+    {
+        "data": {
+            "a": {
+                "[b[c": "v"
+            }
+        },
+        "encoded": "a[b[c=v"
+    },
+    {
+        "data": {
+            "a": {
+                "[b[c]": "v"
+            }
+        },
+        "encoded": "a[b[c]=v"
+    },
+    {
+        "data": {
+            "a": {
+                "b": {
+                    "[c[d": "v"
+                }
+            }
+        },
+        "encoded": "a[b][c[d=v"
+    },
+    {
+        "data": {
+            "[abc": "v"
+        },
+        "encoded": "[abc=v"
+    },
+    {
+        "data": {
+            "[[]b": "v"
+        },
+        "encoded": "[[]b=v"
+    },
+    {
+        "data": {
+            "a]b": "v"
+        },
+        "encoded": "a]b=v"
+    },
+    {
+        "data": {
+            "a": {
+                "b": "v"
+            }
+        },
+        "encoded": "a[b]extra=v"
+    },
+    {
+        "data": {
             "a": [
                 {
                     "b": "c"
