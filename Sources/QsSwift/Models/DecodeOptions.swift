@@ -93,9 +93,17 @@ public struct DecodeOptions: @unchecked Sendable {
     /// When compacted, holes may be removed unless `allowSparseLists` is true.
     public let allowSparseLists: Bool
 
-    /// Maximum number of elements that will be materialized as a list before falling back
-    /// to a dictionary. For example, with the default `20`, `a[20]=x` decodes as
-    /// `["a": ["20": "x"]]` instead of allocating a 21-element list.
+    /// Maximum list size and numeric-index threshold used while decoding.
+    ///
+    /// The limit is cumulative across duplicate keys, flat comma-separated values, and
+    /// list merges. A result with exactly `listLimit` elements remains a list; growing
+    /// past it becomes a numeric-keyed dictionary, or throws when
+    /// `throwOnLimitExceeded` is `true`. A negative limit makes every non-empty list
+    /// overflow or throw immediately.
+    ///
+    /// Comma values written with `[]=` are nested groups: each complete comma group counts
+    /// as one outer list element, regardless of how many values the group contains.
+    /// Numeric bracket indices above the limit are represented as dictionary keys.
     public let listLimit: Int
 
     /// Character encoding to use (`.utf8` or `.isoLatin1`). May be overridden by the charset sentinel.
@@ -132,7 +140,8 @@ public struct DecodeOptions: @unchecked Sendable {
     /// Interpret HTML numeric entities (`&#...;`) when `charset == .isoLatin1`.
     public let interpretNumericEntities: Bool
 
-    /// Disable list parsing entirely. Useful for strict “map only” modes.
+    /// Enable bracket-list parsing. Set to `false` for strict “map only” modes.
+    /// This is the only option that disables bracket-list parsing; parameter count does not.
     public let parseLists: Bool
 
     /// If `true`, exceeding `depth` throws instead of collapsing the remainder.
@@ -145,7 +154,8 @@ public struct DecodeOptions: @unchecked Sendable {
     /// If `true`, values without `=` decode to `nil` (vs `""` by default).
     public let strictNullHandling: Bool
 
-    /// If `true`, exceeding `parameterLimit` throws; otherwise parsing truncates silently.
+    /// If `true`, exceeding `parameterLimit` or `listLimit` throws. Otherwise parameter
+    /// parsing truncates and list overflow falls back to a numeric-keyed dictionary.
     public let throwOnLimitExceeded: Bool
 
     // MARK: - Computed Properties

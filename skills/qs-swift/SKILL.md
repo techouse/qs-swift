@@ -277,13 +277,22 @@ Use these options with `Qs.decode(query, options: .init(...))`:
 - Duplicate keys: `duplicates: .combine` keeps all values as a list; use
   `.first` or `.last` to collapse.
 - Bracket lists: enabled by default; set `parseLists: false` to treat list
-  syntax as dictionary keys.
+  syntax as dictionary keys. Top-level parameter count never disables list
+  parsing implicitly.
 - Empty list tokens such as `foo[]`: `allowEmptyLists: true`.
 - Sparse numeric indices: `allowSparseLists: true` preserves holes as
   `NSNull()` placeholders; the default compacts lists.
 - Large list indices: default `listLimit` is `20`; indices above the limit
   become dictionary keys.
-- Comma-separated values such as `a=b,c`: `comma: true`.
+- Cumulative list growth: duplicate keys, flat comma values, mixed scalar/index/
+  bracket notation, and nested merges all share `listLimit`. Exactly-at-limit
+  results remain lists; non-throwing overflow becomes a numeric-keyed
+  dictionary. A negative limit overflows every non-empty list immediately.
+- Comma-separated values such as `a=b,c`: `comma: true`. With strict limit
+  handling, an oversized flat comma value throws before its values reach a
+  custom decoder.
+- Bracketed comma values such as `a[]=b,c,d` are nested groups and count as one
+  outer list element; the inner group is not capped by `listLimit`.
 - Tokens without `=` as `NSNull()`: `strictNullHandling: true`.
 - Custom delimiters: `delimiter: StringDelimiter(";")` or
   `delimiter: try RegexDelimiter("[;,]")`.
@@ -404,7 +413,8 @@ Warn or adjust before giving code for these cases:
 - `DecodeOptions(decodeDotInKeys: true, allowDots: false)` is invalid.
 - `parameterLimit` must be positive and `depth` must be non-negative.
 - `throwOnLimitExceeded: true` turns parameter and list limit violations into
-  thrown errors; without it, parsing truncates or falls back.
+  thrown errors; without it, parameter parsing truncates and list overflow
+  falls back to a numeric-keyed dictionary.
 - `strictDepth: true` throws on well-formed depth overflow; with the default
   `false`, the remainder beyond `depth` is kept as a trailing key segment.
 - Built-in charset handling supports only `.utf8` and `.isoLatin1`; other
