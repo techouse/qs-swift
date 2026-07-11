@@ -102,6 +102,7 @@ extension QsSwift.Decoder {
                     obj = mutableObj
                 } else if let idx = Int(decodedRoot),
                     idx >= 0,
+                    idx < Int.max,  // overflow metadata must remain incrementable
                     root != decodedRoot,  // must have been "[0]"
                     String(idx) == decodedRoot,
                     options.parseLists

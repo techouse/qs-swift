@@ -160,12 +160,25 @@ extension QsSwift.Utils {
                     var maxIndex = Utils.overflowMaxIndex(overflow) ?? -1
 
                     if let seq = asSequence(source) {
-                        for item in seq where !(item is Undefined) {
-                            maxIndex += 1
+                        let items = seq.filter { !($0 is Undefined) }
+                        for (offset, item) in items.enumerated() {
+                            guard let nextIndex = Utils.nextOverflowIndex(after: maxIndex) else {
+                                var values: [Any?] = [Utils.removingOverflowMetadata(from: overflow)]
+                                values.append(contentsOf: items[offset...].map { $0 as Any? })
+                                return try enforceListLimit(values, options: options)
+                            }
+                            maxIndex = nextIndex
                             overflow[maxIndex] = item
                         }
                     } else if !(source is Undefined) {
-                        maxIndex += 1
+                        guard let nextIndex = Utils.nextOverflowIndex(after: maxIndex) else {
+                            let values: [Any?] = [
+                                Utils.removingOverflowMetadata(from: overflow),
+                                source,
+                            ]
+                            return try enforceListLimit(values, options: options)
+                        }
+                        maxIndex = nextIndex
                         overflow[maxIndex] = source
                     }
 
@@ -235,13 +248,28 @@ extension QsSwift.Utils {
 
                 for (key, value) in sourceDict where !Utils.isOverflowKey(key) {
                     if let idx = Utils.intIndex(key) {
-                        result[idx + 1] = value
+                        guard let shiftedIndex = Utils.nextOverflowIndex(after: idx) else {
+                            return try merge(
+                                target: target,
+                                source: Utils.removingOverflowMetadata(from: sourceDict),
+                                options: options
+                            )
+                        }
+                        result[shiftedIndex] = value
                     } else {
                         result[key] = value
                     }
                 }
 
-                let newMax = (Utils.overflowMaxIndex(sourceDict) ?? -1) + 1
+                guard let newMax = Utils.nextOverflowIndex(
+                    after: Utils.overflowMaxIndex(sourceDict) ?? -1
+                ) else {
+                    return try merge(
+                        target: target,
+                        source: Utils.removingOverflowMetadata(from: sourceDict),
+                        options: options
+                    )
+                }
                 return Utils.markOverflow(result, maxIndex: newMax)
             }
 

@@ -615,6 +615,22 @@ struct DecodeTests {
         }
     }
 
+    @Test("maximum numeric bracket index remains a dictionary key without trapping")
+    func maximumNumericBracketIndexDoesNotTrap() throws {
+        let query = "a[\(Int.max)]=x&a=y"
+
+        for shouldThrow in [false, true] {
+            let decoded = try Qs.decode(
+                query,
+                options: DecodeOptions(throwOnLimitExceeded: shouldThrow)
+            )
+            let values = try #require(decoded["a"] as? [Any])
+            let indexed = try #require(values.first as? [String: Any])
+            #expect(indexed[String(Int.max)] as? String == "x")
+            #expect(values[1] as? String == "y")
+        }
+    }
+
     @Test("qs 6.15.3: overflow values merge with bracket assignments by index")
     func qs6153_overflowValuesMergeWithBracketAssignments() throws {
         let cases: [(String, [String: Any])] = [

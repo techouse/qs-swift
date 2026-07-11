@@ -1001,6 +1001,44 @@ struct UtilsTests {
         #expect(withinLimit?[1] as? String == "y")
     }
 
+    @Test("Overflow index arithmetic preserves values at Int.max without trapping")
+    func testOverflowIndexArithmeticAtIntMax() throws {
+        let boundary = Utils.markOverflow(
+            [AnyHashable(Int.max): "x"],
+            maxIndex: Int.max
+        )
+        let options = DecodeOptions(listLimit: 20)
+
+        let combined = try #require(
+            try Utils.combine(boundary, "y", options: options) as? [Any]
+        )
+        let combinedMap = try #require(combined[0] as? [AnyHashable: Any])
+        #expect(!Utils.isOverflow(combinedMap))
+        #expect(combinedMap[AnyHashable(Int.max)] as? String == "x")
+        #expect(combined[1] as? String == "y")
+
+        let merged = try #require(
+            try Utils.merge(
+                target: boundary,
+                source: OrderedSet<AnyHashable>(["y", "z"]),
+                options: options
+            ) as? [Any]
+        )
+        let mergedMap = try #require(merged[0] as? [AnyHashable: Any])
+        #expect(!Utils.isOverflow(mergedMap))
+        #expect(mergedMap[AnyHashable(Int.max)] as? String == "x")
+        #expect(merged[1] as? String == "y")
+        #expect(merged[2] as? String == "z")
+
+        let shifted = try #require(
+            try Utils.merge(target: "z", source: boundary, options: options) as? [Any]
+        )
+        #expect(shifted[0] as? String == "z")
+        let shiftedMap = try #require(shifted[1] as? [AnyHashable: Any])
+        #expect(!Utils.isOverflow(shiftedMap))
+        #expect(shiftedMap[AnyHashable(Int.max)] as? String == "x")
+    }
+
     @Test("Utils.combine - keeps arrays nested when appending to overflow objects")
     func testCombineKeepsOverflowAppendNested() async throws {
         let overflow = try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))

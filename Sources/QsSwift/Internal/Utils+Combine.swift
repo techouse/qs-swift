@@ -35,7 +35,7 @@ extension Utils {
             if options.throwOnLimitExceeded {
                 throw DecodeError.listLimitExceeded(limit: options.listLimit)
             }
-            return appendOverflow(dict, value: second)
+            return try appendOverflow(dict, value: second, options: options)
         }
 
         var result: [Any?] = []
@@ -79,11 +79,19 @@ extension Utils {
 
     private static func appendOverflow(
         _ dict: [AnyHashable: Any],
-        value: Any?
-    ) -> [AnyHashable: Any] {
+        value: Any?,
+        options: DecodeOptions
+    ) throws -> Any {
         var copy = dict
         var maxIndex = overflowMaxIndex(copy) ?? -1
-        maxIndex += 1
+        guard let nextIndex = nextOverflowIndex(after: maxIndex) else {
+            let values: [Any?] = [
+                removingOverflowMetadata(from: copy),
+                value ?? NSNull(),
+            ]
+            return try enforceListLimit(values, options: options)
+        }
+        maxIndex = nextIndex
         copy[maxIndex] = value ?? NSNull()
         setOverflowMaxIndex(&copy, maxIndex)
         return copy

@@ -45,6 +45,22 @@ extension Utils {
         key.base is OverflowKey
     }
 
+    @inline(__always)
+    @usableFromInline
+    internal static func nextOverflowIndex(after index: Int) -> Int? {
+        let (next, overflowed) = index.addingReportingOverflow(1)
+        return overflowed ? nil : next
+    }
+
+    @usableFromInline
+    internal static func removingOverflowMetadata(
+        from dict: [AnyHashable: Any]
+    ) -> [AnyHashable: Any] {
+        var copy = dict
+        copy.removeValue(forKey: overflowKey)
+        return copy
+    }
+
     @usableFromInline
     /// Scans non-overflow keys to compute the maximum integer index and stores it.
     /// Sets -1 if no integer keys are present.
