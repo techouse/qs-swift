@@ -100,12 +100,9 @@ extension QsSwift.Decoder {
                     // Treat "[]" as dictionary key "0"
                     mutableObj["0"] = (leaf ?? NSNull())
                     obj = mutableObj
-                } else if let idx = Int(decodedRoot),
-                    idx >= 0,
-                    idx < Int.max,  // overflow metadata must remain incrementable
-                    root != decodedRoot,  // must have been "[0]"
-                    String(idx) == decodedRoot,
-                    options.parseLists
+                } else if root != decodedRoot,  // must have been "[0]"
+                    options.parseLists,
+                    let idx = parseJavaScriptArrayIndex(decodedRoot)
                 {
                     if idx < options.listLimit {
                         // valid bracketed numeric index ⇒ array shell
@@ -130,6 +127,18 @@ extension QsSwift.Decoder {
         }
 
         return leaf
+    }
+
+    /// Mirrors qs's `String(parseInt(root, 10)) === root` numeric-index check.
+    private static func parseJavaScriptArrayIndex(_ root: String) -> Int? {
+        guard let index = Int(root), index >= 0, String(index) == root else {
+            return nil
+        }
+        if index <= Utils.maximumSafeJavaScriptInteger { return index }
+        guard let number = Double(root), number.isFinite,
+            Utils.javascriptIntegerDescription(number) == root
+        else { return nil }
+        return index
     }
 
     @inline(__always)

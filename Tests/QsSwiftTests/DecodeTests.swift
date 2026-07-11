@@ -615,19 +615,39 @@ struct DecodeTests {
         }
     }
 
-    @Test("maximum numeric bracket index remains a dictionary key without trapping")
-    func maximumNumericBracketIndexDoesNotTrap() throws {
-        let query = "a[\(Int.max)]=x&a=y"
+    @Test("numeric bracket indices follow qs JavaScript number round trips")
+    func numericBracketIndicesFollowJavaScriptNumberRoundTrips() throws {
+        for index in ["9007199254740993", String(Int.max - 1), String(Int.max)] {
+            let query = "a[\(index)]=x&a=y"
+            for shouldThrow in [false, true] {
+                let decoded = try Qs.decode(
+                    query,
+                    options: DecodeOptions(throwOnLimitExceeded: shouldThrow)
+                )
+                let values = try #require(decoded["a"] as? [Any])
+                let indexed = try #require(values.first as? [String: Any])
+                #expect(indexed[index] as? String == "x")
+                #expect(values[1] as? String == "y")
+            }
+        }
 
-        for shouldThrow in [false, true] {
-            let decoded = try Qs.decode(
-                query,
-                options: DecodeOptions(throwOnLimitExceeded: shouldThrow)
-            )
-            let values = try #require(decoded["a"] as? [Any])
-            let indexed = try #require(values.first as? [String: Any])
-            #expect(indexed[String(Int.max)] as? String == "x")
-            #expect(values[1] as? String == "y")
+        let roundedAppend = try Qs.decode("a[9007199254740994]=x&a=y")
+        let roundedMap = try #require(asDictString(roundedAppend["a"]))
+        #expect(roundedMap["9007199254740994"] as? String == "x")
+        #expect(roundedMap["9007199254740996"] as? String == "y")
+
+        let repeatedIndex = try Qs.decode("a[9007199254740992]=x&a=y")
+        let repeatedMap = try #require(asDictString(repeatedIndex["a"]))
+        #expect(repeatedMap.count == 1)
+        #expect(repeatedMap["9007199254740992"] as? String == "y")
+
+        for index in ["9007199254740992", "9007199254740994"] {
+            #expect(throws: DecodeError.listLimitExceeded(limit: 20)) {
+                _ = try Qs.decode(
+                    "a[\(index)]=x&a=y",
+                    options: DecodeOptions(throwOnLimitExceeded: true)
+                )
+            }
         }
     }
 
