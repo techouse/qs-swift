@@ -115,8 +115,8 @@ extension QsSwift.Decoder {
                         if options.throwOnLimitExceeded {
                             throw DecodeError.listLimitExceeded(limit: options.listLimit)
                         }
-                        mutableObj[decodedRoot] = (leaf ?? NSNull())
-                        obj = mutableObj
+                        mutableObj[idx] = (leaf ?? NSNull())
+                        obj = Utils.markOverflow(mutableObj, maxIndex: idx)
                     }
                 } else {
                     // default: dictionary with *string* key

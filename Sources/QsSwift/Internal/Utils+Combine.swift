@@ -71,7 +71,7 @@ extension Utils {
     private static func arrayToOverflowObject(_ array: [Any?]) -> [AnyHashable: Any] {
         var dict: [AnyHashable: Any] = [:]
         dict.reserveCapacity(array.count + 1)
-        for (index, value) in array.enumerated() {
+        for (index, value) in array.enumerated() where !(value is Undefined) {
             dict[index] = value ?? NSNull()
         }
         return markOverflow(dict, maxIndex: array.count - 1)

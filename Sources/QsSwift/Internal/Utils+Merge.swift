@@ -190,10 +190,12 @@ extension QsSwift.Utils {
                 return mutableTarget
             } else {
                 if let seq = asSequence(source) {
-                    let filtered = seq.filter { !($0 is Undefined) }
                     var result: [Any?] = [target]  // preserve nil at index 0
-                    result.append(contentsOf: filtered)
-                    return try enforceListLimit(result, options: options)
+                    result.append(contentsOf: seq)
+                    if result.count > options.listLimit {
+                        return try enforceListLimit(result, options: options)
+                    }
+                    return result.filter { !($0 is Undefined) }
                 }
                 // qs returns the scalar pair directly here. Limit enforcement
                 // applies to array/primitive directions, while scalar collisions

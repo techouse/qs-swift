@@ -103,7 +103,7 @@ public struct DecodeOptions: @unchecked Sendable {
     ///
     /// Comma values written with `[]=` are nested groups: each complete comma group counts
     /// as one outer list element, regardless of how many values the group contains.
-    /// Numeric bracket indices above the limit are represented as dictionary keys.
+    /// Numeric bracket indices at or above the limit are represented as dictionary keys.
     public let listLimit: Int
 
     /// Character encoding to use (`.utf8` or `.isoLatin1`). May be overridden by the charset sentinel.

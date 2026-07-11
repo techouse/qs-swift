@@ -965,6 +965,42 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.merge - sparse primitive-array growth counts holes but omits them from overflow")
+    func testMergeSparsePrimitiveArrayLimit() throws {
+        let sparse: [Any] = [Undefined.instance, Undefined.instance, "y"]
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: "x",
+                source: sparse,
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            )
+        }
+
+        let soft = try #require(
+            try Utils.merge(
+                target: "x",
+                source: sparse,
+                options: DecodeOptions(listLimit: 3)
+            ) as? [AnyHashable: Any]
+        )
+        #expect(Utils.isOverflow(soft))
+        #expect(Utils.overflowMaxIndex(soft) == 3)
+        #expect(soft[AnyHashable(0)] as? String == "x")
+        #expect(soft[AnyHashable(1)] == nil)
+        #expect(soft[AnyHashable(2)] == nil)
+        #expect(soft[AnyHashable(3)] as? String == "y")
+
+        let withinLimit = try Utils.merge(
+            target: "x",
+            source: sparse,
+            options: DecodeOptions(listLimit: 4, throwOnLimitExceeded: true)
+        ) as? [Any?]
+        #expect(withinLimit?.count == 2)
+        #expect(withinLimit?[0] as? String == "x")
+        #expect(withinLimit?[1] as? String == "y")
+    }
+
     @Test("Utils.combine - keeps arrays nested when appending to overflow objects")
     func testCombineKeepsOverflowAppendNested() async throws {
         let overflow = try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))

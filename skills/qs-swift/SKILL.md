@@ -282,7 +282,7 @@ Use these options with `Qs.decode(query, options: .init(...))`:
 - Empty list tokens such as `foo[]`: `allowEmptyLists: true`.
 - Sparse numeric indices: `allowSparseLists: true` preserves holes as
   `NSNull()` placeholders; the default compacts lists.
-- Large list indices: default `listLimit` is `20`; indices above the limit
+- Large list indices: default `listLimit` is `20`; indices at or above the limit
   become dictionary keys.
 - Cumulative list growth: duplicate keys, flat comma values, mixed scalar/index/
   bracket notation, and nested merges all share `listLimit`. Exactly-at-limit

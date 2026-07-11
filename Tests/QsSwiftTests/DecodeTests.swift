@@ -570,6 +570,51 @@ struct DecodeTests {
         }
     }
 
+    @Test("qs 6.15.3: sparse scalar merges count numeric positions before compaction")
+    func qs6153_sparseScalarMergeCountsPositions() throws {
+        let query = "a=x&a[2]=y"
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Qs.decode(
+                query,
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            )
+        }
+
+        let soft = try Qs.decode(query, options: DecodeOptions(listLimit: 3))
+        let overflow = asDictString(soft["a"])
+        #expect(overflow?["0"] as? String == "x")
+        #expect(overflow?["3"] as? String == "y")
+        #expect(overflow?["1"] == nil)
+        #expect(overflow?["2"] == nil)
+
+        let withinLimit = try Qs.decode(
+            query,
+            options: DecodeOptions(listLimit: 4, throwOnLimitExceeded: true)
+        )
+        #expect(asStrings(withinLimit["a"]) == ["x", "y"])
+    }
+
+    @Test("qs 6.15.3: threshold index maps preserve overflow metadata across mixed merges")
+    func qs6153_thresholdIndexOverflowMetadata() throws {
+        let cases: [(String, Int, [String: String])] = [
+            ("a[1]=x&a=y", 1, ["1": "x", "2": "y"]),
+            ("a=x&a[1]=y", 1, ["0": "x", "2": "y"]),
+            ("a[1]=x&a[]=y", 1, ["0": "y", "1": "x"]),
+            ("a[0]=x&a=y", -1, ["0": "x", "1": "y"]),
+            ("a=x&a[0]=y", -1, ["0": "x", "1": "y"]),
+        ]
+
+        for (query, limit, expected) in cases {
+            let decoded = try Qs.decode(query, options: DecodeOptions(listLimit: limit))
+            let overflow = asDictString(decoded["a"])
+            #expect(overflow?.count == expected.count, Comment(rawValue: query))
+            for (key, value) in expected {
+                #expect(overflow?[key] as? String == value, Comment(rawValue: query))
+            }
+        }
+    }
+
     @Test("qs 6.15.3: overflow values merge with bracket assignments by index")
     func qs6153_overflowValuesMergeWithBracketAssignments() throws {
         let cases: [(String, [String: Any])] = [
