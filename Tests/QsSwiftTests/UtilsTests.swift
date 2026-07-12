@@ -1,5 +1,6 @@
 import Foundation
 import OrderedCollections
+
 @_spi(Testing) @testable import QsSwift
 
 #if canImport(Testing)
@@ -1103,11 +1104,12 @@ struct UtilsTests {
         #expect(soft[AnyHashable(2)] == nil)
         #expect(soft[AnyHashable(3)] as? String == "y")
 
-        let withinLimit = try Utils.merge(
-            target: "x",
-            source: sparse,
-            options: DecodeOptions(listLimit: 4, throwOnLimitExceeded: true)
-        ) as? [Any?]
+        let withinLimit =
+            try Utils.merge(
+                target: "x",
+                source: sparse,
+                options: DecodeOptions(listLimit: 4, throwOnLimitExceeded: true)
+            ) as? [Any?]
         try #require(withinLimit?.count == 4)
         #expect(withinLimit?[0] as? String == "x")
         #expect(withinLimit?[1] is Undefined)
@@ -1188,11 +1190,12 @@ struct UtilsTests {
 
     @Test("Utils.merge - handles overflow objects")
     func testMergeOverflowObjects() async throws {
-        let overflow = try Utils.combine(
-            ["a"],
-            "b",
-            options: DecodeOptions(listLimit: 1)
-        ) as? [AnyHashable: Any]
+        let overflow =
+            try Utils.combine(
+                ["a"],
+                "b",
+                options: DecodeOptions(listLimit: 1)
+            ) as? [AnyHashable: Any]
         #expect(Utils.isOverflow(overflow))
 
         if let overflow {
@@ -1216,11 +1219,12 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges an array target into overflow values by numeric index")
     func testMergeOverflowIntoArrayTarget() async throws {
-        let overflow = try Utils.combine(
-            ["a"],
-            "b",
-            options: DecodeOptions(listLimit: 1)
-        ) as? [AnyHashable: Any]
+        let overflow =
+            try Utils.combine(
+                ["a"],
+                "b",
+                options: DecodeOptions(listLimit: 1)
+            ) as? [AnyHashable: Any]
         #expect(Utils.isOverflow(overflow))
 
         if let overflow {
@@ -2504,7 +2508,8 @@ struct UtilsTests {
             #expect(!orderedResult.isEmpty)
         }
 
-        let orderedWithSequence = try Utils.merge(target: OrderedSet(["a"]), source: [undefined, "b"], options: .init())
+        let orderedWithSequence = try Utils.merge(
+            target: OrderedSet(["a"]), source: [undefined, "b"], options: .init())
         if let orderedSequenceArray = orderedWithSequence as? [Any?] {
             #expect(orderedSequenceArray.contains { ($0 as? String) == "b" })
         }
@@ -2518,7 +2523,8 @@ struct UtilsTests {
         // Array target with Undefined elements and parseLists disabled
         let options = DecodeOptions(parseLists: false)
         let arrayWithUndefined: [Any] = [undefined, "a"]
-        let mergedArray = try Utils.merge(target: arrayWithUndefined, source: ["b", undefined], options: options) as? [Any]
+        let mergedArray =
+            try Utils.merge(target: arrayWithUndefined, source: ["b", undefined], options: options) as? [Any]
         #expect(mergedArray?.compactMap { $0 as? String }.contains("b") == true)
 
         // Array target + sequence of maps recursively merges scalar collisions.
@@ -2531,7 +2537,8 @@ struct UtilsTests {
 
         // Dictionary target with non-sequence source coerces key from description
         let dictTarget: [AnyHashable: Any] = ["keep": 1]
-        if let mergedDict = try Utils.merge(target: dictTarget, source: "flag", options: .init()) as? [AnyHashable: Any] {
+        if let mergedDict = try Utils.merge(target: dictTarget, source: "flag", options: .init()) as? [AnyHashable: Any]
+        {
             #expect(mergedDict.keys.contains { ($0 as? String) == "flag" })
         }
 
@@ -2563,7 +2570,8 @@ struct UtilsTests {
             Issue.record("OrderedSet union branch not exercised")
         }
 
-        if let unchanged = try Utils.merge(target: target, source: undefined, options: .init()) as? OrderedSet<AnyHashable>
+        if let unchanged = try Utils.merge(target: target, source: undefined, options: .init())
+            as? OrderedSet<AnyHashable>
         {
             #expect(unchanged.elementsEqual(target))
         } else {

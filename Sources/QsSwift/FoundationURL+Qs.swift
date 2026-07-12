@@ -9,7 +9,7 @@ public enum QsURLQueryError: Error, Equatable, Sendable {
     case invalidURL
 }
 
-public extension URLComponents {
+extension URLComponents {
     /// Appends QsSwift-encoded query items to this component's percent-encoded query.
     ///
     /// This method appends to `percentEncodedQuery` instead of `queryItems` so qs-style bracket keys stay encoded as
@@ -21,7 +21,7 @@ public extension URLComponents {
     ///     options such as delimiter, list format, sorting, null handling, and custom encoders.
     /// - Throws: `EncodeError` from `Qs.encode`, or `QsURLQueryError.invalidPercentEncodedQuery` when the generated
     ///   query is not valid percent-encoded query text.
-    mutating func appendQsQueryItems(
+    public mutating func appendQsQueryItems(
         _ value: Any?,
         options: EncodeOptions = .init()
     ) throws {
@@ -46,7 +46,7 @@ public extension URLComponents {
     ///
     /// The receiver is restored to its original percent-encoded query if encoding or validation fails.
     @discardableResult
-    mutating func appendQsQueryItemsIfPossible(
+    public mutating func appendQsQueryItemsIfPossible(
         _ value: Any?,
         options: EncodeOptions = .init()
     ) -> Bool {
@@ -62,7 +62,7 @@ public extension URLComponents {
     }
 }
 
-public extension URL {
+extension URL {
     /// Returns a new URL with QsSwift-encoded query items appended.
     ///
     /// The original URL is not mutated. Existing query text and fragments are preserved.
@@ -72,7 +72,7 @@ public extension URL {
     ///   - options: Encoder settings.
     /// - Throws: `EncodeError` from `Qs.encode`, `QsURLQueryError.invalidPercentEncodedQuery`, or
     ///   `QsURLQueryError.invalidURL` if Foundation cannot rebuild the URL.
-    func appendingQsQueryItems(
+    public func appendingQsQueryItems(
         _ value: Any?,
         options: EncodeOptions = .init()
     ) throws -> URL {
@@ -90,7 +90,7 @@ public extension URL {
     }
 
     /// Returns a new URL with QsSwift-encoded query items appended, or `nil` on failure.
-    func appendingQsQueryItemsOrNil(
+    public func appendingQsQueryItemsOrNil(
         _ value: Any?,
         options: EncodeOptions = .init()
     ) -> URL? {

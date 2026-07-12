@@ -40,7 +40,7 @@ struct FoundationURLTests {
                 "where": [
                     "age": ["gte": 30],
                     "name": "John",
-                ],
+                ]
             ],
             "tags": ["a", "b"],
         ]
@@ -54,7 +54,7 @@ struct FoundationURLTests {
         #expect(
             url.absoluteString
                 == "https://api.example.com/products?filter%5Bwhere%5D%5Bage%5D%5Bgte%5D=30"
-                    + "&filter%5Bwhere%5D%5Bname%5D=John&tags%5B0%5D=a&tags%5B1%5D=b"
+                + "&filter%5Bwhere%5D%5Bname%5D=John&tags%5B0%5D=a&tags%5B1%5D=b"
         )
         #expect(url.absoluteString.contains("filter%5Bwhere%5D"))
         #expect(!url.absoluteString.contains("%255B"))
@@ -117,7 +117,7 @@ struct FoundationURLTests {
         #expect(
             components.url?.absoluteString
                 == "https://user:pass@api.example.com:8443/products"
-                    + "?existing=x%20y&flag&filter%5Bname%5D=John#frag"
+                + "?existing=x%20y&flag&filter%5Bname%5D=John#frag"
         )
     }
 

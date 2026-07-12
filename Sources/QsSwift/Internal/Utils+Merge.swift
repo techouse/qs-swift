@@ -247,9 +247,11 @@ extension QsSwift.Utils {
                     }
                 }
 
-                guard let newMax = Utils.nextOverflowIndex(
-                    after: Utils.overflowMaxIndex(sourceDict) ?? -1
-                ) else {
+                guard
+                    let newMax = Utils.nextOverflowIndex(
+                        after: Utils.overflowMaxIndex(sourceDict) ?? -1
+                    )
+                else {
                     return try merge(
                         target: target,
                         source: Utils.removingOverflowMetadata(from: sourceDict),
