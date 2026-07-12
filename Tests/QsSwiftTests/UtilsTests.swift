@@ -1033,6 +1033,50 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.merge - preserves sparse positions for later cumulative growth")
+    func testMergePreservesSparsePositionsForCumulativeGrowth() throws {
+        let first = try #require(
+            try Utils.merge(
+                target: "x",
+                source: [Undefined.instance, ""],
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            ) as? [Any?]
+        )
+        try #require(first.count == 3)
+        #expect(first[0] as? String == "x")
+        #expect(first[1] is Undefined)
+        #expect(first[2] as? String == "")
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: first,
+                source: ["y"],
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            )
+        }
+    }
+
+    @Test("Utils.merge - treats numeric strings and integer indices as the same property")
+    func testMergeNumericPropertyKeyEquivalence() {
+        let nested = ["1", "2", "3"]
+        let options = DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: [AnyHashable("0"): nested],
+                source: ["1", "", "3"],
+                options: options
+            )
+        }
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: ["1", "", "3"],
+                source: [AnyHashable("0"): nested],
+                options: options
+            )
+        }
+    }
+
     @Test("Utils.merge - sparse primitive-array growth counts holes but omits them from overflow")
     func testMergeSparsePrimitiveArrayLimit() throws {
         let sparse: [Any] = [Undefined.instance, Undefined.instance, "y"]
@@ -1064,9 +1108,11 @@ struct UtilsTests {
             source: sparse,
             options: DecodeOptions(listLimit: 4, throwOnLimitExceeded: true)
         ) as? [Any?]
-        #expect(withinLimit?.count == 2)
+        try #require(withinLimit?.count == 4)
         #expect(withinLimit?[0] as? String == "x")
-        #expect(withinLimit?[1] as? String == "y")
+        #expect(withinLimit?[1] is Undefined)
+        #expect(withinLimit?[2] is Undefined)
+        #expect(withinLimit?[3] as? String == "y")
     }
 
     @Test("Overflow index arithmetic preserves values at Int.max without trapping")
@@ -2588,16 +2634,16 @@ struct UtilsTests {
         }
     }
 
-    @Test("Utils.merge merges nil targets with typed [Any] sources and filters Undefined")
+    @Test("Utils.merge merges nil targets with typed [Any] sources and preserves sparse positions")
     func utils_merge_nilTarget_typedArraySource() throws {
         let source: [Any] = [Undefined.instance, "ok", 42]
         if let merged = try Utils.merge(target: nil, source: source, options: .init()) as? [Any?] {
-            #expect(merged.count == 3)
+            #expect(merged.count == 4)
             let head = merged.first.flatMap { $0 }
             #expect(head == nil)
-            #expect(merged.dropFirst().contains { $0 is Undefined } == false)
-            #expect(merged[1] as? String == "ok")
-            #expect(merged[2] as? Int == 42)
+            #expect(merged[1] is Undefined)
+            #expect(merged[2] as? String == "ok")
+            #expect(merged[3] as? Int == 42)
         } else {
             Issue.record("Nil-target array merge branch not exercised")
         }

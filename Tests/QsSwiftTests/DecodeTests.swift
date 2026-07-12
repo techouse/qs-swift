@@ -749,6 +749,59 @@ struct DecodeTests {
         #expect(overflow["3"] as? String == "y")
     }
 
+    @Test("qs 6.15.3: sparse positions survive until cumulative limit enforcement")
+    func qs6153_sparsePositionsSurviveUntilCumulativeLimitEnforcement() throws {
+        let query = "a=x&a[1]&a[]=y"
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Qs.decode(
+                query,
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            )
+        }
+
+        let decoded = try Qs.decode(query, options: DecodeOptions(listLimit: 3))
+        let overflow = try #require(asDictString(decoded["a"]))
+        #expect(overflow["0"] as? String == "x")
+        #expect(overflow["1"] == nil)
+        #expect(overflow["2"] as? String == "")
+        #expect(overflow["3"] as? String == "y")
+    }
+
+    @Test("qs 6.15.3: numeric string and integer keys collide when lists are disabled")
+    func qs6153_numericPropertyKeysCollideWhenListsAreDisabled() throws {
+        let cases: [(query: String, nested: [String])] = [
+            ("a[0]=1,2,3&a=1,,3", ["1", "2", "3", "1"]),
+            ("a=1,,3&a[0]=1,2,3", ["1", "1", "2", "3"]),
+        ]
+
+        for item in cases {
+            #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+                _ = try Qs.decode(
+                    item.query,
+                    options: DecodeOptions(
+                        listLimit: 3,
+                        comma: true,
+                        parseLists: false,
+                        throwOnLimitExceeded: true
+                    )
+                )
+            }
+
+            let decoded = try Qs.decode(
+                item.query,
+                options: DecodeOptions(listLimit: 3, comma: true, parseLists: false)
+            )
+            let outer = try #require(asDictString(decoded["a"]))
+            let nested = try #require(asDictString(outer["0"]))
+            for (index, expected) in item.nested.enumerated() {
+                #expect(nested[String(index)] as? String == expected)
+            }
+            #expect(outer["1"] as? String == "")
+            #expect(outer["2"] as? String == "3")
+        }
+    }
+
     @Test("qs 6.15.3: falsy scalar merges do not grow lists")
     func qs6153_falsyScalarMergeDoesNotGrowList() throws {
         let decoded = try Qs.decode(

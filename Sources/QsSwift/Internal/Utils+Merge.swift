@@ -194,7 +194,7 @@ extension QsSwift.Utils {
                     if result.count > options.listLimit {
                         return try enforceListLimit(result, options: options)
                     }
-                    return result.filter { !($0 is Undefined) }
+                    return result
                 }
                 // qs returns the scalar pair directly here. Limit enforcement
                 // applies to array/primitive directions, while scalar collisions
@@ -409,9 +409,10 @@ extension QsSwift.Utils {
 
             if frame.index < frame.sourceItems.count {
                 let (key, value) = frame.sourceItems[frame.index]
+                let targetKey = matchingDictionaryKey(for: key, in: frame.target)
                 frame.index += 1
 
-                if let existingValue = frame.target[key] {
+                if let existingValue = frame.target[targetKey] {
                     if let existingDict = existingValue as? [AnyHashable: Any],
                         let valueDict = value as? [AnyHashable: Any]
                     {
@@ -420,23 +421,23 @@ extension QsSwift.Utils {
                         {
                             throw DecodeError.listLimitExceeded(limit: options.listLimit)
                         }
-                        frame.pendingKey = key
+                        frame.pendingKey = targetKey
                         stack.append(frame)
                         stack.append(
                             makeDictionaryMergeFrame(target: existingDict, source: valueDict)
                         )
                         continue
                     }
-                    frame.target[key] = try mergeValues(
+                    frame.target[targetKey] = try mergeValues(
                         target: existingValue,
                         source: value,
                         options: options
                     )
                 } else {
-                    frame.target[key] = value
+                    frame.target[targetKey] = value
                 }
 
-                if let idx = Utils.intIndex(key), let current = frame.overflowMax, idx > current {
+                if let idx = Utils.intIndex(targetKey), let current = frame.overflowMax, idx > current {
                     frame.overflowMax = idx
                 }
 
@@ -456,5 +457,27 @@ extension QsSwift.Utils {
         }
 
         return completed ?? target
+    }
+
+    /// JavaScript object keys do not distinguish an integer index from its canonical string form.
+    private static func matchingDictionaryKey(
+        for key: AnyHashable,
+        in target: [AnyHashable: Any]
+    ) -> AnyHashable {
+        if target[key] != nil { return key }
+
+        if let index = Utils.intIndex(key) {
+            let stringKey = AnyHashable(String(index))
+            if target[stringKey] != nil { return stringKey }
+        } else if let stringKey = key.base as? String,
+            let index = Int(stringKey),
+            index >= 0,
+            String(index) == stringKey
+        {
+            let integerKey = AnyHashable(index)
+            if target[integerKey] != nil { return integerKey }
+        }
+
+        return key
     }
 }
