@@ -299,7 +299,9 @@ Use these options with `Qs.decode(query, options: .init(...))`:
 - Legacy charset input: `charset: .isoLatin1`; use `charsetSentinel: true`
   when a form may include `utf8=...` to signal the real charset.
 - HTML numeric entities: `interpretNumericEntities: true`, usually with
-  ISO-8859-1 or charset sentinel handling.
+  ISO-8859-1 or charset sentinel handling. Entity interpretation can collapse a
+  comma list to a scalar before non-throwing overflow is applied, preserving the
+  scalar shape instead of producing a numeric-keyed dictionary.
 - Custom scalar decoding: use `decoder` when key/value behavior differs; key
   decoding should return values that can be stringified.
 - Untrusted input: keep `depth`, `parameterLimit`, and `listLimit` bounded; use
