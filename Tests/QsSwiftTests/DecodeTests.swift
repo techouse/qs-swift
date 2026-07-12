@@ -475,8 +475,8 @@ struct DecodeTests {
         #expect((a?["1"] as? String) == "X:c")
     }
 
-    @Test("comma overflow + iso entities preserves map shape")
-    func testComma_ListLimit_NonThrowingOverflowIsoEntitiesPreserveMap() throws {
+    @Test("comma + iso entities collapses before soft overflow")
+    func testComma_ListLimit_NonThrowingOverflowIsoEntitiesCollapseFirst() throws {
         let opts = DecodeOptions(
             listLimit: 1,
             charset: .isoLatin1,
@@ -485,9 +485,7 @@ struct DecodeTests {
             throwOnLimitExceeded: false
         )
         let r = try Qs.decode("a=1,%26%239786%3B", options: opts)
-        let a = asDictString(r["a"])
-        #expect((a?["0"] as? String) == "1")
-        #expect((a?["1"] as? String) == "☺")
+        #expect(r["a"] as? String == "1,☺")
     }
 
     // MARK: - GHSA-w7fw-mjwx-w883 parity (qs PR #545 / v6.14.2)
@@ -704,6 +702,76 @@ struct DecodeTests {
                 options: DecodeOptions(listLimit: 2, throwOnLimitExceeded: true)
             )
         }
+    }
+
+    @Test("qs 6.15.3: nested comma arrays merge before enforcing listLimit")
+    func qs6153_nestedCommaArraysMergeBeforeLimitEnforcement() throws {
+        let query = "a[0]=1,2&a[]=1,,3"
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Qs.decode(
+                query,
+                options: DecodeOptions(listLimit: 3, comma: true, throwOnLimitExceeded: true)
+            )
+        }
+
+        let decoded = try Qs.decode(
+            query,
+            options: DecodeOptions(listLimit: 3, comma: true)
+        )
+        let outer = try #require(decoded["a"] as? [Any])
+        let inner = try #require(asDictString(outer.first))
+        #expect(inner["0"] as? String == "1")
+        #expect(inner["1"] as? String == "2")
+        #expect(inner["2"] as? String == "1")
+        #expect(inner["3"] as? String == "")
+        #expect(inner["4"] as? String == "3")
+    }
+
+    @Test("qs 6.15.3: sparse array collisions append before enforcing listLimit")
+    func qs6153_sparseArrayCollisionsAppendBeforeLimitEnforcement() throws {
+        let query = "a[2]=1,2&a[]=1,2&a[0]=y"
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Qs.decode(
+                query,
+                options: DecodeOptions(listLimit: 3, comma: true, throwOnLimitExceeded: true)
+            )
+        }
+
+        let decoded = try Qs.decode(
+            query,
+            options: DecodeOptions(listLimit: 3, comma: true)
+        )
+        let overflow = try #require(asDictString(decoded["a"]))
+        #expect((overflow["0"] as? [String]) == ["1", "2"])
+        #expect((overflow["2"] as? [String]) == ["1", "2"])
+        #expect(overflow["3"] as? String == "y")
+    }
+
+    @Test("qs 6.15.3: falsy scalar merges do not grow lists")
+    func qs6153_falsyScalarMergeDoesNotGrowList() throws {
+        let decoded = try Qs.decode(
+            "a[0]=x&a=",
+            options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+        )
+        #expect(asStrings(decoded["a"]) == ["x"])
+    }
+
+    @Test("qs 6.15.3: numeric entities are interpreted before soft comma overflow")
+    func qs6153_numericEntitiesBeforeSoftCommaOverflow() throws {
+        let decoded = try Qs.decode(
+            "a=x&a=%26%239786%3B,%26%239787%3B",
+            options: DecodeOptions(
+                listLimit: 1,
+                charset: .isoLatin1,
+                comma: true,
+                interpretNumericEntities: true
+            )
+        )
+        let overflow = try #require(asDictString(decoded["a"]))
+        #expect(overflow["0"] as? String == "x")
+        #expect(overflow["1"] as? String == "☺,☻")
     }
 
     @Test("qs 6.15.3: bracketed comma groups count as outer elements")

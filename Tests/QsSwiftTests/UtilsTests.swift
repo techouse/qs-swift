@@ -965,6 +965,74 @@ struct UtilsTests {
         }
     }
 
+    @Test("Utils.merge - recursively merges nested arrays before limit enforcement")
+    func testMergeNestedArraysBeforeLimitEnforcement() throws {
+        let target: [Any] = [["1", "2"]]
+        let source: [Any] = [["1", "", "3"]]
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: target,
+                source: source,
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            )
+        }
+
+        let merged = try #require(
+            try Utils.merge(
+                target: target,
+                source: source,
+                options: DecodeOptions(listLimit: 3)
+            ) as? [Any?]
+        )
+        let inner = try #require(merged[0] as? [AnyHashable: Any])
+        #expect(Utils.isOverflow(inner))
+        #expect(inner[AnyHashable(0)] as? String == "1")
+        #expect(inner[AnyHashable(1)] as? String == "2")
+        #expect(inner[AnyHashable(2)] as? String == "1")
+        #expect(inner[AnyHashable(3)] as? String == "")
+        #expect(inner[AnyHashable(4)] as? String == "3")
+    }
+
+    @Test("Utils.merge - sparse collisions append at the logical end")
+    func testMergeSparseCollisionLimit() throws {
+        let target: [Any] = [["1", "2"], Undefined.instance, ["1", "2"]]
+        let source: [Any] = ["y"]
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: target,
+                source: source,
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            )
+        }
+
+        let merged = try #require(
+            try Utils.merge(
+                target: target,
+                source: source,
+                options: DecodeOptions(listLimit: 3)
+            ) as? [AnyHashable: Any]
+        )
+        #expect(Utils.isOverflow(merged))
+        #expect((merged[AnyHashable(0)] as? [String]) == ["1", "2"])
+        #expect(merged[AnyHashable(1)] == nil)
+        #expect((merged[AnyHashable(2)] as? [String]) == ["1", "2"])
+        #expect(merged[AnyHashable(3)] as? String == "y")
+    }
+
+    @Test("Utils.merge - ignores falsy sources before list-limit enforcement")
+    func testMergeFalsySourcesDoNotGrowLists() throws {
+        for source: Any in ["", false, 0, NSNull()] {
+            let merged = try Utils.merge(
+                target: ["x"],
+                source: source,
+                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+            )
+            #expect(merged as? [String] == ["x"])
+        }
+    }
+
     @Test("Utils.merge - sparse primitive-array growth counts holes but omits them from overflow")
     func testMergeSparsePrimitiveArrayLimit() throws {
         let sparse: [Any] = [Undefined.instance, Undefined.instance, "y"]
@@ -2407,12 +2475,12 @@ struct UtilsTests {
         let mergedArray = try Utils.merge(target: arrayWithUndefined, source: ["b", undefined], options: options) as? [Any]
         #expect(mergedArray?.compactMap { $0 as? String }.contains("b") == true)
 
-        // Array target + sequence of maps to trigger recursive merge
+        // Array target + sequence of maps recursively merges scalar collisions.
         let targetMaps: [Any] = [["k": "v"], Undefined.instance]
         let sourceMaps: [Any] = [["k": "override"], ["new": "value"]]
         if let mergedMaps = try Utils.merge(target: targetMaps, source: sourceMaps, options: .init()) as? [Any?] {
             let first = mergedMaps[0] as? [AnyHashable: Any]
-            #expect(first?["k"] as? String == "override")
+            #expect(first?["k"] as? [String] == ["v", "override"])
         }
 
         // Dictionary target with non-sequence source coerces key from description
@@ -2477,17 +2545,18 @@ struct UtilsTests {
         }
     }
 
-    @Test("Utils.merge overlays Swift [Any] with sequence indices")
-    func utils_merge_arraySequenceOverlay() throws {
+    @Test("Utils.merge applies qs collision rules to Swift [Any] sequence indices")
+    func utils_merge_arraySequenceCollisions() throws {
         let undefined = Undefined.instance
         let target = [Any](arrayLiteral: undefined, "keep")
         let source: [Any] = ["replaced", "new"]
         if let merged = try Utils.merge(target: target, source: source, options: .init(parseLists: true)) as? [Any?] {
             #expect(merged[0] as? String == "replaced")
-            #expect(merged[1] as? String == "new")
-            #expect(merged.count == 2)
+            #expect(merged[1] as? String == "keep")
+            #expect(merged[2] as? String == "new")
+            #expect(merged.count == 3)
         } else {
-            Issue.record("Sequence overlay branch not exercised")
+            Issue.record("Sequence collision branch not exercised")
         }
     }
 

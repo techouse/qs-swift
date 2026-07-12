@@ -21,6 +21,7 @@ extension QsSwift.Utils {
         options: DecodeOptions = DecodeOptions()
     ) throws -> Any? {
         guard let source = source else { return target }
+        if isFalsyMergeSource(source) { return target }
 
         if let tArr = target as? [Any?], let sDict = source as? [AnyHashable: Any] {
             var tDict: [AnyHashable: Any] = [:]
@@ -84,72 +85,57 @@ extension QsSwift.Utils {
             }
 
             if let targetArray = target as? [Any] {
-                if targetArray.contains(where: { $0 is Undefined }) {
+                if let seq = asSequence(source) {
                     var mutableTarget: [Int: Any?] = [:]
 
                     for (index, value) in targetArray.enumerated() {
                         mutableTarget[index] = value
                     }
 
-                    if let seq = asSequence(source) {
-                        for (index, item) in seq.enumerated() where !(item is Undefined) {
+                    var logicalLength = targetArray.count
+                    for (index, item) in seq.enumerated() where !(item is Undefined) {
+                        if let existing = mutableTarget[index], !(existing is Undefined) {
+                            let existingIsContainer =
+                                existing is [Any] || existing is [AnyHashable: Any]
+                            let itemIsContainer =
+                                item is [Any] || item is [AnyHashable: Any]
+                            if existingIsContainer, itemIsContainer {
+                                mutableTarget[index] = try mergeValues(
+                                    target: existing,
+                                    source: item,
+                                    options: options
+                                )
+                            } else {
+                                mutableTarget[logicalLength] = item
+                                logicalLength += 1
+                            }
+                        } else {
                             mutableTarget[index] = item
+                            if index >= logicalLength {
+                                logicalLength = index + 1
+                            }
                         }
-                    } else {
-                        mutableTarget[mutableTarget.count] = source
                     }
 
+                    let merged = (0..<logicalLength).map {
+                        mutableTarget[$0] ?? Undefined.instance
+                    }
                     if !options.parseLists
-                        && mutableTarget.values.contains(where: { $0 is Undefined })
+                        && merged.contains(where: { $0 is Undefined })
                     {
                         // Preserve original element order by iterating indices in ascending order.
                         // Drop both `nil` and `Undefined` entries to match prior semantics.
-                        let orderedIndices = mutableTarget.keys.sorted()
-                        let pruned: [Any] = orderedIndices.compactMap { idx in
-                            guard let value = mutableTarget[idx] else { return nil }
+                        let pruned: [Any] = merged.compactMap { value in
+                            guard let value else { return nil }
                             return (value is Undefined) ? nil : value
                         }
                         return try enforceListLimit(pruned, options: options)
                     }
 
-                    // We’re in the Array-target branch. `target` cannot be a Set/OrderedSet here.
-                    let merged = mutableTarget.sorted { $0.key < $1.key }.map(\.value)
                     return try enforceListLimit(merged, options: options)
                 } else {
-                    if let seq = asSequence(source) {
-                        let targetMaps = targetArray.allSatisfy {
-                            $0 is [AnyHashable: Any] || $0 is Undefined
-                        }
-                        let sourceMaps = seq.allSatisfy {
-                            $0 is [AnyHashable: Any] || $0 is Undefined
-                        }
-
-                        if targetMaps && sourceMaps {
-                            var mutableTarget: [Int: Any?] = [:]
-
-                            for (index, value) in targetArray.enumerated() {
-                                mutableTarget[index] = value
-                            }
-
-                            for (index, item) in seq.enumerated() {
-                                if let existing = mutableTarget[index] {
-                                    mutableTarget[index] = try mergeValues(
-                                        target: existing, source: item, options: options)
-                                } else {
-                                    mutableTarget[index] = item
-                                }
-                            }
-
-                            let merged = mutableTarget.sorted { $0.key < $1.key }.map(\.value)
-                            return try enforceListLimit(merged, options: options)
-                        } else {
-                            let filtered = seq.filter { !($0 is Undefined) }
-                            return try enforceListLimit(targetArray + filtered, options: options)
-                        }
-                    } else {
-                        // source is not a sequence and we are in the Array-target branch; target cannot be any Set/OrderedSet here.
-                        return try enforceListLimit(targetArray + [source], options: options)
-                    }
+                    // Source is not a sequence and target cannot be a Set/OrderedSet here.
+                    return try enforceListLimit(targetArray + [source], options: options)
                 }
             } else if let targetDict = target as? [AnyHashable: Any] {
                 if Utils.isOverflow(targetDict) {

@@ -151,19 +151,6 @@ extension QsSwift.Decoder {
                     value = parsed
                 }
 
-                // Flat comma values are list values in their own right. Enforce the
-                // soft limit after decoding their elements but before numeric-entity
-                // interpretation so the established indexed overflow representation
-                // continues through that transform.
-                // `[]=` comma groups are nested values and are handled by their outer
-                // list after wrapping below.
-                if !hadBracketedEmpty, options.comma {
-                    if let arr = value as? [Any], arr.count > options.listLimit {
-                        value = try Utils.combine([], arr, options: options)
-                    } else if let arr = value as? [Any?], arr.count > options.listLimit {
-                        value = try Utils.combine([], arr, options: options)
-                    }
-                }
             }
 
             // Interpret numeric entities if asked (ISO‑8859‑1 only).
@@ -207,7 +194,10 @@ extension QsSwift.Decoder {
                 // else leave scalars as-is; parseObject will handle "[]"
             }
 
-            if hadBracketedEmpty, options.comma {
+            // Match qs ordering: numeric-entity interpretation may collapse a comma
+            // array to a scalar before the soft list limit is applied. Bracketed
+            // comma groups are wrapped first, so each group counts as one element.
+            if options.comma {
                 if let arr = value as? [Any], arr.count > options.listLimit {
                     value = try Utils.combine([], arr, options: options)
                 } else if let arr = value as? [Any?], arr.count > options.listLimit {

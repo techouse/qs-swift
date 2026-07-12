@@ -250,9 +250,9 @@
             #expect(a?["1"] as? String == "X:c")
         }
 
-        @Test("objc-decode: comma overflow + iso entities preserves indexed map")
-        func commaLimitNonThrowFallbackIsoEntitiesPreserveMap() throws {
-            let r = decode("a=1,%26%239786%3B") { o in
+        @Test("objc-decode: iso entities precede soft comma overflow")
+        func commaLimitNonThrowFallbackIsoEntitiesCollapseFirst() throws {
+            let r = decode("a=x&a=%26%239786%3B,%26%239787%3B") { o in
                 o.comma = true
                 o.listLimit = 1
                 o.throwOnLimitExceeded = false
@@ -260,8 +260,8 @@
                 o.interpretNumericEntities = true
             }
             let a = r["a"] as? NSDictionary
-            #expect(a?["0"] as? String == "1")
-            #expect(a?["1"] as? String == "☺")
+            #expect(a?["0"] as? String == "x")
+            #expect(a?["1"] as? String == "☺,☻")
         }
 
         // MARK: - Dot / decodeDotInKeys combinations (subset)
