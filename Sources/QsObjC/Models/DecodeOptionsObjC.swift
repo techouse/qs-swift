@@ -67,11 +67,20 @@
         /// Allow empty lists like `a[]=` to produce an empty array rather than omitting the key.
         public var allowEmptyLists: Bool = false
 
-        /// Permit sparse arrays (e.g. `a[2]=x` without lower indices). When `false`, gaps are filled.
+        /// Permit sparse arrays (e.g. `a[2]=x` without lower indices). When `false`, gaps are
+        /// compacted; when `true`, public bridge output preserves them as `NSNull` placeholders.
         public var allowSparseLists: Bool = false
 
-        /// Maximum number of items parsed into a single list (defensive cap).
-        /// The highest numeric bracket index that can materialize as an array is `listLimit - 1`.
+        /// Maximum list size and numeric-index threshold used while decoding.
+        ///
+        /// The limit is cumulative across duplicate keys, flat comma-separated values, and list
+        /// merges. A result with exactly `listLimit` elements remains a list; growing past it
+        /// becomes a numeric-keyed dictionary, or throws when `throwOnLimitExceeded` is `true`.
+        /// A negative limit makes every non-empty list overflow or throw immediately.
+        ///
+        /// Comma values written with `[]=` are nested groups: each complete comma group counts as
+        /// one outer list element, regardless of how many values the group contains. Numeric
+        /// bracket indices at or above the limit are represented as dictionary keys.
         public var listLimit: Int = 20
 
         /// When `true`, treat commas as element separators inside a single key (e.g. `a=b,c`).
@@ -99,8 +108,9 @@
         /// Hard cap on the number of key/value pairs processed from the input.
         public var parameterLimit: Int = 1000
 
-        /// If `true`, exceedance of `listLimit`, `depth`, or `parameterLimit` throws instead
-        /// of truncating/ignoring extra data.
+        /// If `true`, exceeding `parameterLimit` or `listLimit` throws. Otherwise parameter
+        /// parsing truncates and list overflow falls back to a numeric-keyed dictionary.
+        /// Depth exceedance is controlled separately by `strictDepth`.
         public var throwOnLimitExceeded: Bool = false
 
         // MARK: - Charset / wire format
