@@ -1,4 +1,4 @@
-## 1.4.1-dev
+## 1.4.1
 
 - [FIX] align list-limit behavior with `qs@6.15.3`: enforce `listLimit` cumulatively across duplicate keys, comma values, bracket/index notation, nested merges, and existing overflow maps; exact-limit values remain lists, while non-throwing overflow becomes a numeric-keyed dictionary.
 - [FIX] treat negative `listLimit` values as immediate overflow whenever list-limit enforcement runs (or `DecodeError.listLimitExceeded` when `throwOnLimitExceeded` is enabled), preserve later overflow values as nested entries, and keep `[]=` comma groups as single outer list elements regardless of inner group size.
