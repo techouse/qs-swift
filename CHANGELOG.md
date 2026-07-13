@@ -1,7 +1,7 @@
 ## 1.4.1-dev
 
 - [FIX] align list-limit behavior with `qs@6.15.3`: enforce `listLimit` cumulatively across duplicate keys, comma values, bracket/index notation, nested merges, and existing overflow maps; exact-limit values remain lists, while non-throwing overflow becomes a numeric-keyed dictionary.
-- [FIX] treat negative `listLimit` values as immediate overflow (or `DecodeError.listLimitExceeded` when `throwOnLimitExceeded` is enabled), preserve later overflow values as nested entries, and keep `[]=` comma groups as single outer list elements regardless of inner group size.
+- [FIX] treat negative `listLimit` values as immediate overflow whenever list-limit enforcement runs (or `DecodeError.listLimitExceeded` when `throwOnLimitExceeded` is enabled), preserve later overflow values as nested entries, and keep `[]=` comma groups as single outer list elements regardless of inner group size.
 - [FIX] interpret ISO-8859-1 numeric entities before applying non-throwing comma-list overflow, preserving the qs-compatible scalar shape instead of producing a numeric-keyed dictionary.
 - [FIX] keep list parsing enabled regardless of top-level parameter count; only `parseLists: false` disables bracket-list parsing.
 - [TEST] add Swift, Objective-C bridge, Objective-C E2E, and qs comparison coverage for cumulative limits, mixed list notation, unbalanced bracket keys, UTF-16 chunk-boundary encoding, and multi-step Foundation cycles.

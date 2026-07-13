@@ -287,7 +287,9 @@ Use these options with `Qs.decode(query, options: .init(...))`:
 - Cumulative list growth: duplicate keys, flat comma values, mixed scalar/index/
   bracket notation, and nested merges all share `listLimit`. Exactly-at-limit
   results remain lists; non-throwing overflow becomes a numeric-keyed
-  dictionary. A negative limit overflows every non-empty list immediately.
+  dictionary. A negative limit treats every list construction or merge that
+  reaches limit enforcement as exceeded. With `allowEmptyLists`, a
+  parser-recognized empty list can bypass that enforcement and remain a list.
 - Comma-separated values such as `a=b,c`: `comma: true`. With strict limit
   handling, an oversized flat comma value throws before its values reach a
   custom decoder.

@@ -187,7 +187,9 @@ d.duplicates = QsDuplicatesCombine;    // combine | first | last
 d.parameterLimit = 1000;                // must be > 0 (defensive cap on number of pairs)
 // listLimit is cumulative across duplicate keys, flat comma values, and list merges.
 // Exact-limit results stay arrays; soft overflow and numeric indices at/above the limit use maps.
-// A negative limit overflows every non-empty list. Each comma group in a[]= counts as one element.
+// A negative limit makes limit-enforced list construction/merges overflow or throw;
+// allowEmptyLists can still preserve parser-recognized empty lists by bypassing that enforcement.
+// Each comma group in a[]= counts as one element.
 d.listLimit      = 20;
 d.depth          = 5;                   // maximum bracket nesting (≥ 0)
 

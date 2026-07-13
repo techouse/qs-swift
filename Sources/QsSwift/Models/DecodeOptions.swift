@@ -98,8 +98,9 @@ public struct DecodeOptions: @unchecked Sendable {
     /// The limit is cumulative across duplicate keys, flat comma-separated values, and
     /// list merges. A result with exactly `listLimit` elements remains a list; growing
     /// past it becomes a numeric-keyed dictionary, or throws when
-    /// `throwOnLimitExceeded` is `true`. A negative limit makes every non-empty list
-    /// overflow or throw immediately.
+    /// `throwOnLimitExceeded` is `true`. A negative limit treats every list construction
+    /// or merge that reaches limit enforcement as exceeded. Parser-recognized empty lists
+    /// can still be preserved by `allowEmptyLists` because they bypass list construction.
     ///
     /// Comma values written with `[]=` are nested groups: each complete comma group counts
     /// as one outer list element, regardless of how many values the group contains.
