@@ -185,7 +185,12 @@ d.duplicates = QsDuplicatesCombine;    // combine | first | last
 // Limits and strictness
 
 d.parameterLimit = 1000;                // must be > 0 (defensive cap on number of pairs)
-d.listLimit      = 20;                  // max array element count; index 20+ falls back to a map
+// listLimit is cumulative across duplicate keys, flat comma values, and list merges.
+// Exact-limit results stay arrays; soft overflow and numeric indices at/above the limit use maps.
+// A negative limit makes limit-enforced list construction/merges overflow or throw;
+// allowEmptyLists can still preserve parser-recognized empty lists by bypassing that enforcement.
+// Each comma group in a[]= counts as one element.
+d.listLimit      = 20;
 d.depth          = 5;                   // maximum bracket nesting (≥ 0)
 
 d.strictDepth          = NO;            // YES: throw when over depth; NO (default): collapse the remainder into a literal key
@@ -194,7 +199,7 @@ d.strictMerge          = YES;           // YES: qs-compatible object/scalar conf
 
 d.strictNullHandling   = NO;            // if YES, keys with no value → NSNull instead of ""
 
-d.throwOnLimitExceeded = NO;            // if YES, parameter/list/depth violations throw
+d.throwOnLimitExceeded = NO;            // if YES, parameter/list violations throw; see strictDepth for depth
 
 // Custom scalar decoder (runs before interpretation)
 d.valueDecoderBlock = ^id(NSString * token, NSNumber * charset) {

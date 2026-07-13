@@ -27,23 +27,32 @@ extension Utils {
         return result
     }
 
-    /// Combines two objects while honoring list limits; may return an overflow map.
+    /// Combines two objects while honoring list limits; may throw or return an overflow map.
     /// - Returns: `[Any?]` when within limit, or `[AnyHashable: Any]` when exceeded.
     @usableFromInline
-    static func combine(_ first: Any?, _ second: Any?, listLimit: Int) -> Any {
+    static func combine(_ first: Any?, _ second: Any?, options: DecodeOptions) throws -> Any {
         if let dict = first as? [AnyHashable: Any], isOverflow(dict) {
-            return appendOverflow(dict, value: second)
+            if options.throwOnLimitExceeded {
+                throw DecodeError.listLimitExceeded(limit: options.listLimit)
+            }
+            return try appendOverflow(dict, value: second, options: options)
         }
 
         var result: [Any?] = []
         appendCombineValue(first, into: &result)
         appendCombineValue(second, into: &result)
 
-        guard listLimit >= 0, result.count > listLimit else {
-            return result
-        }
+        return try enforceListLimit(result, options: options)
+    }
 
-        return arrayToOverflowObject(result)
+    /// Keeps an in-limit list, throws in strict mode, or converts every value to an overflow map.
+    @usableFromInline
+    static func enforceListLimit<Element>(_ values: [Element], options: DecodeOptions) throws -> Any {
+        guard values.count > options.listLimit else { return values }
+        if options.throwOnLimitExceeded {
+            throw DecodeError.listLimitExceeded(limit: options.listLimit)
+        }
+        return arrayToOverflowObject(values.map { $0 as Any? })
     }
 
     private static func appendCombineValue(_ value: Any?, into array: inout [Any?]) {
@@ -62,7 +71,7 @@ extension Utils {
     private static func arrayToOverflowObject(_ array: [Any?]) -> [AnyHashable: Any] {
         var dict: [AnyHashable: Any] = [:]
         dict.reserveCapacity(array.count + 1)
-        for (index, value) in array.enumerated() {
+        for (index, value) in array.enumerated() where !(value is Undefined) {
             dict[index] = value ?? NSNull()
         }
         return markOverflow(dict, maxIndex: array.count - 1)
@@ -70,28 +79,20 @@ extension Utils {
 
     private static func appendOverflow(
         _ dict: [AnyHashable: Any],
-        value: Any?
-    ) -> [AnyHashable: Any] {
+        value: Any?,
+        options: DecodeOptions
+    ) throws -> Any {
         var copy = dict
         var maxIndex = overflowMaxIndex(copy) ?? -1
-
-        func appendElement(_ element: Any?) {
-            maxIndex += 1
-            copy[maxIndex] = element ?? NSNull()
+        guard let nextIndex = nextOverflowIndex(after: maxIndex) else {
+            let values: [Any?] = [
+                removingOverflowMetadata(from: copy),
+                value ?? NSNull(),
+            ]
+            return try enforceListLimit(values, options: options)
         }
-
-        if let arrOpt = value as? [Any?] {
-            for element in arrOpt {
-                appendElement(element)
-            }
-        } else if let arr = value as? [Any] {
-            for element in arr {
-                appendElement(element)
-            }
-        } else {
-            appendElement(value)
-        }
-
+        maxIndex = nextIndex
+        copy[maxIndex] = value ?? NSNull()
         setOverflowMaxIndex(&copy, maxIndex)
         return copy
     }

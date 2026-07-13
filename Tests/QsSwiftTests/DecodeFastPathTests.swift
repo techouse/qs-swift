@@ -167,14 +167,18 @@ struct DecodeFastPathTests {
         }
     }
 
-    @Test("top-level list-limit gate still counts empty-key pairs")
-    func listLimit_gateCountsEmptyKeyPairs() throws {
+    @Test("parameter count no longer disables list parsing when it exceeds listLimit")
+    func parameterCountDoesNotDisableListParsing() throws {
         let decoded = try Qs.decode("=&a[]=b&a[]=c", options: .init(listLimit: 1))
         let forcedNoLists = try Qs.decode(
             "=&a[]=b&a[]=c",
             options: .init(listLimit: 1, parseLists: false)
         )
-        #expect(NSDictionary(dictionary: decoded).isEqual(to: forcedNoLists))
+
+        let overflow = decoded["a"] as? [String: Any]
+        #expect(overflow?["0"] as? String == "b")
+        #expect(overflow?["1"] as? String == "c")
+        #expect(!NSDictionary(dictionary: decoded).isEqual(to: forcedNoLists))
         #expect(decoded[""] == nil)
     }
 

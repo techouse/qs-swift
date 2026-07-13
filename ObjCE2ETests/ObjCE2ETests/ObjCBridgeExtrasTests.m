@@ -144,6 +144,41 @@
     XCTAssertEqualObjects(m3[@"a"], @"2");
 }
 
+- (void)test_decode_qs_6_15_3_cumulative_list_limits {
+    QsDecodeOptions *strict = [[QsDecodeOptions alloc] init];
+    strict.comma = YES;
+    strict.listLimit = 3;
+    strict.throwOnLimitExceeded = YES;
+
+    NSError *err = nil;
+    NSDictionary *failed = [Qs decode:@"a=1,2&a=3,4" options:strict error:&err];
+    XCTAssertNil(failed);
+    XCTAssertNotNil(err);
+    XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
+    XCTAssertEqual(err.code, QsDecodeErrorCodeListLimitExceeded);
+
+    QsDecodeOptions *soft = [[QsDecodeOptions alloc] init];
+    soft.comma = YES;
+    soft.listLimit = 3;
+    err = nil;
+    NSDictionary *overflowed = [Qs decode:@"a=1,2&a=3,4" options:soft error:&err];
+    XCTAssertNil(err);
+    NSDictionary *overflow = overflowed[@"a"];
+    XCTAssertEqualObjects(overflow[@"0"], @"1");
+    XCTAssertEqualObjects(overflow[@"3"], @"4");
+
+    QsDecodeOptions *bracketed = [[QsDecodeOptions alloc] init];
+    bracketed.comma = YES;
+    bracketed.listLimit = 1;
+    bracketed.throwOnLimitExceeded = YES;
+    err = nil;
+    NSDictionary *nested = [Qs decode:@"a[]=1,2,3,4" options:bracketed error:&err];
+    XCTAssertNil(err);
+    NSArray *outer = nested[@"a"];
+    XCTAssertEqual(outer.count, 1u);
+    XCTAssertEqualObjects(outer[0], (@[@"1", @"2", @"3", @"4"]));
+}
+
 #pragma mark - 8) RFC1738 uses + for spaces when encoding
 
 - (void)test_encode_rfc1738_space_plus {

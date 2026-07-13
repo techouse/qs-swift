@@ -1,5 +1,6 @@
 import Foundation
 import OrderedCollections
+
 @_spi(Testing) @testable import QsSwift
 
 #if canImport(Testing)
@@ -106,6 +107,18 @@ struct UtilsTests {
         let longString = String(repeating: " ", count: 1500)
         let expectedString = String(repeating: "%20", count: 1500)
         #expect(Utils.encode(longString) == expectedString)
+    }
+
+    @Test("Utils.encode - preserves an emoji across the first qs chunk boundary")
+    func testEncodeEmojiAtFirstChunkBoundary() {
+        let prefix = String(repeating: "a", count: 1_023)
+        #expect(Utils.encode(prefix + "😀") == prefix + "%F0%9F%98%80")
+    }
+
+    @Test("Utils.encode - preserves an emoji across a later qs chunk boundary")
+    func testEncodeEmojiAtLaterChunkBoundary() {
+        let prefix = String(repeating: "a", count: 2_047)
+        #expect(Utils.encode(prefix + "😀") == prefix + "%F0%9F%98%80")
     }
 
     @Test("Utils.encode - encodes parentheses")
@@ -447,7 +460,7 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges Map with List")
     func testMergeMapWithList() async throws {
-        let result = Utils.merge(target: [0: "a"], source: [Undefined(), "b"])
+        let result = try Utils.merge(target: [0: "a"], source: [Undefined(), "b"])
         let out: [AnyHashable: Any] = result as! [AnyHashable: Any]
         // Compare contents directly to avoid NSNumber/Int key-bridging differences on Linux
         #expect(out.count == 2)
@@ -459,7 +472,7 @@ struct UtilsTests {
     func testMergeTwoObjectsSameKeyDifferentValues() async throws {
         let target = ["foo": [["a": "a", "b": "b"], ["a": "aa"]]]
         let source = ["foo": [Undefined(), ["b": "bb"]]]
-        let result = Utils.merge(target: target, source: source)
+        let result = try Utils.merge(target: target, source: source)
         let expected = ["foo": [["a": "a", "b": "b"], ["a": "aa", "b": "bb"]]]
 
         // Deep comparison needed for nested structures
@@ -472,7 +485,7 @@ struct UtilsTests {
     func testMergeTwoObjectsSameKeyDifferentListValues() async throws {
         let target = ["foo": [["baz": ["15"]]]]
         let source = ["foo": [["baz": [Undefined(), "16"]]]]
-        let result = Utils.merge(target: target, source: source)
+        let result = try Utils.merge(target: target, source: source)
         let expected = ["foo": [["baz": ["15", "16"]]]]
 
         let resultDict = result as! [String: Any]
@@ -484,7 +497,7 @@ struct UtilsTests {
     func testMergeTwoObjectsSameKeyIntoList() async throws {
         let target = ["foo": [["a": "b"]]]
         let source = ["foo": [["c": "d"]]]
-        let result = Utils.merge(target: target, source: source)
+        let result = try Utils.merge(target: target, source: source)
         let expected = ["foo": [["a": "b", "c": "d"]]]
 
         let resultDict = result as! [String: Any]
@@ -494,7 +507,7 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges true into null")
     func testMergeTrueIntoNull() async throws {
-        let result = Utils.merge(target: nil, source: true)
+        let result = try Utils.merge(target: nil, source: true)
         let resultArray = result as! [Any?]
         #expect(resultArray.count == 2)
         #expect(resultArray[0] == nil)
@@ -503,7 +516,7 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges null into a list")
     func testMergeNullIntoList() async throws {
-        let result = Utils.merge(target: nil, source: [42])
+        let result = try Utils.merge(target: nil, source: [42])
         let resultArray = result as! [Any?]
         #expect(resultArray.count == 2)
         #expect(resultArray[0] == nil)
@@ -512,7 +525,7 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges null into a set")
     func testMergeNullIntoSet() async throws {
-        let result = Utils.merge(target: nil, source: Set(["foo"]))
+        let result = try Utils.merge(target: nil, source: Set(["foo"]))
         let resultArray = result as! [Any?]
         #expect(resultArray.count == 2)
         #expect(resultArray[0] == nil)
@@ -521,7 +534,7 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges String into set")
     func testMergeStringIntoSet() async throws {
-        let result = Utils.merge(target: Set(["foo"]), source: "bar")
+        let result = try Utils.merge(target: Set(["foo"]), source: "bar")
         let resultSet = result as! Set<AnyHashable>
         #expect(resultSet.contains("foo"))
         #expect(resultSet.contains("bar"))
@@ -530,7 +543,7 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges two objects with the same key")
     func testMergeTwoObjectsSameKey() async throws {
-        let result = Utils.merge(target: ["a": "b"], source: ["a": "c"])
+        let result = try Utils.merge(target: ["a": "b"], source: ["a": "c"])
         let resultDict = result as! [String: Any]
         #expect(resultDict.keys.contains("a"))
 
@@ -543,7 +556,7 @@ struct UtilsTests {
     func testMergeStandaloneAndObjectIntoList() async throws {
         let target = ["foo": "bar"]
         let source = ["foo": ["first": "123"]]
-        let result = Utils.merge(target: target, source: source)
+        let result = try Utils.merge(target: target, source: source)
         let resultDict = result as! [String: Any]
         #expect(resultDict.keys.contains("foo"))
 
@@ -555,7 +568,7 @@ struct UtilsTests {
     func testMergeStandaloneAndTwoObjectsIntoList() async throws {
         let target = ["foo": ["bar", ["first": "123"]]]
         let source = ["foo": ["second": "456"]]
-        let result = Utils.merge(target: target, source: source)
+        let result = try Utils.merge(target: target, source: source)
         let resultDict = result as! [String: Any]
         #expect(resultDict.keys.contains("foo"))
     }
@@ -564,7 +577,7 @@ struct UtilsTests {
     func testMergeObjectSandwichedByStandalones() async throws {
         let target = ["foo": ["bar", ["first": "123", "second": "456"]]]
         let source = ["foo": "baz"]
-        let result = Utils.merge(target: target, source: source)
+        let result = try Utils.merge(target: target, source: source)
         let resultDict = result as! [String: Any]
         #expect(resultDict.keys.contains("foo"))
 
@@ -574,11 +587,11 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges two lists into a list")
     func testMergeTwoListsIntoList() async throws {
-        let result1 = Utils.merge(target: ["foo"], source: ["bar", "xyzzy"])
+        let result1 = try Utils.merge(target: ["foo"], source: ["bar", "xyzzy"])
         let resultArray1 = result1 as! [String]
         #expect(resultArray1 == ["foo", "bar", "xyzzy"])
 
-        let result2 = Utils.merge(target: ["foo": ["baz"]], source: ["foo": ["bar", "xyzzy"]])
+        let result2 = try Utils.merge(target: ["foo": ["baz"]], source: ["foo": ["bar", "xyzzy"]])
         let resultDict2 = result2 as! [String: Any]
         #expect(resultDict2.keys.contains("foo"))
 
@@ -588,13 +601,13 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges two sets into a list")
     func testMergeTwoSetsIntoList() async throws {
-        let result1 = Utils.merge(target: Set(["foo"]), source: Set(["bar", "xyzzy"]))
+        let result1 = try Utils.merge(target: Set(["foo"]), source: Set(["bar", "xyzzy"]))
         let resultSet1 = result1 as! Set<AnyHashable>
         #expect(resultSet1.contains("foo"))
         #expect(resultSet1.contains("bar"))
         #expect(resultSet1.contains("xyzzy"))
 
-        let result2 = Utils.merge(
+        let result2 = try Utils.merge(
             target: ["foo": Set(["baz"])], source: ["foo": Set(["bar", "xyzzy"])])
         let resultDict2 = result2 as! [String: Any]
         #expect(resultDict2.keys.contains("foo"))
@@ -602,7 +615,7 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges a set into a list")
     func testMergeSetIntoList() async throws {
-        let result = Utils.merge(target: ["foo": ["baz"]], source: ["foo": Set(["bar"])])
+        let result = try Utils.merge(target: ["foo": ["baz"]], source: ["foo": Set(["bar"])])
         let resultDict = result as! [String: Any]
         #expect(resultDict.keys.contains("foo"))
 
@@ -613,7 +626,7 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges a list into a set")
     func testMergeListIntoSet() async throws {
-        let result = Utils.merge(target: ["foo": Set(["baz"])], source: ["foo": ["bar"]])
+        let result = try Utils.merge(target: ["foo": Set(["baz"])], source: ["foo": ["bar"]])
         let resultDict = result as! [String: Any]
         #expect(resultDict.keys.contains("foo"))
 
@@ -624,7 +637,7 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges a set into a list with multiple elements")
     func testMergeSetIntoListMultipleElements() async throws {
-        let result = Utils.merge(target: ["foo": ["baz"]], source: ["foo": Set(["bar", "xyzzy"])])
+        let result = try Utils.merge(target: ["foo": ["baz"]], source: ["foo": Set(["bar", "xyzzy"])])
         let resultDict = result as! [String: Any]
         #expect(resultDict.keys.contains("foo"))
 
@@ -634,14 +647,14 @@ struct UtilsTests {
 
     @Test("Utils.merge - merges an object into a list")
     func testMergeObjectIntoList() async throws {
-        let result = Utils.merge(target: ["foo": ["bar"]], source: ["foo": ["baz": "xyzzy"]])
+        let result = try Utils.merge(target: ["foo": ["bar"]], source: ["foo": ["baz": "xyzzy"]])
         let resultDict = result as! [String: Any]
         #expect(resultDict.keys.contains("foo"))
     }
 
     @Test("Utils.merge - merges a list into an object")
     func testMergeListIntoObject() async throws {
-        let result = Utils.merge(target: ["foo": ["bar": "baz"]], source: ["foo": ["xyzzy"]])
+        let result = try Utils.merge(target: ["foo": ["bar": "baz"]], source: ["foo": ["xyzzy"]])
         let resultDict = result as! [String: Any]
         #expect(resultDict.keys.contains("foo"))
     }
@@ -650,7 +663,7 @@ struct UtilsTests {
     func testMergeSetWithUndefinedWithAnotherSet() async throws {
         let undefined = Undefined()
 
-        let result1 = Utils.merge(
+        let result1 = try Utils.merge(
             target: ["foo": Set<AnyHashable>(["bar"])],
             source: ["foo": Set<AnyHashable>([undefined, "baz"])]
         )
@@ -661,7 +674,7 @@ struct UtilsTests {
         #expect(valueSet1.contains("bar"))
         #expect(valueSet1.contains("baz"))
 
-        let result2 = Utils.merge(
+        let result2 = try Utils.merge(
             target: ["foo": Set<AnyHashable>([undefined, "bar"])],
             source: ["foo": Set<AnyHashable>(["baz"])]
         )
@@ -671,14 +684,14 @@ struct UtilsTests {
 
     @Test("Utils.merge - merge set of Maps with another set of Maps")
     func testMergeSetOfMapsWithAnotherSetOfMaps() async throws {
-        let result1 = Utils.merge(
+        let result1 = try Utils.merge(
             target: Set<AnyHashable>([["bar": "baz"]]),
             source: Set<AnyHashable>([["baz": "xyzzy"]])
         )
         let resultSet1 = result1 as! Set<AnyHashable>
         #expect(resultSet1.count >= 1)
 
-        let result2 = Utils.merge(
+        let result2 = try Utils.merge(
             target: ["foo": Set<AnyHashable>([["bar": "baz"]])],
             source: ["foo": Set<AnyHashable>([["baz": "xyzzy"]])]
         )
@@ -690,7 +703,7 @@ struct UtilsTests {
     func testMergeArrayOverlayWithUndefined_Default() async throws {
         let target: [Any?] = ["x", Undefined(), "z"]
         let source: [Any?] = [Undefined(), "Y", Undefined()]
-        let merged = Utils.merge(target: target, source: source) as! [Any?]
+        let merged = try Utils.merge(target: target, source: source) as! [Any?]
         #expect(merged.count == 3)
         #expect(merged[0] as? String == "x")  // undefined in source leaves target
         #expect(merged[1] as? String == "Y")  // replaced
@@ -702,7 +715,7 @@ struct UtilsTests {
         let target: [Any?] = [Undefined(), "b", Undefined()]
         let source: [Any?] = [Undefined(), Undefined()]
         let opts = DecodeOptions(parseLists: false)
-        let merged = Utils.merge(target: target, source: source, options: opts) as! [Any?]
+        let merged = try Utils.merge(target: target, source: source, options: opts) as! [Any?]
         // remaining Undefined entries are pruned under parseLists=false
         #expect(merged.count == 1)
         #expect(merged[0] as? String == "b")
@@ -711,7 +724,7 @@ struct UtilsTests {
     @Test("Utils.merge - non-sequence source appends to array")
     func testMergeArrayWithNonSequenceSourceAppends() async throws {
         let target: [Any] = ["a", "b"]
-        let merged = Utils.merge(target: target, source: 42) as! [Any]
+        let merged = try Utils.merge(target: target, source: 42) as! [Any]
         #expect(merged.count == 3)
         #expect(merged[0] as? String == "a")
         #expect(merged[1] as? String == "b")
@@ -723,7 +736,7 @@ struct UtilsTests {
         let undefined = Undefined()
         let target = Set<AnyHashable>(["a"])
         let source: [Any?] = [undefined, "c", "a"]
-        let merged = Utils.merge(target: target, source: source) as! Set<AnyHashable>
+        let merged = try Utils.merge(target: target, source: source) as! Set<AnyHashable>
         #expect(merged.contains("a"))
         #expect(merged.contains("c"))
         #expect(merged.count == 2)
@@ -781,13 +794,25 @@ struct UtilsTests {
 
     @Test("Utils.combine - applies list limit and overflow tracking")
     func testCombineListLimitOverflow() async throws {
-        let under = Utils.combine(["a", "b"], "c", listLimit: 10)
+        let under = try Utils.combine(
+            ["a", "b"],
+            "c",
+            options: DecodeOptions(listLimit: 10)
+        )
         #expect((under as? [Any]) != nil)
 
-        let exact = Utils.combine(["a", "b"], "c", listLimit: 3)
+        let exact = try Utils.combine(
+            ["a", "b"],
+            "c",
+            options: DecodeOptions(listLimit: 3)
+        )
         #expect((exact as? [Any]) != nil)
 
-        let over = Utils.combine(["a", "b", "c"], "d", listLimit: 3)
+        let over = try Utils.combine(
+            ["a", "b", "c"],
+            "d",
+            options: DecodeOptions(listLimit: 3)
+        )
         let overDict = over as? [AnyHashable: Any]
         #expect(overDict != nil)
         #expect(Utils.isOverflow(overDict))
@@ -797,7 +822,7 @@ struct UtilsTests {
             #expect(cleaned[AnyHashable(3)] as? String == "d")
         }
 
-        let zero = Utils.combine([], "a", listLimit: 0)
+        let zero = try Utils.combine([], "a", options: DecodeOptions(listLimit: 0))
         let zeroDict = zero as? [AnyHashable: Any]
         #expect(zeroDict != nil)
         if let zeroDict {
@@ -808,11 +833,11 @@ struct UtilsTests {
 
     @Test("Utils.combine - appends to overflow objects")
     func testCombineAppendsToOverflow() async throws {
-        let overflow = Utils.combine(["a"], "b", listLimit: 1)
+        let overflow = try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))
         let overflowDict = overflow as? [AnyHashable: Any]
         #expect(Utils.isOverflow(overflowDict))
 
-        let combined = Utils.combine(overflow, "c", listLimit: 10)
+        let combined = try Utils.combine(overflow, "c", options: DecodeOptions(listLimit: 10))
         let combinedDict = combined as? [AnyHashable: Any]
         #expect(Utils.isOverflow(combinedDict))
         if let combinedDict {
@@ -822,37 +847,359 @@ struct UtilsTests {
         }
     }
 
-    @Test("Utils.combine - flattens arrays when appending to overflow objects")
-    func testCombineFlattensOverflowAppend() async throws {
-        let overflow = Utils.combine(["a"], "b", listLimit: 1)
-        let combined = Utils.combine(overflow, ["c", "d"], listLimit: 10)
+    @Test("Utils.combine - enforces strict and negative list limits")
+    func testCombineStrictAndNegativeLimits() throws {
+        let exact = try Utils.combine(
+            ["a"],
+            "b",
+            options: DecodeOptions(listLimit: 2, throwOnLimitExceeded: true)
+        )
+        #expect(exact as? [String] == ["a", "b"])
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+            _ = try Utils.combine(
+                ["a"],
+                "b",
+                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+            )
+        }
+
+        let negative = try Utils.combine([], "a", options: DecodeOptions(listLimit: -1))
+        #expect(Utils.isOverflow(negative as? [AnyHashable: Any]))
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: -1)) {
+            _ = try Utils.combine(
+                [],
+                "a",
+                options: DecodeOptions(listLimit: -1, throwOnLimitExceeded: true)
+            )
+        }
+    }
+
+    @Test("Utils.combine - strict mode rejects an existing overflow without mutation")
+    func testCombineStrictExistingOverflow() throws {
+        let overflow = try #require(
+            try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))
+                as? [AnyHashable: Any]
+        )
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+            _ = try Utils.combine(
+                overflow,
+                ["c", "d"],
+                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+            )
+        }
+        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+            _ = try Utils.merge(
+                target: overflow,
+                source: "c",
+                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+            )
+        }
+        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+            _ = try Utils.merge(
+                target: "z",
+                source: overflow,
+                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+            )
+        }
+        #expect(overflow[AnyHashable(2)] == nil)
+        #expect(Utils.overflowMaxIndex(overflow) == 1)
+    }
+
+    @Test("Utils.merge - enforces list limits in every array and primitive direction")
+    func testMergeListLimitDirections() throws {
+        let soft = DecodeOptions(listLimit: 1)
+        let strict = DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+
+        for (target, source) in [
+            (["a"] as Any, "b" as Any),
+            ("a" as Any, ["b", "c"] as Any),
+            (["a"] as Any, ["b"] as Any),
+        ] {
+            let merged = try Utils.merge(target: target, source: source, options: soft)
+            #expect(Utils.isOverflow(merged as? [AnyHashable: Any]))
+            #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+                _ = try Utils.merge(target: target, source: source, options: strict)
+            }
+        }
+
+        let exact = try Utils.merge(target: [Any](), source: "a", options: strict)
+        #expect(exact as? [String] == ["a"])
+
+        let negative = try Utils.merge(
+            target: [Any](),
+            source: "a",
+            options: DecodeOptions(listLimit: -1)
+        )
+        #expect(Utils.isOverflow(negative as? [AnyHashable: Any]))
+    }
+
+    @Test("Utils.merge - enforces limits after nested array merges")
+    func testMergeNestedArrayLimit() throws {
+        let target: [Any] = [[AnyHashable("a"): 1]]
+        let source: [Any] = [
+            [AnyHashable("b"): 2],
+            [AnyHashable("c"): 3],
+        ]
+
+        let merged = try #require(
+            try Utils.merge(
+                target: target,
+                source: source,
+                options: DecodeOptions(listLimit: 1)
+            ) as? [AnyHashable: Any]
+        )
+        #expect(Utils.isOverflow(merged))
+        let first = merged[AnyHashable(0)] as? [AnyHashable: Any]
+        #expect(first?[AnyHashable("a")] as? Int == 1)
+        #expect(first?[AnyHashable("b")] as? Int == 2)
+        #expect((merged[AnyHashable(1)] as? [AnyHashable: Any])?[AnyHashable("c")] as? Int == 3)
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+            _ = try Utils.merge(
+                target: target,
+                source: source,
+                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+            )
+        }
+    }
+
+    @Test("Utils.merge - recursively merges nested arrays before limit enforcement")
+    func testMergeNestedArraysBeforeLimitEnforcement() throws {
+        let target: [Any] = [["1", "2"]]
+        let source: [Any] = [["1", "", "3"]]
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: target,
+                source: source,
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            )
+        }
+
+        let merged = try #require(
+            try Utils.merge(
+                target: target,
+                source: source,
+                options: DecodeOptions(listLimit: 3)
+            ) as? [Any?]
+        )
+        let inner = try #require(merged[0] as? [AnyHashable: Any])
+        #expect(Utils.isOverflow(inner))
+        #expect(inner[AnyHashable(0)] as? String == "1")
+        #expect(inner[AnyHashable(1)] as? String == "2")
+        #expect(inner[AnyHashable(2)] as? String == "1")
+        #expect(inner[AnyHashable(3)] as? String == "")
+        #expect(inner[AnyHashable(4)] as? String == "3")
+    }
+
+    @Test("Utils.merge - sparse collisions append at the logical end")
+    func testMergeSparseCollisionLimit() throws {
+        let target: [Any] = [["1", "2"], Undefined.instance, ["1", "2"]]
+        let source: [Any] = ["y"]
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: target,
+                source: source,
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            )
+        }
+
+        let merged = try #require(
+            try Utils.merge(
+                target: target,
+                source: source,
+                options: DecodeOptions(listLimit: 3)
+            ) as? [AnyHashable: Any]
+        )
+        #expect(Utils.isOverflow(merged))
+        #expect((merged[AnyHashable(0)] as? [String]) == ["1", "2"])
+        #expect(merged[AnyHashable(1)] == nil)
+        #expect((merged[AnyHashable(2)] as? [String]) == ["1", "2"])
+        #expect(merged[AnyHashable(3)] as? String == "y")
+    }
+
+    @Test("Utils.merge - ignores falsy sources before list-limit enforcement")
+    func testMergeFalsySourcesDoNotGrowLists() throws {
+        for source: Any in ["", false, 0, NSNull()] {
+            let merged = try Utils.merge(
+                target: ["x"],
+                source: source,
+                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+            )
+            #expect(merged as? [String] == ["x"])
+        }
+    }
+
+    @Test("Utils.merge - preserves sparse positions for later cumulative growth")
+    func testMergePreservesSparsePositionsForCumulativeGrowth() throws {
+        let first = try #require(
+            try Utils.merge(
+                target: "x",
+                source: [Undefined.instance, ""],
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            ) as? [Any?]
+        )
+        try #require(first.count == 3)
+        #expect(first[0] as? String == "x")
+        #expect(first[1] is Undefined)
+        #expect(first[2] as? String == "")
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: first,
+                source: ["y"],
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            )
+        }
+    }
+
+    @Test("Utils.merge - treats numeric strings and integer indices as the same property")
+    func testMergeNumericPropertyKeyEquivalence() {
+        let nested = ["1", "2", "3"]
+        let options = DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: [AnyHashable("0"): nested],
+                source: ["1", "", "3"],
+                options: options
+            )
+        }
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: ["1", "", "3"],
+                source: [AnyHashable("0"): nested],
+                options: options
+            )
+        }
+    }
+
+    @Test("Utils.merge - sparse primitive-array growth counts holes but omits them from overflow")
+    func testMergeSparsePrimitiveArrayLimit() throws {
+        let sparse: [Any] = [Undefined.instance, Undefined.instance, "y"]
+
+        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+            _ = try Utils.merge(
+                target: "x",
+                source: sparse,
+                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+            )
+        }
+
+        let soft = try #require(
+            try Utils.merge(
+                target: "x",
+                source: sparse,
+                options: DecodeOptions(listLimit: 3)
+            ) as? [AnyHashable: Any]
+        )
+        #expect(Utils.isOverflow(soft))
+        #expect(Utils.overflowMaxIndex(soft) == 3)
+        #expect(soft[AnyHashable(0)] as? String == "x")
+        #expect(soft[AnyHashable(1)] == nil)
+        #expect(soft[AnyHashable(2)] == nil)
+        #expect(soft[AnyHashable(3)] as? String == "y")
+
+        let withinLimit =
+            try Utils.merge(
+                target: "x",
+                source: sparse,
+                options: DecodeOptions(listLimit: 4, throwOnLimitExceeded: true)
+            ) as? [Any?]
+        try #require(withinLimit?.count == 4)
+        #expect(withinLimit?[0] as? String == "x")
+        #expect(withinLimit?[1] is Undefined)
+        #expect(withinLimit?[2] is Undefined)
+        #expect(withinLimit?[3] as? String == "y")
+    }
+
+    @Test("Overflow index arithmetic preserves values at Int.max without trapping")
+    func testOverflowIndexArithmeticAtIntMax() throws {
+        let boundary = Utils.markOverflow(
+            [AnyHashable(Int.max): "x"],
+            maxIndex: Int.max
+        )
+        let options = DecodeOptions(listLimit: 20)
+
+        let combined = try #require(
+            try Utils.combine(boundary, "y", options: options) as? [Any]
+        )
+        let combinedMap = try #require(combined[0] as? [AnyHashable: Any])
+        #expect(!Utils.isOverflow(combinedMap))
+        #expect(combinedMap[AnyHashable(Int.max)] as? String == "x")
+        #expect(combined[1] as? String == "y")
+
+        let merged = try #require(
+            try Utils.merge(
+                target: boundary,
+                source: OrderedSet<AnyHashable>(["y", "z"]),
+                options: options
+            ) as? [Any]
+        )
+        let mergedMap = try #require(merged[0] as? [AnyHashable: Any])
+        #expect(!Utils.isOverflow(mergedMap))
+        #expect(mergedMap[AnyHashable(Int.max)] as? String == "x")
+        #expect(merged[1] as? String == "y")
+        #expect(merged[2] as? String == "z")
+
+        let shifted = try #require(
+            try Utils.merge(target: "z", source: boundary, options: options) as? [Any]
+        )
+        #expect(shifted[0] as? String == "z")
+        let shiftedMap = try #require(shifted[1] as? [AnyHashable: Any])
+        #expect(!Utils.isOverflow(shiftedMap))
+        #expect(shiftedMap[AnyHashable(Int.max)] as? String == "x")
+    }
+
+    @Test("Utils.combine - keeps arrays nested when appending to overflow objects")
+    func testCombineKeepsOverflowAppendNested() async throws {
+        let overflow = try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))
+        let combined = try Utils.combine(
+            overflow,
+            ["c", "d"],
+            options: DecodeOptions(listLimit: 10)
+        )
         let combinedDict = combined as? [AnyHashable: Any]
         #expect(Utils.isOverflow(combinedDict))
         if let combinedDict {
             let cleaned = combinedDict.filter { !Utils.isOverflowKey($0.key) }
             #expect(cleaned[AnyHashable(0)] as? String == "a")
             #expect(cleaned[AnyHashable(1)] as? String == "b")
-            #expect(cleaned[AnyHashable(2)] as? String == "c")
-            #expect(cleaned[AnyHashable(3)] as? String == "d")
+            #expect(cleaned[AnyHashable(2)] as? [String] == ["c", "d"])
         }
 
-        let combinedWithNil = Utils.combine(overflow, [nil, "e"], listLimit: 10)
+        let combinedWithNil = try Utils.combine(
+            overflow,
+            [nil, "e"],
+            options: DecodeOptions(listLimit: 10)
+        )
         let combinedNilDict = combinedWithNil as? [AnyHashable: Any]
         #expect(Utils.isOverflow(combinedNilDict))
         if let combinedNilDict {
             let cleaned = combinedNilDict.filter { !Utils.isOverflowKey($0.key) }
-            #expect((cleaned[AnyHashable(2)] as AnyObject) is NSNull)
-            #expect(cleaned[AnyHashable(3)] as? String == "e")
+            let nested = cleaned[AnyHashable(2)] as? [Any?]
+            #expect(nested?.count == 2)
+            #expect(nested?[0] == nil)
+            #expect(nested?[1] as? String == "e")
         }
     }
 
     @Test("Utils.merge - handles overflow objects")
     func testMergeOverflowObjects() async throws {
-        let overflow = Utils.combine(["a"], "b", listLimit: 1) as? [AnyHashable: Any]
+        let overflow =
+            try Utils.combine(
+                ["a"],
+                "b",
+                options: DecodeOptions(listLimit: 1)
+            ) as? [AnyHashable: Any]
         #expect(Utils.isOverflow(overflow))
 
         if let overflow {
-            let merged = Utils.merge(target: overflow, source: "c") as? [AnyHashable: Any]
+            let merged = try Utils.merge(target: overflow, source: "c") as? [AnyHashable: Any]
             #expect(Utils.isOverflow(merged))
             if let merged {
                 let cleaned = merged.filter { !Utils.isOverflowKey($0.key) }
@@ -860,7 +1207,7 @@ struct UtilsTests {
                 #expect(cleaned[AnyHashable(2)] as? String == "c")
             }
 
-            let mergedIntoPrimitive = Utils.merge(target: "z", source: overflow) as? [AnyHashable: Any]
+            let mergedIntoPrimitive = try Utils.merge(target: "z", source: overflow) as? [AnyHashable: Any]
             #expect(Utils.isOverflow(mergedIntoPrimitive))
             if let mergedIntoPrimitive {
                 let cleaned = mergedIntoPrimitive.filter { !Utils.isOverflowKey($0.key) }
@@ -870,20 +1217,26 @@ struct UtilsTests {
         }
     }
 
-    @Test("Utils.merge - preserves overflow max index when merging into array target")
+    @Test("Utils.merge - merges an array target into overflow values by numeric index")
     func testMergeOverflowIntoArrayTarget() async throws {
-        let overflow = Utils.combine(["a"], "b", listLimit: 1) as? [AnyHashable: Any]
+        let overflow =
+            try Utils.combine(
+                ["a"],
+                "b",
+                options: DecodeOptions(listLimit: 1)
+            ) as? [AnyHashable: Any]
         #expect(Utils.isOverflow(overflow))
 
         if let overflow {
-            let merged = Utils.merge(target: ["z"], source: overflow) as? [AnyHashable: Any]
+            let merged = try Utils.merge(target: ["z"], source: overflow) as? [AnyHashable: Any]
             #expect(Utils.isOverflow(merged))
 
-            let appended = Utils.merge(target: merged, source: "c") as? [AnyHashable: Any]
+            let appended = try Utils.merge(target: merged, source: "c") as? [AnyHashable: Any]
             #expect(Utils.isOverflow(appended))
             if let appended {
                 let cleaned = appended.filter { !Utils.isOverflowKey($0.key) }
-                #expect(cleaned[AnyHashable(0)] as? String == "a")
+                #expect(cleaned[AnyHashable(0)] as? [String] == ["z", "a"])
+                #expect(cleaned[AnyHashable(1)] as? String == "b")
                 #expect(cleaned[AnyHashable(2)] as? String == "c")
             }
         }
@@ -900,26 +1253,26 @@ struct UtilsTests {
             maxIndex: 9
         )
 
-        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
         #expect(Utils.isOverflow(merged))
         if let merged {
             #expect(Utils.overflowMaxIndex(merged) == 9)
-            #expect(merged[AnyHashable(0)] as? String == "a")
+            #expect(merged[AnyHashable(0)] as? [String] == ["z", "a"])
             #expect(merged[AnyHashable(1)] as? String == "b")
         }
     }
 
-    @Test("Utils.merge - overflow target appends array source by index")
-    func testMergeOverflowTarget_ArraySourceAppendPath() async throws {
+    @Test("Utils.merge - overflow target merges array source by numeric index")
+    func testMergeOverflowTarget_ArraySourceIndexPath() async throws {
         let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 2)
         let source: [Any?] = ["x", nil, Undefined.instance]
 
-        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
         #expect(Utils.isOverflow(merged))
         if let merged {
-            #expect(merged[AnyHashable(3)] as? String == "x")
-            #expect(merged[AnyHashable(4)] is NSNull)
-            #expect(Utils.overflowMaxIndex(merged) == 4)
+            #expect(merged[AnyHashable(0)] as? [String] == ["a", "x"])
+            #expect(merged[AnyHashable(1)] is NSNull)
+            #expect(Utils.overflowMaxIndex(merged) == 2)
         }
     }
 
@@ -928,7 +1281,7 @@ struct UtilsTests {
         let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 0)
         let source = OrderedSet<AnyHashable>([AnyHashable("x"), AnyHashable("y")])
 
-        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
         #expect(Utils.isOverflow(merged))
         if let merged {
             #expect((merged[AnyHashable(1)] as? AnyHashable)?.base as? String == "x")
@@ -948,7 +1301,7 @@ struct UtilsTests {
             maxIndex: 2
         )
 
-        let merged = Utils.merge(target: nil, source: source) as? [AnyHashable: Any]
+        let merged = try Utils.merge(target: nil, source: source) as? [AnyHashable: Any]
         #expect(Utils.isOverflow(merged))
         if let merged {
             #expect(merged[AnyHashable(0)] is NSNull)
@@ -967,7 +1320,7 @@ struct UtilsTests {
             AnyHashable(3): "tail",
         ]
 
-        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
         #expect(merged != nil)
         if let merged {
             #expect(merged[AnyHashable(0)] as? String == "left")
@@ -982,7 +1335,7 @@ struct UtilsTests {
         let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 0)
         let source = Utils.markOverflow([AnyHashable(1): "b"], maxIndex: 10)
 
-        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
         #expect(Utils.isOverflow(merged))
         if let merged {
             #expect(merged[AnyHashable(1)] as? String == "b")
@@ -1008,13 +1361,13 @@ struct UtilsTests {
             )
         ]
 
-        let merged = Utils.merge(target: parent, source: source) as? [AnyHashable: Any]
+        let merged = try Utils.merge(target: parent, source: source) as? [AnyHashable: Any]
         #expect(Utils.isOverflow(merged))
 
         if let merged {
             #expect(Utils.overflowMaxIndex(merged) == 0)
 
-            let appended = Utils.merge(target: merged, source: "tail") as? [AnyHashable: Any]
+            let appended = try Utils.merge(target: merged, source: "tail") as? [AnyHashable: Any]
             #expect(Utils.isOverflow(appended))
             #expect(appended?[AnyHashable(1)] as? String == "tail")
             #expect(appended?[AnyHashable(102)] == nil)
@@ -1046,7 +1399,7 @@ struct UtilsTests {
             source = ["p": source]
         }
 
-        let merged = Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
         #expect(merged != nil)
 
         var node: Any? = merged
@@ -1964,6 +2317,40 @@ struct UtilsTests {
         #endif
     }
 
+    @Test("Utils.compact and compactToAny replace multi-step Foundation cycle back-edges with NSNull")
+    func utils_compact_foundationMultiStepCycle() throws {
+        #if os(Linux)
+            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary cycles")) {
+                #expect(
+                    Bool(false),
+                    Comment("Skipped: cannot safely build cyclic Foundation containers on Linux"))
+            }
+        #else
+            let root = NSMutableDictionary()
+            let middle = NSMutableDictionary()
+            let leaf = NSMutableDictionary()
+            root["b"] = middle
+            middle["c"] = leaf
+            leaf["d"] = root
+            leaf["keep"] = "x"
+
+            var compactRoot: [String: Any?] = ["root": root]
+            let compacted = Utils.compact(&compactRoot, allowSparseLists: true)
+            let compactedRoot = compacted["root"] as? [String: Any?]
+            let compactedMiddle = compactedRoot?["b"] as? [String: Any?]
+            let compactedLeaf = compactedMiddle?["c"] as? [String: Any?]
+            #expect(compactedLeaf?["keep"] as? String == "x")
+            #expect((compactedLeaf?["d"] ?? nil) is NSNull)
+
+            let compactedAny = Utils.compactToAny(["root": root], allowSparseLists: true)
+            let anyRoot = compactedAny["root"] as? [String: Any]
+            let anyMiddle = anyRoot?["b"] as? [String: Any]
+            let anyLeaf = anyMiddle?["c"] as? [String: Any]
+            #expect(anyLeaf?["keep"] as? String == "x")
+            #expect(anyLeaf?["d"] is NSNull)
+        #endif
+    }
+
     @Test("Utils.containsUndefined detects sentinel in nested structures")
     func utils_containsUndefined_detects() {
         let undefined = Undefined.instance
@@ -2096,13 +2483,13 @@ struct UtilsTests {
     }
 
     @Test("Utils.merge handles heterogeneous containers")
-    func utils_merge_coversBranches() {
+    func utils_merge_coversBranches() throws {
         let undefined = Undefined.instance
 
         // [Any?] target merged with dictionary source
         let targetArray: [Any?] = ["a", nil, undefined]
         let sourceDict: [AnyHashable: Any] = ["extra": "value"]
-        let merged1 = Utils.merge(target: targetArray, source: sourceDict, options: .init())
+        let merged1 = try Utils.merge(target: targetArray, source: sourceDict, options: .init())
         #expect(merged1 is [AnyHashable: Any])
         if let mergedDict1 = merged1 as? [AnyHashable: Any] {
             #expect(mergedDict1["extra"] as? String == "value")
@@ -2110,24 +2497,25 @@ struct UtilsTests {
         }
 
         // Dictionary target merged with array source
-        let merged2 = Utils.merge(target: merged1, source: [undefined, "tail"], options: .init())
+        let merged2 = try Utils.merge(target: merged1, source: [undefined, "tail"], options: .init())
         #expect(merged2 is [AnyHashable: Any])
 
         // OrderedSet union and sequence merging
         let ordered = OrderedSet<AnyHashable>([1, 2])
-        let mergedOrdered = Utils.merge(target: ordered, source: OrderedSet([2, 3]), options: .init())
+        let mergedOrdered = try Utils.merge(target: ordered, source: OrderedSet([2, 3]), options: .init())
         #expect(mergedOrdered is OrderedSet<AnyHashable>)
         if let orderedResult = mergedOrdered as? OrderedSet<AnyHashable> {
             #expect(!orderedResult.isEmpty)
         }
 
-        let orderedWithSequence = Utils.merge(target: OrderedSet(["a"]), source: [undefined, "b"], options: .init())
+        let orderedWithSequence = try Utils.merge(
+            target: OrderedSet(["a"]), source: [undefined, "b"], options: .init())
         if let orderedSequenceArray = orderedWithSequence as? [Any?] {
             #expect(orderedSequenceArray.contains { ($0 as? String) == "b" })
         }
 
         // Set union and sequence merging
-        let mergedSet = Utils.merge(target: Set([1, 2]), source: [undefined, 3], options: .init())
+        let mergedSet = try Utils.merge(target: Set([1, 2]), source: [undefined, 3], options: .init())
         if let setResult = mergedSet as? Set<AnyHashable> {
             #expect(setResult.contains { ($0 as? Int) == 3 })
         }
@@ -2135,34 +2523,36 @@ struct UtilsTests {
         // Array target with Undefined elements and parseLists disabled
         let options = DecodeOptions(parseLists: false)
         let arrayWithUndefined: [Any] = [undefined, "a"]
-        let mergedArray = Utils.merge(target: arrayWithUndefined, source: ["b", undefined], options: options) as? [Any]
+        let mergedArray =
+            try Utils.merge(target: arrayWithUndefined, source: ["b", undefined], options: options) as? [Any]
         #expect(mergedArray?.compactMap { $0 as? String }.contains("b") == true)
 
-        // Array target + sequence of maps to trigger recursive merge
+        // Array target + sequence of maps recursively merges scalar collisions.
         let targetMaps: [Any] = [["k": "v"], Undefined.instance]
         let sourceMaps: [Any] = [["k": "override"], ["new": "value"]]
-        if let mergedMaps = Utils.merge(target: targetMaps, source: sourceMaps, options: .init()) as? [Any?] {
+        if let mergedMaps = try Utils.merge(target: targetMaps, source: sourceMaps, options: .init()) as? [Any?] {
             let first = mergedMaps[0] as? [AnyHashable: Any]
-            #expect(first?["k"] as? String == "override")
+            #expect(first?["k"] as? [String] == ["v", "override"])
         }
 
         // Dictionary target with non-sequence source coerces key from description
         let dictTarget: [AnyHashable: Any] = ["keep": 1]
-        if let mergedDict = Utils.merge(target: dictTarget, source: "flag", options: .init()) as? [AnyHashable: Any] {
+        if let mergedDict = try Utils.merge(target: dictTarget, source: "flag", options: .init()) as? [AnyHashable: Any]
+        {
             #expect(mergedDict.keys.contains { ($0 as? String) == "flag" })
         }
 
         // Nil target with array source produces array with filtered Undefined
-        if let mergedFromNil = Utils.merge(target: nil, source: ["a", undefined], options: .init()) as? [Any?] {
+        if let mergedFromNil = try Utils.merge(target: nil, source: ["a", undefined], options: .init()) as? [Any?] {
             #expect(mergedFromNil.contains { ($0 as? String) == "a" })
         }
     }
 
     @Test("Utils.merge extends OrderedSet<AnyHashable> with sequences and skips Undefined")
-    func utils_merge_orderedSet_anyHashable_sequence() {
+    func utils_merge_orderedSet_anyHashable_sequence() throws {
         let undefined = Undefined.instance
         let target = OrderedSet<AnyHashable>([AnyHashable("a")])
-        let merged = Utils.merge(target: target, source: [undefined, "b", "a"], options: .init())
+        let merged = try Utils.merge(target: target, source: [undefined, "b", "a"], options: .init())
 
         if let ordered = merged as? OrderedSet<AnyHashable> {
             #expect(ordered.contains("a"))
@@ -2172,7 +2562,7 @@ struct UtilsTests {
             Issue.record("OrderedSet branch did not return OrderedSet: \(String(describing: merged))")
         }
 
-        if let unioned = Utils.merge(target: target, source: OrderedSet([AnyHashable("b")]), options: .init())
+        if let unioned = try Utils.merge(target: target, source: OrderedSet([AnyHashable("b")]), options: .init())
             as? OrderedSet<AnyHashable>
         {
             #expect(unioned.elementsEqual([AnyHashable("a"), AnyHashable("b")]))
@@ -2180,7 +2570,8 @@ struct UtilsTests {
             Issue.record("OrderedSet union branch not exercised")
         }
 
-        if let unchanged = Utils.merge(target: target, source: undefined, options: .init()) as? OrderedSet<AnyHashable>
+        if let unchanged = try Utils.merge(target: target, source: undefined, options: .init())
+            as? OrderedSet<AnyHashable>
         {
             #expect(unchanged.elementsEqual(target))
         } else {
@@ -2189,10 +2580,10 @@ struct UtilsTests {
     }
 
     @Test("Utils.merge unions Set<AnyHashable> with sequence input")
-    func utils_merge_set_anyHashable_sequence() {
+    func utils_merge_set_anyHashable_sequence() throws {
         let undefined = Undefined.instance
         let target = Set<AnyHashable>(["seed"])
-        let merged = Utils.merge(target: target, source: [undefined, "extra"], options: .init())
+        let merged = try Utils.merge(target: target, source: [undefined, "extra"], options: .init())
 
         if let setResult = merged as? Set<AnyHashable> {
             #expect(setResult.contains("seed"))
@@ -2201,33 +2592,34 @@ struct UtilsTests {
             Issue.record("Set branch did not return Set: \(String(describing: merged))")
         }
 
-        if let unchanged = Utils.merge(target: target, source: undefined, options: .init()) as? Set<AnyHashable> {
+        if let unchanged = try Utils.merge(target: target, source: undefined, options: .init()) as? Set<AnyHashable> {
             #expect(unchanged == target)
         } else {
             Issue.record("Set Undefined branch not exercised")
         }
     }
 
-    @Test("Utils.merge overlays Swift [Any] with sequence indices")
-    func utils_merge_arraySequenceOverlay() {
+    @Test("Utils.merge applies qs collision rules to Swift [Any] sequence indices")
+    func utils_merge_arraySequenceCollisions() throws {
         let undefined = Undefined.instance
         let target = [Any](arrayLiteral: undefined, "keep")
         let source: [Any] = ["replaced", "new"]
-        if let merged = Utils.merge(target: target, source: source, options: .init(parseLists: true)) as? [Any?] {
+        if let merged = try Utils.merge(target: target, source: source, options: .init(parseLists: true)) as? [Any?] {
             #expect(merged[0] as? String == "replaced")
-            #expect(merged[1] as? String == "new")
-            #expect(merged.count == 2)
+            #expect(merged[1] as? String == "keep")
+            #expect(merged[2] as? String == "new")
+            #expect(merged.count == 3)
         } else {
-            Issue.record("Sequence overlay branch not exercised")
+            Issue.record("Sequence collision branch not exercised")
         }
     }
 
     @Test("Utils.merge promotes array target to dictionary when merging with map")
-    func utils_merge_arrayToDictionaryTarget() {
+    func utils_merge_arrayToDictionaryTarget() throws {
         let undefined = Undefined.instance
         let target: [Any] = ["a", undefined]
         let sourceDict: [AnyHashable: Any] = ["b": 2]
-        let merged = Utils.merge(target: target, source: sourceDict, options: .init())
+        let merged = try Utils.merge(target: target, source: sourceDict, options: .init())
         if let dict = merged as? [AnyHashable: Any] {
             #expect(dict[0] as? String == "a")
             #expect(dict["b"] as? Int == 2)
@@ -2237,11 +2629,11 @@ struct UtilsTests {
     }
 
     @Test("Utils.merge dictionary target consumes OrderedSet sequences")
-    func utils_merge_dictionaryOrderedSetSequence() {
+    func utils_merge_dictionaryOrderedSetSequence() throws {
         let target: [AnyHashable: Any] = ["existing": "value"]
         let ordered = OrderedSet<AnyHashable>([AnyHashable("first"), AnyHashable(2)])
 
-        if let merged = Utils.merge(target: target, source: ordered, options: .init()) as? [AnyHashable: Any] {
+        if let merged = try Utils.merge(target: target, source: ordered, options: .init()) as? [AnyHashable: Any] {
             #expect(merged["existing"] as? String == "value")
             #expect(merged[0] as? AnyHashable == AnyHashable("first"))
             #expect(merged[1] as? AnyHashable == AnyHashable(2))
@@ -2250,26 +2642,26 @@ struct UtilsTests {
         }
     }
 
-    @Test("Utils.merge merges nil targets with typed [Any] sources and filters Undefined")
-    func utils_merge_nilTarget_typedArraySource() {
+    @Test("Utils.merge merges nil targets with typed [Any] sources and preserves sparse positions")
+    func utils_merge_nilTarget_typedArraySource() throws {
         let source: [Any] = [Undefined.instance, "ok", 42]
-        if let merged = Utils.merge(target: nil, source: source, options: .init()) as? [Any?] {
-            #expect(merged.count == 3)
+        if let merged = try Utils.merge(target: nil, source: source, options: .init()) as? [Any?] {
+            #expect(merged.count == 4)
             let head = merged.first.flatMap { $0 }
             #expect(head == nil)
-            #expect(merged.dropFirst().contains { $0 is Undefined } == false)
-            #expect(merged[1] as? String == "ok")
-            #expect(merged[2] as? Int == 42)
+            #expect(merged[1] is Undefined)
+            #expect(merged[2] as? String == "ok")
+            #expect(merged[3] as? Int == 42)
         } else {
             Issue.record("Nil-target array merge branch not exercised")
         }
     }
 
     @Test("Utils.merge overlays arrays with scalars when no sequence is available")
-    func utils_merge_arrayAppendsScalarOnNonSequenceSource() {
+    func utils_merge_arrayAppendsScalarOnNonSequenceSource() throws {
         let undefined = Undefined.instance
         let target: [Any] = [undefined, "keep"]
-        let merged = Utils.merge(target: target, source: "tail", options: .init())
+        let merged = try Utils.merge(target: target, source: "tail", options: .init())
 
         if let out = merged as? [Any?] {
             #expect(out.count == 3)

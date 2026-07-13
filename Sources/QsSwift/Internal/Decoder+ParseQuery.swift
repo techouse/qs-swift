@@ -119,7 +119,6 @@ extension QsSwift.Decoder {
                     continue
                 }
                 key = decodedKey
-                let isFirstOccurrence = (obj[key] == nil)
 
                 // Determine current list length for limit checks (only if key already has a list)
                 let currentLen = effectiveListLength(obj[key])
@@ -128,7 +127,7 @@ extension QsSwift.Decoder {
                     rhs,
                     options: options,
                     currentListLength: currentLen,
-                    isFirstOccurrence: isFirstOccurrence
+                    isFlatListValue: !hadBracketedEmpty
                 )
 
                 // IMPORTANT: distinguish custom decoder vs default decoder
@@ -151,6 +150,7 @@ extension QsSwift.Decoder {
                 } else {
                     value = parsed
                 }
+
             }
 
             // Interpret numeric entities if asked (ISO‑8859‑1 only).
@@ -190,17 +190,19 @@ extension QsSwift.Decoder {
                     value = [arr]
                 } else if let arrOpt = value as? [Any?] {
                     value = [arrOpt.map { $0 ?? NSNull() }]
-                } else if let overflow = value as? [AnyHashable: Any], Utils.isOverflow(overflow) {
-                    // Explicit "[]": preserve list-of-lists semantics even when comma overflow
-                    // temporarily used indexed-map fallback.
-                    if let dense = overflowElementsAsArray(overflow, listLimit: options.listLimit) {
-                        value = [dense]
-                    } else {
-                        // Avoid unbounded dense allocation; keep overflow-map representation.
-                        value = overflow
-                    }
                 }
                 // else leave scalars as-is; parseObject will handle "[]"
+            }
+
+            // Match qs ordering: numeric-entity interpretation may collapse a comma
+            // array to a scalar before the soft list limit is applied. Bracketed
+            // comma groups are wrapped first, so each group counts as one element.
+            if options.comma {
+                if let arr = value as? [Any], arr.count > options.listLimit {
+                    value = try Utils.combine([], arr, options: options)
+                } else if let arr = value as? [Any?], arr.count > options.listLimit {
+                    value = try Utils.combine([], arr, options: options)
+                }
             }
 
             // Duplicates handling (only arrayify on subsequent duplicates, like Kotlin)
@@ -209,7 +211,7 @@ extension QsSwift.Decoder {
             if shouldCombine {
                 if exists {
                     let prev: Any? = obj[key] ?? nil
-                    let combined = Utils.combine(prev, value, listLimit: options.listLimit)
+                    let combined = try Utils.combine(prev, value, options: options)
                     if let combinedArray = combined as? [Any?] {
                         obj[key] = combinedArray.map { $0 ?? NSNull() }  // normalize optionals
                     } else if let combinedArray = combined as? [Any] {
@@ -1046,42 +1048,4 @@ extension QsSwift.Decoder {
         return out
     }
 
-    /// Materializes an overflow dictionary into a dense, index-ordered array payload.
-    /// Missing indices are represented as `NSNull` to preserve positional semantics.
-    ///
-    /// Returns `nil` when the dense size would be unbounded for the current parser limits.
-    private static func overflowElementsAsArray(
-        _ overflow: [AnyHashable: Any],
-        listLimit: Int
-    ) -> [Any]? {
-        let explicitMax = overflow.keys.compactMap(Utils.intIndex).max() ?? -1
-        let metadataMax = Utils.overflowMaxIndex(overflow) ?? -1
-        let maxIndex = max(explicitMax, metadataMax)
-        guard maxIndex >= 0 else { return [] }
-
-        let (elementCount, overflowed) = maxIndex.addingReportingOverflow(1)
-        guard !overflowed else { return nil }
-
-        let normalizedListLimit = max(listLimit, 0)
-        let nearLimitAllowance: Int = {
-            let (value, didOverflow) = normalizedListLimit.addingReportingOverflow(1)
-            return didOverflow ? Int.max : value
-        }()
-        let materializationLimit = max(nearLimitAllowance, overflowDenseArrayMaterializationFloor)
-        guard elementCount <= materializationLimit else { return nil }
-
-        var out = Array(repeating: NSNull() as Any, count: elementCount)
-        for (key, value) in overflow where !Utils.isOverflowKey(key) {
-            guard let idx = Utils.intIndex(key), idx >= 0, idx <= maxIndex else { continue }
-            out[idx] = value
-        }
-        return out
-    }
-
-    /// Lower bound for dense overflow materialization when applying parser limits.
-    /// This keeps modest sparse overflows materializable even when `listLimit` is very small,
-    /// preserving list-like semantics instead of immediately falling back to overflow maps.
-    /// At 4_096 elements, pointer-sized storage is roughly 32 KiB (4_096 * 8 bytes) before
-    /// container overhead, which keeps the memory tradeoff bounded.
-    private static let overflowDenseArrayMaterializationFloor = 4_096
 }

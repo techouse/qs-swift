@@ -184,6 +184,44 @@
             #expect(a?["1"] as? String == "c")
         }
 
+        @Test("objc-decode: cumulative duplicate growth throws at listLimit")
+        func cumulativeListLimitThrow() throws {
+            let error = try #require(
+                decodeExpectingError("a=1,2&a=3,4") { o in
+                    o.comma = true
+                    o.listLimit = 3
+                    o.throwOnLimitExceeded = true
+                }
+            )
+            #expect(DecodeErrorObjC.kind(from: error) == .listLimitExceeded)
+            #expect(DecodeErrorObjC.limit(from: error) == 3)
+        }
+
+        @Test("objc-decode: cumulative duplicate growth becomes an indexed map")
+        func cumulativeListLimitSoftOverflow() throws {
+            let decoded = decode("a=1,2&a=3,4") { o in
+                o.comma = true
+                o.listLimit = 3
+            }
+            let overflow = decoded["a"] as? NSDictionary
+            #expect(overflow?["0"] as? String == "1")
+            #expect(overflow?["1"] as? String == "2")
+            #expect(overflow?["2"] as? String == "3")
+            #expect(overflow?["3"] as? String == "4")
+        }
+
+        @Test("objc-decode: bracketed comma group counts as one outer element")
+        func bracketedCommaGroupCountsAsOneOuterElement() throws {
+            let decoded = decode("a[]=1,2,3,4") { o in
+                o.comma = true
+                o.listLimit = 1
+                o.throwOnLimitExceeded = true
+            }
+            let outer = decoded["a"] as? [Any]
+            #expect(outer?.count == 1)
+            #expect(outer?.first as? [String] == ["1", "2", "3", "4"])
+        }
+
         @Test("objc-decode: comma non-throw fallback percent-decodes split elements")
         func commaLimitNonThrowFallbackDecodesElements() throws {
             let r = decode("a=b%20c,d%20e") { o in
@@ -212,9 +250,9 @@
             #expect(a?["1"] as? String == "X:c")
         }
 
-        @Test("objc-decode: comma overflow + iso entities preserves indexed map")
-        func commaLimitNonThrowFallbackIsoEntitiesPreserveMap() throws {
-            let r = decode("a=1,%26%239786%3B") { o in
+        @Test("objc-decode: iso entities precede soft comma overflow")
+        func commaLimitNonThrowFallbackIsoEntitiesCollapseFirst() throws {
+            let r = decode("a=x&a=%26%239786%3B,%26%239787%3B") { o in
                 o.comma = true
                 o.listLimit = 1
                 o.throwOnLimitExceeded = false
@@ -222,8 +260,8 @@
                 o.interpretNumericEntities = true
             }
             let a = r["a"] as? NSDictionary
-            #expect(a?["0"] as? String == "1")
-            #expect(a?["1"] as? String == "☺")
+            #expect(a?["0"] as? String == "x")
+            #expect(a?["1"] as? String == "☺,☻")
         }
 
         // MARK: - Dot / decodeDotInKeys combinations (subset)
