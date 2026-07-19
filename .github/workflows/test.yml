@@ -429,7 +429,7 @@ jobs:
             spm-${{ runner.os }}-xcode-${{ env.XCODE_VERSION }}-
 
       - name: Install Node.js (with npm cache)
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
 
