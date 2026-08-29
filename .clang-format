@@ -1,12 +1,14 @@
----
 BasedOnStyle: WebKit
+
 IndentWidth: 2
 ColumnLimit: 120
 BreakBeforeBraces: Attach
+
 AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: Never
 
----
-Language: ObjC
+BinPackParameters: false
+AllowAllParametersOfDeclarationOnNextLine: false
+
 ObjCSpaceAfterProperty: true
 ObjCSpaceBeforeProtocolList: true
