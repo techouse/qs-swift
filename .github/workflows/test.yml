@@ -76,7 +76,7 @@ jobs:
     name: ${{ format('Swift tests ({0}, Xcode {1}, Swift {2}{3})', matrix.runner, matrix.xcode, matrix.swift, matrix.experimental && ' — experimental' || '') }}
     timeout-minutes: 45
     runs-on: ${{ matrix.runner }}
-    needs: swift-lint
+    needs: [swift-lint, clang-format]
     continue-on-error: ${{ matrix.experimental }}
 
     strategy:
@@ -198,7 +198,7 @@ jobs:
     name: Objective-C E2E tests (macOS, Xcode)
     timeout-minutes: 45
     runs-on: macos-26
-    needs: [ swift-lint, macos-tests ]
+    needs: [ swift-lint, clang-format, macos-tests ]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -351,7 +351,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     continue-on-error: ${{ matrix.experimental }}
-    needs: swift-lint
+    needs: [ swift-lint, clang-format ]
 
     strategy:
       fail-fast: false
@@ -414,7 +414,7 @@ jobs:
 
   ensure-compatibility:
     name: Ensure compatibility with qs.js
-    needs: [ swift-lint, macos-tests ]
+    needs: [ swift-lint, clang-format, macos-tests ]
     runs-on: macos-26
     timeout-minutes: 15
     steps:
