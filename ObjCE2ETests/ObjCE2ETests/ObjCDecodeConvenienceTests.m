@@ -18,8 +18,8 @@ static NSDictionary* Qs_DecodeOrEmpty(id _Nullable input, QsDecodeOptions* _Null
   return out ?: @ { };
 }
 
-static NSDictionary* Qs_DecodeOrDefault(
-    id _Nullable input, QsDecodeOptions* _Nullable opts, NSDictionary* _Nonnull def) {
+static NSDictionary*
+Qs_DecodeOrDefault(id _Nullable input, QsDecodeOptions* _Nullable opts, NSDictionary* _Nonnull def) {
   NSDictionary* out = Qs_DecodeOrNil(input, opts);
   return out ?: def;
 }
