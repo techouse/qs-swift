@@ -1,3 +1,7 @@
+## 1.4.2
+
+- [CHORE] modify swift-lint and clang-format rules and apply them across the codebase
+
 ## 1.4.1
 
 - [FIX] align list-limit behavior with `qs@6.15.3`: enforce `listLimit` cumulatively across duplicate keys, comma values, bracket/index notation, nested merges, and existing overflow maps; exact-limit values remain lists, while non-throwing overflow becomes a numeric-keyed dictionary.
