@@ -12,7 +12,7 @@ excluded:
   - Tools
 
 disabled_rules:
-  - trailing_whitespace
+  - trailing_comma
   - opening_brace
   - cyclomatic_complexity
   - function_body_length
@@ -22,13 +22,16 @@ opt_in_rules:
   - empty_count
   - force_unwrapping
   - closure_end_indentation
+  - multiline_parameters
+  - multiline_parameters_brackets
+  - multiline_arguments
+  - multiline_arguments_brackets
+  - direct_return
+  - modifier_order
 
 analyzer_rules:
   - unused_declaration
   - unused_import
-
-trailing_comma:
-  mandatory_comma: true
 
 line_length:
   warning: 120
