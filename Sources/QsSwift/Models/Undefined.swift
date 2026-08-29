@@ -12,27 +12,27 @@ import Foundation
 @frozen
 public struct Undefined: Equatable, Hashable, Sendable {
 
-    /// Public initializer so clients can write `Undefined()`.
-    @inlinable
-    public init() {}
+  /// Public initializer so clients can write `Undefined()`.
+  @inlinable
+  public init() {}
 
-    /// Canonical singleton, for convenience.
-    public static let instance = Undefined()
+  /// Canonical singleton, for convenience.
+  public static let instance = Undefined()
 }
 
 // MARK: - CustomStringConvertible / Debug
 
 extension Undefined: CustomStringConvertible, CustomDebugStringConvertible {
-    /// Human-readable representation, useful in logs and tests.
-    public var description: String { "Undefined" }
-    public var debugDescription: String { description }
+  /// Human-readable representation, useful in logs and tests.
+  public var description: String { "Undefined" }
+  public var debugDescription: String { description }
 }
 
 // MARK: - Convenience
 
 extension Undefined {
-    /// Callable-type sugar: `Undefined()` or `Undefined.callAsFunction()` both return a value.
-    /// Mirrors Kotlin’s companion `invoke`-style ergonomics.
-    @inlinable
-    public static func callAsFunction() -> Undefined { .instance }
+  /// Callable-type sugar: `Undefined()` or `Undefined.callAsFunction()` both return a value.
+  /// Mirrors Kotlin’s companion `invoke`-style ergonomics.
+  @inlinable
+  public static func callAsFunction() -> Undefined { .instance }
 }

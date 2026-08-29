@@ -23,9 +23,9 @@
 ///   let map = try await Qs.decodeAsync("a=b").value   // use on current actor
 ///   ```
 public struct DecodedMap: @unchecked Sendable {
-    /// The decoded key–value pairs. Treat as read-only across threads.
-    public let value: [String: Any]
+  /// The decoded key–value pairs. Treat as read-only across threads.
+  public let value: [String: Any]
 
-    @inlinable
-    public init(_ dict: [String: Any]) { self.value = dict }
+  @inlinable
+  public init(_ dict: [String: Any]) { self.value = dict }
 }

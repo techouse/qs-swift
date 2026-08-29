@@ -4,2970 +4,2984 @@ import OrderedCollections
 @_spi(Testing) @testable import QsSwift
 
 #if canImport(Testing)
-    import Testing
+  import Testing
 #else
-    #error("The swift-testing package is required to build tests on Swift 5.x")
+  #error("The swift-testing package is required to build tests on Swift 5.x")
 #endif
 
 private let deterministicHashing = ProcessInfo.processInfo.environment["SWIFT_DETERMINISTIC_HASHING"] == "1"
 
 struct UtilsTests {
-    // MARK: - Utils.encode tests
-
-    @Test("Utils.encode - encodes various values correctly")
-    func testEncodeVariousValues() async throws {
-        // Basic encoding
-        #expect(Utils.encode("foo+bar") == "foo%2Bbar")
-
-        // Exceptions (characters that should not be encoded)
-        #expect(Utils.encode("foo-bar") == "foo-bar")
-        #expect(Utils.encode("foo_bar") == "foo_bar")
-        #expect(Utils.encode("foo~bar") == "foo~bar")
-        #expect(Utils.encode("foo.bar") == "foo.bar")
-
-        // Space encoding
-        #expect(Utils.encode("foo bar") == "foo%20bar")
-
-        // Parentheses
-        #expect(Utils.encode("foo(bar)") == "foo%28bar%29")
-        #expect(Utils.encode("foo(bar)", format: .rfc1738) == "foo(bar)")
-
-        // Enum encoding
-        #expect(Utils.encode(DummyEnum.lorem) == "LOREM")
-
-        // Values that should not be encoded (return empty string)
-        // Array
-        #expect(Utils.encode([1, 2]) == "")
-        // Dictionary
-        #expect(Utils.encode(["a": "b"]) == "")
-        // Undefined
-        #expect(Utils.encode(Undefined()) == "")
-    }
-
-    @Test("Utils.encode - encode huge string")
-    func testEncodeHugeString() async throws {
-        let hugeString = String(repeating: "a", count: 1_000_000)
-        #expect(Utils.encode(hugeString) == hugeString)
-    }
-
-    @Test("Utils.encode - encodes utf8")
-    func testEncodeUtf8() async throws {
-        #expect(Utils.encode("foo+bar", charset: .utf8) == "foo%2Bbar")
-        // exceptions
-        #expect(Utils.encode("foo-bar", charset: .utf8) == "foo-bar")
-        #expect(Utils.encode("foo_bar", charset: .utf8) == "foo_bar")
-        #expect(Utils.encode("foo~bar", charset: .utf8) == "foo~bar")
-        #expect(Utils.encode("foo.bar", charset: .utf8) == "foo.bar")
-        // space
-        #expect(Utils.encode("foo bar", charset: .utf8) == "foo%20bar")
-        // parentheses
-        #expect(Utils.encode("foo(bar)", charset: .utf8) == "foo%28bar%29")
-        #expect(Utils.encode("foo(bar)", charset: .utf8, format: .rfc1738) == "foo(bar)")
-    }
-
-    @Test("Utils.encode - encodes latin1")
-    func testEncodeLatin1() async throws {
-        #expect(Utils.encode("foo+bar", charset: .isoLatin1) == "foo+bar")
-        // exceptions
-        #expect(Utils.encode("foo-bar", charset: .isoLatin1) == "foo-bar")
-        #expect(Utils.encode("foo_bar", charset: .isoLatin1) == "foo_bar")
-        #expect(Utils.encode("foo~bar", charset: .isoLatin1) == "foo%7Ebar")
-        #expect(Utils.encode("foo.bar", charset: .isoLatin1) == "foo.bar")
-        // space
-        #expect(Utils.encode("foo bar", charset: .isoLatin1) == "foo%20bar")
-        // parentheses
-        #expect(Utils.encode("foo(bar)", charset: .isoLatin1) == "foo%28bar%29")
-        #expect(Utils.encode("foo(bar)", charset: .isoLatin1, format: .rfc1738) == "foo(bar)")
-    }
-
-    @Test("Utils.encode - encodes empty string")
-    func testEncodeEmptyString() async throws {
-        #expect(Utils.encode("") == "")
-    }
-
-    @Test("Utils.encode - encodes parentheses with default format")
-    func testEncodeParenthesesDefaultFormat() async throws {
-        #expect(Utils.encode("(abc)") == "%28abc%29")
-    }
-
-    @Test("Utils.encode - encodes unicode with ISO-8859-1 charset")
-    func testEncodeUnicodeIso88591() async throws {
-        #expect(
-            Utils.encode("abc 123 💩", charset: .isoLatin1)
-                == "abc%20123%20%26%2355357%3B%26%2356489%3B")
-    }
-
-    @Test("Utils.encode - encodes unicode with UTF-8 charset")
-    func testEncodeUnicodeUtf8() async throws {
-        #expect(Utils.encode("abc 123 💩") == "abc%20123%20%F0%9F%92%A9")
-    }
-
-    @Test("Utils.encode - encodes long strings efficiently")
-    func testEncodeLongStrings() async throws {
-        let longString = String(repeating: " ", count: 1500)
-        let expectedString = String(repeating: "%20", count: 1500)
-        #expect(Utils.encode(longString) == expectedString)
-    }
-
-    @Test("Utils.encode - preserves an emoji across the first qs chunk boundary")
-    func testEncodeEmojiAtFirstChunkBoundary() {
-        let prefix = String(repeating: "a", count: 1_023)
-        #expect(Utils.encode(prefix + "😀") == prefix + "%F0%9F%98%80")
-    }
-
-    @Test("Utils.encode - preserves an emoji across a later qs chunk boundary")
-    func testEncodeEmojiAtLaterChunkBoundary() {
-        let prefix = String(repeating: "a", count: 2_047)
-        #expect(Utils.encode(prefix + "😀") == prefix + "%F0%9F%98%80")
-    }
-
-    @Test("Utils.encode - encodes parentheses")
-    func testEncodeParentheses() async throws {
-        #expect(Utils.encode("()") == "%28%29")
-        #expect(Utils.encode("()", format: .rfc1738) == "()")
-    }
-
-    @Test("Utils.encode - encodes multi-byte unicode characters")
-    func testEncodeMultiByteUnicode() async throws {
-        #expect(Utils.encode("Āက豈") == "%C4%80%E1%80%80%EF%A4%80")
-    }
-
-    @Test("Utils.encode - encodes surrogate pairs")
-    func testEncodeSurrogatePairs() async throws {
-        #expect(Utils.encode("\u{1F4A9}") == "%F0%9F%92%A9")
-        #expect(Utils.encode("💩") == "%F0%9F%92%A9")
-    }
-
-    @Test("Utils.encode - encodes emoji with ISO-8859-1 charset")
-    func testEncodeEmojiIso88591() async throws {
-        #expect(Utils.encode("💩", charset: .isoLatin1) == "%26%2355357%3B%26%2356489%3B")
-    }
-
-    @Test("Utils.encode - encodes nil values")
-    func testEncodeNilValues() async throws {
-        #expect(Utils.encode(nil) == "")
-    }
-
-    @Test("Utils.encode - encodes byte arrays")
-    func testEncodeByteArrays() async throws {
-        let data = "test".data(using: .utf8)!
-        #expect(Utils.encode(data) == "test")
-    }
-
-    @Test("Utils.encode - returns empty string for unsupported types")
-    func testEncodeUnsupportedTypes() async throws {
-        #expect(Utils.encode([1, 2, 3]) == "")
-        #expect(Utils.encode(["a": "b"]) == "")
-        #expect(Utils.encode(Undefined()) == "")
-    }
-
-    @Test("Utils.encode - handles special characters")
-    func testEncodeSpecialCharacters() async throws {
-        #expect(Utils.encode("~._-") == "~._-")
-        #expect(Utils.encode("!@#$%^&*()") == "%21%40%23%24%25%5E%26%2A%28%29")
-    }
-
-    @Test("Utils.encode - latin1 encodes characters as numeric entities when not representable")
-    func testEncodeLatin1NumericEntities() async throws {
-        let out = Utils.encode("☺", charset: .isoLatin1, format: .rfc3986)
-        #expect(out == "%26%239786%3B")
-    }
-
-    @Test("Utils.encode - RFC1738 leaves parentheses unescaped")
-    func testEncodeRfc1738Parentheses() async throws {
-        let out = Utils.encode("()", charset: .utf8, format: .rfc1738)
-        #expect(out == "()")
-    }
-
-    @Test("Utils.encode - encodes surrogate pairs (emoji) correctly")
-    func testEncodeSurrogatePairsEmoji() async throws {
-        #expect(Utils.encode("😀") == "%F0%9F%98%80")
-    }
-
-    @Test("Utils.encode - encodes Data")
-    func testEncodeData() async throws {
-        let data = "ä".data(using: .utf8)!
-        #expect(Utils.encode(data) == "%C3%A4")
-
-        let hiData = "hi".data(using: .utf8)!
-        #expect(Utils.encode(hiData) == "hi")
-    }
-
-    // MARK: - Utils.decode tests
-
-    @Test("Utils.decode - decodes URL encoded strings")
-    func testDecodeUrlEncodedStrings() async throws {
-        #expect(Utils.decode("foo%2Bbar") == "foo+bar")
-    }
-
-    @Test("Utils.decode - handles exceptions (characters that don't need decoding)")
-    func testDecodeExceptions() async throws {
-        #expect(Utils.decode("foo-bar") == "foo-bar")
-        #expect(Utils.decode("foo_bar") == "foo_bar")
-        #expect(Utils.decode("foo~bar") == "foo~bar")
-        #expect(Utils.decode("foo.bar") == "foo.bar")
-    }
-
-    @Test("Utils.decode - decodes spaces")
-    func testDecodeSpaces() async throws {
-        #expect(Utils.decode("foo%20bar") == "foo bar")
-    }
-
-    @Test("Utils.decode - decodes parentheses")
-    func testDecodeParentheses() async throws {
-        #expect(Utils.decode("foo%28bar%29") == "foo(bar)")
-    }
-
-    @Test("Utils.decode - decodes utf8")
-    func testDecodeUtf8() async throws {
-        #expect(Utils.decode("foo%2Bbar", charset: .utf8) == "foo+bar")
-        // exceptions
-        #expect(Utils.decode("foo-bar", charset: .utf8) == "foo-bar")
-        #expect(Utils.decode("foo_bar", charset: .utf8) == "foo_bar")
-        #expect(Utils.decode("foo~bar", charset: .utf8) == "foo~bar")
-        #expect(Utils.decode("foo.bar", charset: .utf8) == "foo.bar")
-        // space
-        #expect(Utils.decode("foo%20bar", charset: .utf8) == "foo bar")
-        // parentheses
-        #expect(Utils.decode("foo%28bar%29", charset: .utf8) == "foo(bar)")
-    }
-
-    @Test("Utils.decode - decode latin1")
-    func testDecodeLatin1() async throws {
-        #expect(Utils.decode("foo+bar", charset: .isoLatin1) == "foo bar")
-        // exceptions
-        #expect(Utils.decode("foo-bar", charset: .isoLatin1) == "foo-bar")
-        #expect(Utils.decode("foo_bar", charset: .isoLatin1) == "foo_bar")
-        #expect(Utils.decode("foo%7Ebar", charset: .isoLatin1) == "foo~bar")
-        #expect(Utils.decode("foo.bar", charset: .isoLatin1) == "foo.bar")
-        // space
-        #expect(Utils.decode("foo%20bar", charset: .isoLatin1) == "foo bar")
-        // parentheses
-        #expect(Utils.decode("foo%28bar%29", charset: .isoLatin1) == "foo(bar)")
-    }
-
-    @Test("Utils.decode - decodes URL-encoded strings")
-    func testDecodeUrlEncodedStrings2() async throws {
-        #expect(Utils.decode("a+b") == "a b")
-        #expect(Utils.decode("name%2Eobj") == "name.obj")
-        #expect(Utils.decode("name%2Eobj%2Efoo", charset: .isoLatin1) == "name.obj.foo")
-    }
-
-    // MARK: - Utils.escape tests
-
-    @Test("Utils.escape - handles basic alphanumerics (remain unchanged)")
-    func testEscapeBasicAlphanumerics() async throws {
-        #expect(
-            Utils.escape("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@*_+-./")
-                == "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@*_+-./")
-        #expect(Utils.escape("abc123") == "abc123")
-    }
-
-    @Test("Utils.escape - handles accented characters (Latin-1 range uses %XX)")
-    func testEscapeAccentedCharacters() async throws {
-        #expect(Utils.escape("äöü") == "%E4%F6%FC")
-    }
-
-    @Test("Utils.escape - handles non-ASCII that falls outside Latin-1 uses %uXXXX")
-    func testEscapeNonAsciiOutsideLatin1() async throws {
-        #expect(Utils.escape("ć") == "%u0107")
-    }
-
-    @Test("Utils.escape - handles characters that are defined as safe")
-    func testEscapeSafeCharacters() async throws {
-        #expect(Utils.escape("@*_+-./") == "@*_+-./")
-    }
-
-    @Test("Utils.escape - handles parentheses (in RFC3986 they are encoded)")
-    func testEscapeParenthesesRfc3986() async throws {
-        #expect(Utils.escape("(") == "%28")
-        #expect(Utils.escape(")") == "%29")
-    }
-
-    @Test("Utils.escape - handles space character")
-    func testEscapeSpaceCharacter() async throws {
-        #expect(Utils.escape(" ") == "%20")
-    }
-
-    @Test("Utils.escape - handles tilde as safe")
-    func testEscapeTildeAsSafe() async throws {
-        #expect(Utils.escape("~") == "%7E")
-    }
-
-    @Test("Utils.escape - handles unsafe punctuation")
-    func testEscapeUnsafePunctuation() async throws {
-        #expect(Utils.escape("!") == "%21")
-        #expect(Utils.escape(",") == "%2C")
-    }
-
-    @Test("Utils.escape - handles mixed safe and unsafe characters")
-    func testEscapeMixedSafeUnsafe() async throws {
-        #expect(Utils.escape("hello world!") == "hello%20world%21")
-    }
-
-    @Test("Utils.escape - handles multiple spaces")
-    func testEscapeMultipleSpaces() async throws {
-        #expect(Utils.escape("a b c") == "a%20b%20c")
-    }
-
-    @Test("Utils.escape - handles string with various punctuation")
-    func testEscapeVariousPunctuation() async throws {
-        #expect(Utils.escape("Hello, World!") == "Hello%2C%20World%21")
-    }
-
-    @Test("Utils.escape - handles null character")
-    func testEscapeNullCharacter() async throws {
-        #expect(Utils.escape("\u{0000}") == "%00")
-    }
-
-    @Test("Utils.escape - handles emoji")
-    func testEscapeEmoji() async throws {
-        #expect(Utils.escape("😀") == "%uD83D%uDE00")
-    }
-
-    @Test("Utils.escape - handles RFC1738 format where parentheses are safe")
-    func testEscapeRfc1738Parentheses() async throws {
-        #expect(Utils.escape("(", format: .rfc1738) == "(")
-        #expect(Utils.escape(")", format: .rfc1738) == ")")
-    }
-
-    @Test("Utils.escape - handles mixed test with RFC1738")
-    func testEscapeMixedRfc1738() async throws {
-        #expect(Utils.escape("(hello)!", format: .rfc1738) == "(hello)%21")
-    }
-
-    @Test("Utils.escape - escape huge string")
-    func testEscapeHugeString() async throws {
-        let hugeString = String(repeating: "äöü", count: 1_000_000)
-        let expectedString = String(repeating: "%E4%F6%FC", count: 1_000_000)
-        #expect(Utils.escape(hugeString) == expectedString)
-    }
-
-    // MARK: - Utils.unescape tests
-
-    @Test("Utils.unescape - No escapes")
-    func testUnescapeNoEscapes() async throws {
-        #expect(Utils.unescape("abc123") == "abc123")
-    }
-
-    @Test("Utils.unescape - Hex escapes with uppercase hex digits")
-    func testUnescapeHexUppercase() async throws {
-        #expect(Utils.unescape("%E4%F6%FC") == "äöü")
-    }
-
-    @Test("Utils.unescape - Hex escapes with lowercase hex digits")
-    func testUnescapeHexLowercase() async throws {
-        #expect(Utils.unescape("%e4%f6%fc") == "äöü")
-    }
-
-    @Test("Utils.unescape - Unicode escape")
-    func testUnescapeUnicode() async throws {
-        #expect(Utils.unescape("%u0107") == "ć")
-    }
-
-    @Test("Utils.unescape - Unicode escape with lowercase digits")
-    func testUnescapeUnicodeLowercase() async throws {
-        #expect(Utils.unescape("%u0061") == "a")
-    }
-
-    @Test("Utils.unescape - Characters that do not need escaping")
-    func testUnescapeNoEscapingNeeded() async throws {
-        #expect(Utils.unescape("@*_+-./") == "@*_+-./")
-    }
-
-    @Test("Utils.unescape - Hex escapes for punctuation")
-    func testUnescapeHexPunctuation() async throws {
-        #expect(Utils.unescape("%28") == "(")
-        #expect(Utils.unescape("%29") == ")")
-        #expect(Utils.unescape("%20") == " ")
-        #expect(Utils.unescape("%7E") == "~")
-    }
-
-    @Test("Utils.unescape - A long string with only safe characters")
-    func testUnescapeLongSafeString() async throws {
-        #expect(
-            Utils.unescape("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@*_+-./")
-                == "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@*_+-./")
-    }
-
-    @Test("Utils.unescape - A mix of Unicode and hex escapes")
-    func testUnescapeMixedUnicodeHex() async throws {
-        #expect(Utils.unescape("%u0041%20%42") == "A B")
-    }
-
-    @Test("Utils.unescape - A mix of literal text and hex escapes")
-    func testUnescapeMixedLiteralHex() async throws {
-        #expect(Utils.unescape("hello%20world") == "hello world")
-    }
-
-    @Test(
-        "Utils.unescape - A literal percent sign that is not followed by a valid escape remains unchanged"
+  // MARK: - Utils.encode tests
+
+  @Test("Utils.encode - encodes various values correctly")
+  func testEncodeVariousValues() async throws {
+    // Basic encoding
+    #expect(Utils.encode("foo+bar") == "foo%2Bbar")
+
+    // Exceptions (characters that should not be encoded)
+    #expect(Utils.encode("foo-bar") == "foo-bar")
+    #expect(Utils.encode("foo_bar") == "foo_bar")
+    #expect(Utils.encode("foo~bar") == "foo~bar")
+    #expect(Utils.encode("foo.bar") == "foo.bar")
+
+    // Space encoding
+    #expect(Utils.encode("foo bar") == "foo%20bar")
+
+    // Parentheses
+    #expect(Utils.encode("foo(bar)") == "foo%28bar%29")
+    #expect(Utils.encode("foo(bar)", format: .rfc1738) == "foo(bar)")
+
+    // Enum encoding
+    #expect(Utils.encode(DummyEnum.lorem) == "LOREM")
+
+    // Values that should not be encoded (return empty string)
+    // Array
+    #expect(Utils.encode([1, 2]) == "")
+    // Dictionary
+    #expect(Utils.encode(["a": "b"]) == "")
+    // Undefined
+    #expect(Utils.encode(Undefined()) == "")
+  }
+
+  @Test("Utils.encode - encode huge string")
+  func testEncodeHugeString() async throws {
+    let hugeString = String(repeating: "a", count: 1_000_000)
+    #expect(Utils.encode(hugeString) == hugeString)
+  }
+
+  @Test("Utils.encode - encodes utf8")
+  func testEncodeUtf8() async throws {
+    #expect(Utils.encode("foo+bar", charset: .utf8) == "foo%2Bbar")
+    // exceptions
+    #expect(Utils.encode("foo-bar", charset: .utf8) == "foo-bar")
+    #expect(Utils.encode("foo_bar", charset: .utf8) == "foo_bar")
+    #expect(Utils.encode("foo~bar", charset: .utf8) == "foo~bar")
+    #expect(Utils.encode("foo.bar", charset: .utf8) == "foo.bar")
+    // space
+    #expect(Utils.encode("foo bar", charset: .utf8) == "foo%20bar")
+    // parentheses
+    #expect(Utils.encode("foo(bar)", charset: .utf8) == "foo%28bar%29")
+    #expect(Utils.encode("foo(bar)", charset: .utf8, format: .rfc1738) == "foo(bar)")
+  }
+
+  @Test("Utils.encode - encodes latin1")
+  func testEncodeLatin1() async throws {
+    #expect(Utils.encode("foo+bar", charset: .isoLatin1) == "foo+bar")
+    // exceptions
+    #expect(Utils.encode("foo-bar", charset: .isoLatin1) == "foo-bar")
+    #expect(Utils.encode("foo_bar", charset: .isoLatin1) == "foo_bar")
+    #expect(Utils.encode("foo~bar", charset: .isoLatin1) == "foo%7Ebar")
+    #expect(Utils.encode("foo.bar", charset: .isoLatin1) == "foo.bar")
+    // space
+    #expect(Utils.encode("foo bar", charset: .isoLatin1) == "foo%20bar")
+    // parentheses
+    #expect(Utils.encode("foo(bar)", charset: .isoLatin1) == "foo%28bar%29")
+    #expect(Utils.encode("foo(bar)", charset: .isoLatin1, format: .rfc1738) == "foo(bar)")
+  }
+
+  @Test("Utils.encode - encodes empty string")
+  func testEncodeEmptyString() async throws {
+    #expect(Utils.encode("") == "")
+  }
+
+  @Test("Utils.encode - encodes parentheses with default format")
+  func testEncodeParenthesesDefaultFormat() async throws {
+    #expect(Utils.encode("(abc)") == "%28abc%29")
+  }
+
+  @Test("Utils.encode - encodes unicode with ISO-8859-1 charset")
+  func testEncodeUnicodeIso88591() async throws {
+    #expect(
+      Utils.encode("abc 123 💩", charset: .isoLatin1)
+        == "abc%20123%20%26%2355357%3B%26%2356489%3B"
     )
-    func testUnescapeLiteralPercent() async throws {
-        #expect(Utils.unescape("100% sure") == "100% sure")
-    }
-
-    @Test("Utils.unescape - Mixed Unicode and hex escapes")
-    func testUnescapeMixedUnicodeHex2() async throws {
-        #expect(Utils.unescape("%u0041%65") == "Ae")
-    }
-
-    @Test("Utils.unescape - Escaped percent signs that do not form a valid escape remain unchanged")
-    func testUnescapeInvalidEscapePercent() async throws {
-        #expect(Utils.unescape("50%% off") == "50%% off")
-    }
-
-    @Test("Utils.unescape - Consecutive escapes producing multiple spaces")
-    func testUnescapeConsecutiveEscapes() async throws {
-        #expect(Utils.unescape("%20%u0020") == "  ")
-    }
-
-    @Test("Utils.unescape - An invalid escape sequence should remain unchanged")
-    func testUnescapeInvalidEscapeSequence() async throws {
-        #expect(Utils.unescape("abc%g") == "abc%g")
-    }
-
-    @Test("Utils.unescape - An invalid Unicode escape sequence should remain unchanged")
-    func testUnescapeInvalidUnicodeEscape() async throws {
-        #expect(Utils.unescape("%uZZZZ") == "%uZZZZ")
-        #expect(Utils.unescape("%u12") == "%u12")
-        #expect(Utils.unescape("abc%") == "abc%")
-    }
-
-    @Test("Utils.unescape - huge string")
-    func testUnescapeHugeString() async throws {
-        let hugeString = String(repeating: "%E4%F6%FC", count: 1_000_000)
-        let expectedString = String(repeating: "äöü", count: 1_000_000)
-        #expect(Utils.unescape(hugeString) == expectedString)
-    }
-
-    @Test("Utils.unescape - leaves trailing '%' literal when incomplete escape")
-    func testUnescapeTrailingPercent() async throws {
-        #expect(Utils.unescape("%") == "%")
-    }
-
-    @Test("Utils.unescape - leaves incomplete %uXXXX literal")
-    func testUnescapeIncompleteUnicode() async throws {
-        #expect(Utils.unescape("%u12") == "%u12")
-    }
-
-    @Test("Utils.unescape - handles bad hex after %")
-    func testUnescapeBadHex() async throws {
-        #expect(Utils.unescape("%GZ") == "%GZ")
-    }
-
-    // MARK: - Utils.merge tests
-
-    @Test("Utils.merge - merges Map with List")
-    func testMergeMapWithList() async throws {
-        let result = try Utils.merge(target: [0: "a"], source: [Undefined(), "b"])
-        let out: [AnyHashable: Any] = result as! [AnyHashable: Any]
-        // Compare contents directly to avoid NSNumber/Int key-bridging differences on Linux
-        #expect(out.count == 2)
-        #expect(out[AnyHashable(0)] as? String == "a")
-        #expect(out[AnyHashable(1)] as? String == "b")
-    }
-
-    @Test("Utils.merge - merges two objects with the same key and different values")
-    func testMergeTwoObjectsSameKeyDifferentValues() async throws {
-        let target = ["foo": [["a": "a", "b": "b"], ["a": "aa"]]]
-        let source = ["foo": [Undefined(), ["b": "bb"]]]
-        let result = try Utils.merge(target: target, source: source)
-        let expected = ["foo": [["a": "a", "b": "b"], ["a": "aa", "b": "bb"]]]
-
-        // Deep comparison needed for nested structures
-        let resultDict = result as! [String: Any]
-        let expectedDict = expected as [String: Any]
-        #expect(resultDict.keys == expectedDict.keys)
-    }
-
-    @Test("Utils.merge - merges two objects with the same key and different list values")
-    func testMergeTwoObjectsSameKeyDifferentListValues() async throws {
-        let target = ["foo": [["baz": ["15"]]]]
-        let source = ["foo": [["baz": [Undefined(), "16"]]]]
-        let result = try Utils.merge(target: target, source: source)
-        let expected = ["foo": [["baz": ["15", "16"]]]]
-
-        let resultDict = result as! [String: Any]
-        let expectedDict = expected as [String: Any]
-        #expect(resultDict.keys == expectedDict.keys)
-    }
-
-    @Test("Utils.merge - merges two objects with the same key and different values into a list")
-    func testMergeTwoObjectsSameKeyIntoList() async throws {
-        let target = ["foo": [["a": "b"]]]
-        let source = ["foo": [["c": "d"]]]
-        let result = try Utils.merge(target: target, source: source)
-        let expected = ["foo": [["a": "b", "c": "d"]]]
-
-        let resultDict = result as! [String: Any]
-        let expectedDict = expected as [String: Any]
-        #expect(resultDict.keys == expectedDict.keys)
-    }
-
-    @Test("Utils.merge - merges true into null")
-    func testMergeTrueIntoNull() async throws {
-        let result = try Utils.merge(target: nil, source: true)
-        let resultArray = result as! [Any?]
-        #expect(resultArray.count == 2)
-        #expect(resultArray[0] == nil)
-        #expect(resultArray[1] as! Bool == true)
-    }
-
-    @Test("Utils.merge - merges null into a list")
-    func testMergeNullIntoList() async throws {
-        let result = try Utils.merge(target: nil, source: [42])
-        let resultArray = result as! [Any?]
-        #expect(resultArray.count == 2)
-        #expect(resultArray[0] == nil)
-        #expect(resultArray[1] as! Int == 42)
-    }
-
-    @Test("Utils.merge - merges null into a set")
-    func testMergeNullIntoSet() async throws {
-        let result = try Utils.merge(target: nil, source: Set(["foo"]))
-        let resultArray = result as! [Any?]
-        #expect(resultArray.count == 2)
-        #expect(resultArray[0] == nil)
-        #expect(resultArray[1] as! String == "foo")
-    }
-
-    @Test("Utils.merge - merges String into set")
-    func testMergeStringIntoSet() async throws {
-        let result = try Utils.merge(target: Set(["foo"]), source: "bar")
-        let resultSet = result as! Set<AnyHashable>
-        #expect(resultSet.contains("foo"))
-        #expect(resultSet.contains("bar"))
-        #expect(resultSet.count == 2)
-    }
-
-    @Test("Utils.merge - merges two objects with the same key")
-    func testMergeTwoObjectsSameKey() async throws {
-        let result = try Utils.merge(target: ["a": "b"], source: ["a": "c"])
-        let resultDict = result as! [String: Any]
-        #expect(resultDict.keys.contains("a"))
-
-        let valueArray = resultDict["a"] as! [String]
-        #expect(valueArray.contains("b"))
-        #expect(valueArray.contains("c"))
-    }
-
-    @Test("Utils.merge - merges a standalone and an object into a list")
-    func testMergeStandaloneAndObjectIntoList() async throws {
-        let target = ["foo": "bar"]
-        let source = ["foo": ["first": "123"]]
-        let result = try Utils.merge(target: target, source: source)
-        let resultDict = result as! [String: Any]
-        #expect(resultDict.keys.contains("foo"))
-
-        let valueArray = resultDict["foo"] as! [Any]
-        #expect(valueArray.count == 2)
-    }
-
-    @Test("Utils.merge - merges a standalone and two objects into a list")
-    func testMergeStandaloneAndTwoObjectsIntoList() async throws {
-        let target = ["foo": ["bar", ["first": "123"]]]
-        let source = ["foo": ["second": "456"]]
-        let result = try Utils.merge(target: target, source: source)
-        let resultDict = result as! [String: Any]
-        #expect(resultDict.keys.contains("foo"))
-    }
-
-    @Test("Utils.merge - merges an object sandwiched by two standalones into a list")
-    func testMergeObjectSandwichedByStandalones() async throws {
-        let target = ["foo": ["bar", ["first": "123", "second": "456"]]]
-        let source = ["foo": "baz"]
-        let result = try Utils.merge(target: target, source: source)
-        let resultDict = result as! [String: Any]
-        #expect(resultDict.keys.contains("foo"))
-
-        let valueArray = resultDict["foo"] as! [Any]
-        #expect(valueArray.count == 3)
-    }
-
-    @Test("Utils.merge - merges two lists into a list")
-    func testMergeTwoListsIntoList() async throws {
-        let result1 = try Utils.merge(target: ["foo"], source: ["bar", "xyzzy"])
-        let resultArray1 = result1 as! [String]
-        #expect(resultArray1 == ["foo", "bar", "xyzzy"])
-
-        let result2 = try Utils.merge(target: ["foo": ["baz"]], source: ["foo": ["bar", "xyzzy"]])
-        let resultDict2 = result2 as! [String: Any]
-        #expect(resultDict2.keys.contains("foo"))
-
-        let valueArray = resultDict2["foo"] as! [String]
-        #expect(valueArray.count == 3)
-    }
-
-    @Test("Utils.merge - merges two sets into a list")
-    func testMergeTwoSetsIntoList() async throws {
-        let result1 = try Utils.merge(target: Set(["foo"]), source: Set(["bar", "xyzzy"]))
-        let resultSet1 = result1 as! Set<AnyHashable>
-        #expect(resultSet1.contains("foo"))
-        #expect(resultSet1.contains("bar"))
-        #expect(resultSet1.contains("xyzzy"))
-
-        let result2 = try Utils.merge(
-            target: ["foo": Set(["baz"])], source: ["foo": Set(["bar", "xyzzy"])])
-        let resultDict2 = result2 as! [String: Any]
-        #expect(resultDict2.keys.contains("foo"))
-    }
-
-    @Test("Utils.merge - merges a set into a list")
-    func testMergeSetIntoList() async throws {
-        let result = try Utils.merge(target: ["foo": ["baz"]], source: ["foo": Set(["bar"])])
-        let resultDict = result as! [String: Any]
-        #expect(resultDict.keys.contains("foo"))
-
-        let valueArray = resultDict["foo"] as! [String]
-        #expect(valueArray.contains("baz"))
-        #expect(valueArray.contains("bar"))
-    }
-
-    @Test("Utils.merge - merges a list into a set")
-    func testMergeListIntoSet() async throws {
-        let result = try Utils.merge(target: ["foo": Set(["baz"])], source: ["foo": ["bar"]])
-        let resultDict = result as! [String: Any]
-        #expect(resultDict.keys.contains("foo"))
-
-        let valueSet = resultDict["foo"] as! Set<AnyHashable>
-        #expect(valueSet.contains("baz"))
-        #expect(valueSet.contains("bar"))
-    }
-
-    @Test("Utils.merge - merges a set into a list with multiple elements")
-    func testMergeSetIntoListMultipleElements() async throws {
-        let result = try Utils.merge(target: ["foo": ["baz"]], source: ["foo": Set(["bar", "xyzzy"])])
-        let resultDict = result as! [String: Any]
-        #expect(resultDict.keys.contains("foo"))
-
-        let valueArray = resultDict["foo"] as! [String]
-        #expect(valueArray.count == 3)
-    }
-
-    @Test("Utils.merge - merges an object into a list")
-    func testMergeObjectIntoList() async throws {
-        let result = try Utils.merge(target: ["foo": ["bar"]], source: ["foo": ["baz": "xyzzy"]])
-        let resultDict = result as! [String: Any]
-        #expect(resultDict.keys.contains("foo"))
-    }
-
-    @Test("Utils.merge - merges a list into an object")
-    func testMergeListIntoObject() async throws {
-        let result = try Utils.merge(target: ["foo": ["bar": "baz"]], source: ["foo": ["xyzzy"]])
-        let resultDict = result as! [String: Any]
-        #expect(resultDict.keys.contains("foo"))
-    }
-
-    @Test("Utils.merge - merge set with undefined with another set")
-    func testMergeSetWithUndefinedWithAnotherSet() async throws {
-        let undefined = Undefined()
-
-        let result1 = try Utils.merge(
-            target: ["foo": Set<AnyHashable>(["bar"])],
-            source: ["foo": Set<AnyHashable>([undefined, "baz"])]
-        )
-        let resultDict1 = result1 as! [String: Any]
-        #expect(resultDict1.keys.contains("foo"))
-
-        let valueSet1 = resultDict1["foo"] as! Set<AnyHashable>
-        #expect(valueSet1.contains("bar"))
-        #expect(valueSet1.contains("baz"))
-
-        let result2 = try Utils.merge(
-            target: ["foo": Set<AnyHashable>([undefined, "bar"])],
-            source: ["foo": Set<AnyHashable>(["baz"])]
-        )
-        let resultDict2 = result2 as! [String: Any]
-        #expect(resultDict2.keys.contains("foo"))
-    }
-
-    @Test("Utils.merge - merge set of Maps with another set of Maps")
-    func testMergeSetOfMapsWithAnotherSetOfMaps() async throws {
-        let result1 = try Utils.merge(
-            target: Set<AnyHashable>([["bar": "baz"]]),
-            source: Set<AnyHashable>([["baz": "xyzzy"]])
-        )
-        let resultSet1 = result1 as! Set<AnyHashable>
-        #expect(resultSet1.count >= 1)
-
-        let result2 = try Utils.merge(
-            target: ["foo": Set<AnyHashable>([["bar": "baz"]])],
-            source: ["foo": Set<AnyHashable>([["baz": "xyzzy"]])]
-        )
-        let resultDict2 = result2 as! [String: Any]
-        #expect(resultDict2.keys.contains("foo"))
-    }
-
-    @Test("Utils.merge - array overlay with Undefined preserves/replaces by index (default options)")
-    func testMergeArrayOverlayWithUndefined_Default() async throws {
-        let target: [Any?] = ["x", Undefined(), "z"]
-        let source: [Any?] = [Undefined(), "Y", Undefined()]
-        let merged = try Utils.merge(target: target, source: source) as! [Any?]
-        #expect(merged.count == 3)
-        #expect(merged[0] as? String == "x")  // undefined in source leaves target
-        #expect(merged[1] as? String == "Y")  // replaced
-        #expect(merged[2] as? String == "z")  // undefined in source leaves target
-    }
-
-    @Test("Utils.merge - array overlay with parseLists=false prunes remaining Undefined")
-    func testMergeArrayOverlayWithUndefined_ParseListsFalsePrunes() async throws {
-        let target: [Any?] = [Undefined(), "b", Undefined()]
-        let source: [Any?] = [Undefined(), Undefined()]
-        let opts = DecodeOptions(parseLists: false)
-        let merged = try Utils.merge(target: target, source: source, options: opts) as! [Any?]
-        // remaining Undefined entries are pruned under parseLists=false
-        #expect(merged.count == 1)
-        #expect(merged[0] as? String == "b")
-    }
-
-    @Test("Utils.merge - non-sequence source appends to array")
-    func testMergeArrayWithNonSequenceSourceAppends() async throws {
-        let target: [Any] = ["a", "b"]
-        let merged = try Utils.merge(target: target, source: 42) as! [Any]
-        #expect(merged.count == 3)
-        #expect(merged[0] as? String == "a")
-        #expect(merged[1] as? String == "b")
-        #expect(merged[2] as? Int == 42)
-    }
-
-    @Test("Utils.merge - set target stays Set<AnyHashable> and ignores Undefined in source")
-    func testMergeSetTargetPreservesTypeAndIgnoresUndefined() async throws {
-        let undefined = Undefined()
-        let target = Set<AnyHashable>(["a"])
-        let source: [Any?] = [undefined, "c", "a"]
-        let merged = try Utils.merge(target: target, source: source) as! Set<AnyHashable>
-        #expect(merged.contains("a"))
-        #expect(merged.contains("c"))
-        #expect(merged.count == 2)
-    }
-
-    // MARK: - Utils.combine tests
-
-    @Test("Utils.combine - combines both lists")
-    func testCombineBothLists() async throws {
-        let a = [1]
-        let b = [2]
-        let combined: [Int] = Utils.combine(a, b)
-
-        // Verify original arrays are unchanged
-        #expect(a == [1])
-        #expect(b == [2])
-
-        // Verify the combined result
-        #expect(combined == [1, 2])
-    }
-
-    @Test("Utils.combine - combines one list and one non-list")
-    func testCombineOneListOneNonList() async throws {
-        let aN = 1
-        let a = [aN]
-        let bN = 2
-        let b = [bN]
-
-        let combinedAnB: [Int] = Utils.combine(aN, b)
-        #expect(b == [bN])
-        #expect(combinedAnB == [1, 2])
-
-        let combinedABn: [Int] = Utils.combine(a, bN)
-        #expect(a == [aN])
-        #expect(combinedABn == [1, 2])
-    }
-
-    @Test("Utils.combine - combines neither is a list")
-    func testCombineNeitherIsList() async throws {
-        let a = 1
-        let b = 2
-        let combined: [Int] = Utils.combine(a, b)
-
-        #expect(combined == [1, 2])
-    }
-
-    @Test("Utils.combine - preserves order when combining list and scalar")
-    func testCombineListAndScalarPreservesOrder() async throws {
-        let result1: [String] = Utils.combine(["a"], "b")
-        #expect(result1 == ["a", "b"])
-
-        let result2: [Int] = Utils.combine(1, [2, 3])
-        #expect(result2 == [1, 2, 3])
-    }
-
-    @Test("Utils.combine - applies list limit and overflow tracking")
-    func testCombineListLimitOverflow() async throws {
-        let under = try Utils.combine(
-            ["a", "b"],
-            "c",
-            options: DecodeOptions(listLimit: 10)
-        )
-        #expect((under as? [Any]) != nil)
-
-        let exact = try Utils.combine(
-            ["a", "b"],
-            "c",
-            options: DecodeOptions(listLimit: 3)
-        )
-        #expect((exact as? [Any]) != nil)
-
-        let over = try Utils.combine(
-            ["a", "b", "c"],
-            "d",
-            options: DecodeOptions(listLimit: 3)
-        )
-        let overDict = over as? [AnyHashable: Any]
-        #expect(overDict != nil)
-        #expect(Utils.isOverflow(overDict))
-        if let overDict {
-            let cleaned = overDict.filter { !Utils.isOverflowKey($0.key) }
-            #expect(cleaned[AnyHashable(0)] as? String == "a")
-            #expect(cleaned[AnyHashable(3)] as? String == "d")
-        }
-
-        let zero = try Utils.combine([], "a", options: DecodeOptions(listLimit: 0))
-        let zeroDict = zero as? [AnyHashable: Any]
-        #expect(zeroDict != nil)
-        if let zeroDict {
-            let cleaned = zeroDict.filter { !Utils.isOverflowKey($0.key) }
-            #expect(cleaned[AnyHashable(0)] as? String == "a")
-        }
-    }
-
-    @Test("Utils.combine - appends to overflow objects")
-    func testCombineAppendsToOverflow() async throws {
-        let overflow = try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))
-        let overflowDict = overflow as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(overflowDict))
-
-        let combined = try Utils.combine(overflow, "c", options: DecodeOptions(listLimit: 10))
-        let combinedDict = combined as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(combinedDict))
-        if let combinedDict {
-            let cleaned = combinedDict.filter { !Utils.isOverflowKey($0.key) }
-            #expect(cleaned[AnyHashable(0)] as? String == "a")
-            #expect(cleaned[AnyHashable(2)] as? String == "c")
-        }
-    }
-
-    @Test("Utils.combine - enforces strict and negative list limits")
-    func testCombineStrictAndNegativeLimits() throws {
-        let exact = try Utils.combine(
-            ["a"],
-            "b",
-            options: DecodeOptions(listLimit: 2, throwOnLimitExceeded: true)
-        )
-        #expect(exact as? [String] == ["a", "b"])
-
-        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
-            _ = try Utils.combine(
-                ["a"],
-                "b",
-                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
-            )
-        }
-
-        let negative = try Utils.combine([], "a", options: DecodeOptions(listLimit: -1))
-        #expect(Utils.isOverflow(negative as? [AnyHashable: Any]))
-
-        #expect(throws: DecodeError.listLimitExceeded(limit: -1)) {
-            _ = try Utils.combine(
-                [],
-                "a",
-                options: DecodeOptions(listLimit: -1, throwOnLimitExceeded: true)
-            )
-        }
-    }
-
-    @Test("Utils.combine - strict mode rejects an existing overflow without mutation")
-    func testCombineStrictExistingOverflow() throws {
-        let overflow = try #require(
-            try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))
-                as? [AnyHashable: Any]
-        )
-
-        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
-            _ = try Utils.combine(
-                overflow,
-                ["c", "d"],
-                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
-            )
-        }
-        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
-            _ = try Utils.merge(
-                target: overflow,
-                source: "c",
-                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
-            )
-        }
-        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
-            _ = try Utils.merge(
-                target: "z",
-                source: overflow,
-                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
-            )
-        }
-        #expect(overflow[AnyHashable(2)] == nil)
-        #expect(Utils.overflowMaxIndex(overflow) == 1)
-    }
-
-    @Test("Utils.merge - enforces list limits in every array and primitive direction")
-    func testMergeListLimitDirections() throws {
-        let soft = DecodeOptions(listLimit: 1)
-        let strict = DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
-
-        for (target, source) in [
-            (["a"] as Any, "b" as Any),
-            ("a" as Any, ["b", "c"] as Any),
-            (["a"] as Any, ["b"] as Any),
-        ] {
-            let merged = try Utils.merge(target: target, source: source, options: soft)
-            #expect(Utils.isOverflow(merged as? [AnyHashable: Any]))
-            #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
-                _ = try Utils.merge(target: target, source: source, options: strict)
-            }
-        }
-
-        let exact = try Utils.merge(target: [Any](), source: "a", options: strict)
-        #expect(exact as? [String] == ["a"])
-
-        let negative = try Utils.merge(
-            target: [Any](),
-            source: "a",
-            options: DecodeOptions(listLimit: -1)
-        )
-        #expect(Utils.isOverflow(negative as? [AnyHashable: Any]))
-    }
-
-    @Test("Utils.merge - enforces limits after nested array merges")
-    func testMergeNestedArrayLimit() throws {
-        let target: [Any] = [[AnyHashable("a"): 1]]
-        let source: [Any] = [
-            [AnyHashable("b"): 2],
-            [AnyHashable("c"): 3],
-        ]
-
-        let merged = try #require(
-            try Utils.merge(
-                target: target,
-                source: source,
-                options: DecodeOptions(listLimit: 1)
-            ) as? [AnyHashable: Any]
-        )
-        #expect(Utils.isOverflow(merged))
-        let first = merged[AnyHashable(0)] as? [AnyHashable: Any]
-        #expect(first?[AnyHashable("a")] as? Int == 1)
-        #expect(first?[AnyHashable("b")] as? Int == 2)
-        #expect((merged[AnyHashable(1)] as? [AnyHashable: Any])?[AnyHashable("c")] as? Int == 3)
-
-        #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
-            _ = try Utils.merge(
-                target: target,
-                source: source,
-                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
-            )
-        }
-    }
-
-    @Test("Utils.merge - recursively merges nested arrays before limit enforcement")
-    func testMergeNestedArraysBeforeLimitEnforcement() throws {
-        let target: [Any] = [["1", "2"]]
-        let source: [Any] = [["1", "", "3"]]
-
-        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
-            _ = try Utils.merge(
-                target: target,
-                source: source,
-                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
-            )
-        }
-
-        let merged = try #require(
-            try Utils.merge(
-                target: target,
-                source: source,
-                options: DecodeOptions(listLimit: 3)
-            ) as? [Any?]
-        )
-        let inner = try #require(merged[0] as? [AnyHashable: Any])
-        #expect(Utils.isOverflow(inner))
-        #expect(inner[AnyHashable(0)] as? String == "1")
-        #expect(inner[AnyHashable(1)] as? String == "2")
-        #expect(inner[AnyHashable(2)] as? String == "1")
-        #expect(inner[AnyHashable(3)] as? String == "")
-        #expect(inner[AnyHashable(4)] as? String == "3")
-    }
-
-    @Test("Utils.merge - sparse collisions append at the logical end")
-    func testMergeSparseCollisionLimit() throws {
-        let target: [Any] = [["1", "2"], Undefined.instance, ["1", "2"]]
-        let source: [Any] = ["y"]
-
-        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
-            _ = try Utils.merge(
-                target: target,
-                source: source,
-                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
-            )
-        }
-
-        let merged = try #require(
-            try Utils.merge(
-                target: target,
-                source: source,
-                options: DecodeOptions(listLimit: 3)
-            ) as? [AnyHashable: Any]
-        )
-        #expect(Utils.isOverflow(merged))
-        #expect((merged[AnyHashable(0)] as? [String]) == ["1", "2"])
-        #expect(merged[AnyHashable(1)] == nil)
-        #expect((merged[AnyHashable(2)] as? [String]) == ["1", "2"])
-        #expect(merged[AnyHashable(3)] as? String == "y")
-    }
-
-    @Test("Utils.merge - ignores falsy sources before list-limit enforcement")
-    func testMergeFalsySourcesDoNotGrowLists() throws {
-        for source: Any in ["", false, 0, NSNull()] {
-            let merged = try Utils.merge(
-                target: ["x"],
-                source: source,
-                options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
-            )
-            #expect(merged as? [String] == ["x"])
-        }
-    }
-
-    @Test("Utils.merge - preserves sparse positions for later cumulative growth")
-    func testMergePreservesSparsePositionsForCumulativeGrowth() throws {
-        let first = try #require(
-            try Utils.merge(
-                target: "x",
-                source: [Undefined.instance, ""],
-                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
-            ) as? [Any?]
-        )
-        try #require(first.count == 3)
-        #expect(first[0] as? String == "x")
-        #expect(first[1] is Undefined)
-        #expect(first[2] as? String == "")
-
-        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
-            _ = try Utils.merge(
-                target: first,
-                source: ["y"],
-                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
-            )
-        }
-    }
-
-    @Test("Utils.merge - treats numeric strings and integer indices as the same property")
-    func testMergeNumericPropertyKeyEquivalence() {
-        let nested = ["1", "2", "3"]
-        let options = DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
-
-        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
-            _ = try Utils.merge(
-                target: [AnyHashable("0"): nested],
-                source: ["1", "", "3"],
-                options: options
-            )
-        }
-        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
-            _ = try Utils.merge(
-                target: ["1", "", "3"],
-                source: [AnyHashable("0"): nested],
-                options: options
-            )
-        }
-    }
-
-    @Test("Utils.merge - sparse primitive-array growth counts holes but omits them from overflow")
-    func testMergeSparsePrimitiveArrayLimit() throws {
-        let sparse: [Any] = [Undefined.instance, Undefined.instance, "y"]
-
-        #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
-            _ = try Utils.merge(
-                target: "x",
-                source: sparse,
-                options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
-            )
-        }
-
-        let soft = try #require(
-            try Utils.merge(
-                target: "x",
-                source: sparse,
-                options: DecodeOptions(listLimit: 3)
-            ) as? [AnyHashable: Any]
-        )
-        #expect(Utils.isOverflow(soft))
-        #expect(Utils.overflowMaxIndex(soft) == 3)
-        #expect(soft[AnyHashable(0)] as? String == "x")
-        #expect(soft[AnyHashable(1)] == nil)
-        #expect(soft[AnyHashable(2)] == nil)
-        #expect(soft[AnyHashable(3)] as? String == "y")
-
-        let withinLimit =
-            try Utils.merge(
-                target: "x",
-                source: sparse,
-                options: DecodeOptions(listLimit: 4, throwOnLimitExceeded: true)
-            ) as? [Any?]
-        try #require(withinLimit?.count == 4)
-        #expect(withinLimit?[0] as? String == "x")
-        #expect(withinLimit?[1] is Undefined)
-        #expect(withinLimit?[2] is Undefined)
-        #expect(withinLimit?[3] as? String == "y")
-    }
-
-    @Test("Overflow index arithmetic preserves values at Int.max without trapping")
-    func testOverflowIndexArithmeticAtIntMax() throws {
-        let boundary = Utils.markOverflow(
-            [AnyHashable(Int.max): "x"],
-            maxIndex: Int.max
-        )
-        let options = DecodeOptions(listLimit: 20)
-
-        let combined = try #require(
-            try Utils.combine(boundary, "y", options: options) as? [Any]
-        )
-        let combinedMap = try #require(combined[0] as? [AnyHashable: Any])
-        #expect(!Utils.isOverflow(combinedMap))
-        #expect(combinedMap[AnyHashable(Int.max)] as? String == "x")
-        #expect(combined[1] as? String == "y")
-
-        let merged = try #require(
-            try Utils.merge(
-                target: boundary,
-                source: OrderedSet<AnyHashable>(["y", "z"]),
-                options: options
-            ) as? [Any]
-        )
-        let mergedMap = try #require(merged[0] as? [AnyHashable: Any])
-        #expect(!Utils.isOverflow(mergedMap))
-        #expect(mergedMap[AnyHashable(Int.max)] as? String == "x")
-        #expect(merged[1] as? String == "y")
-        #expect(merged[2] as? String == "z")
-
-        let shifted = try #require(
-            try Utils.merge(target: "z", source: boundary, options: options) as? [Any]
-        )
-        #expect(shifted[0] as? String == "z")
-        let shiftedMap = try #require(shifted[1] as? [AnyHashable: Any])
-        #expect(!Utils.isOverflow(shiftedMap))
-        #expect(shiftedMap[AnyHashable(Int.max)] as? String == "x")
-    }
-
-    @Test("Utils.combine - keeps arrays nested when appending to overflow objects")
-    func testCombineKeepsOverflowAppendNested() async throws {
-        let overflow = try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))
-        let combined = try Utils.combine(
-            overflow,
-            ["c", "d"],
-            options: DecodeOptions(listLimit: 10)
-        )
-        let combinedDict = combined as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(combinedDict))
-        if let combinedDict {
-            let cleaned = combinedDict.filter { !Utils.isOverflowKey($0.key) }
-            #expect(cleaned[AnyHashable(0)] as? String == "a")
-            #expect(cleaned[AnyHashable(1)] as? String == "b")
-            #expect(cleaned[AnyHashable(2)] as? [String] == ["c", "d"])
-        }
-
-        let combinedWithNil = try Utils.combine(
-            overflow,
-            [nil, "e"],
-            options: DecodeOptions(listLimit: 10)
-        )
-        let combinedNilDict = combinedWithNil as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(combinedNilDict))
-        if let combinedNilDict {
-            let cleaned = combinedNilDict.filter { !Utils.isOverflowKey($0.key) }
-            let nested = cleaned[AnyHashable(2)] as? [Any?]
-            #expect(nested?.count == 2)
-            #expect(nested?[0] == nil)
-            #expect(nested?[1] as? String == "e")
-        }
-    }
-
-    @Test("Utils.merge - handles overflow objects")
-    func testMergeOverflowObjects() async throws {
-        let overflow =
-            try Utils.combine(
-                ["a"],
-                "b",
-                options: DecodeOptions(listLimit: 1)
-            ) as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(overflow))
-
-        if let overflow {
-            let merged = try Utils.merge(target: overflow, source: "c") as? [AnyHashable: Any]
-            #expect(Utils.isOverflow(merged))
-            if let merged {
-                let cleaned = merged.filter { !Utils.isOverflowKey($0.key) }
-                #expect(cleaned[AnyHashable(0)] as? String == "a")
-                #expect(cleaned[AnyHashable(2)] as? String == "c")
-            }
-
-            let mergedIntoPrimitive = try Utils.merge(target: "z", source: overflow) as? [AnyHashable: Any]
-            #expect(Utils.isOverflow(mergedIntoPrimitive))
-            if let mergedIntoPrimitive {
-                let cleaned = mergedIntoPrimitive.filter { !Utils.isOverflowKey($0.key) }
-                #expect(cleaned[AnyHashable(0)] as? String == "z")
-                #expect(cleaned[AnyHashable(2)] as? String == "b")
-            }
-        }
-    }
-
-    @Test("Utils.merge - merges an array target into overflow values by numeric index")
-    func testMergeOverflowIntoArrayTarget() async throws {
-        let overflow =
-            try Utils.combine(
-                ["a"],
-                "b",
-                options: DecodeOptions(listLimit: 1)
-            ) as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(overflow))
-
-        if let overflow {
-            let merged = try Utils.merge(target: ["z"], source: overflow) as? [AnyHashable: Any]
-            #expect(Utils.isOverflow(merged))
-
-            let appended = try Utils.merge(target: merged, source: "c") as? [AnyHashable: Any]
-            #expect(Utils.isOverflow(appended))
-            if let appended {
-                let cleaned = appended.filter { !Utils.isOverflowKey($0.key) }
-                #expect(cleaned[AnyHashable(0)] as? [String] == ["z", "a"])
-                #expect(cleaned[AnyHashable(1)] as? String == "b")
-                #expect(cleaned[AnyHashable(2)] as? String == "c")
-            }
-        }
-    }
-
-    @Test("Utils.merge - array target adopts larger overflow max index from source metadata")
-    func testMergeArrayTarget_OverflowSourceMaxPropagation() async throws {
-        let target: [Any?] = ["z"]
-        let source = Utils.markOverflow(
-            [
-                AnyHashable(0): "a",
-                AnyHashable(1): "b",
-            ],
-            maxIndex: 9
-        )
-
-        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(merged))
-        if let merged {
-            #expect(Utils.overflowMaxIndex(merged) == 9)
-            #expect(merged[AnyHashable(0)] as? [String] == ["z", "a"])
-            #expect(merged[AnyHashable(1)] as? String == "b")
-        }
-    }
-
-    @Test("Utils.merge - overflow target merges array source by numeric index")
-    func testMergeOverflowTarget_ArraySourceIndexPath() async throws {
-        let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 2)
-        let source: [Any?] = ["x", nil, Undefined.instance]
-
-        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(merged))
-        if let merged {
-            #expect(merged[AnyHashable(0)] as? [String] == ["a", "x"])
-            #expect(merged[AnyHashable(1)] is NSNull)
-            #expect(Utils.overflowMaxIndex(merged) == 2)
-        }
-    }
-
-    @Test("Utils.merge - overflow target appends sequence source by index")
-    func testMergeOverflowTarget_SequenceSourceAppendPath() async throws {
-        let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 0)
-        let source = OrderedSet<AnyHashable>([AnyHashable("x"), AnyHashable("y")])
-
-        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(merged))
-        if let merged {
-            #expect((merged[AnyHashable(1)] as? AnyHashable)?.base as? String == "x")
-            #expect((merged[AnyHashable(2)] as? AnyHashable)?.base as? String == "y")
-            #expect(Utils.overflowMaxIndex(merged) == 2)
-        }
-    }
-
-    @Test("Utils.merge - nil target with overflow source seeds NSNull at index zero")
-    func testMergeNilTarget_OverflowSourceSeedsNSNull() async throws {
-        let source = Utils.markOverflow(
-            [
-                AnyHashable(0): "a",
-                AnyHashable(2): "c",
-                AnyHashable("k"): "v",
-            ],
-            maxIndex: 2
-        )
-
-        let merged = try Utils.merge(target: nil, source: source) as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(merged))
-        if let merged {
-            #expect(merged[AnyHashable(0)] is NSNull)
-            #expect(merged[AnyHashable(1)] as? String == "a")
-            #expect(merged[AnyHashable(3)] as? String == "c")
-            #expect(merged[AnyHashable("k")] as? String == "v")
-            #expect(Utils.overflowMaxIndex(merged) == 3)
-        }
-    }
-
-    @Test("Utils.merge - array target with plain dictionary source produces keyed map")
-    func testMergeArrayTarget_PlainDictionaryConversionPath() async throws {
-        let target: [Any] = ["left", "right"]
-        let source: [AnyHashable: Any] = [
-            AnyHashable("extra"): "value",
-            AnyHashable(3): "tail",
-        ]
-
-        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
-        #expect(merged != nil)
-        if let merged {
-            #expect(merged[AnyHashable(0)] as? String == "left")
-            #expect(merged[AnyHashable(1)] as? String == "right")
-            #expect(merged[AnyHashable("extra")] as? String == "value")
-            #expect(merged[AnyHashable(3)] as? String == "tail")
-        }
-    }
-
-    @Test("Utils.merge - iterative dictionary merge preserves larger source overflow max")
-    func testMergeIterativeDictionary_OverflowMaxReconciliation() async throws {
-        let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 0)
-        let source = Utils.markOverflow([AnyHashable(1): "b"], maxIndex: 10)
-
-        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(merged))
-        if let merged {
-            #expect(merged[AnyHashable(1)] as? String == "b")
-            #expect(Utils.overflowMaxIndex(merged) == 10)
-        }
-    }
-
-    @Test("Utils.merge - does not propagate child overflow max into parent overflow metadata")
-    func testMergeNestedOverflowDoesNotInflateParentMax() async throws {
-        let parent: [AnyHashable: Any] = Utils.markOverflow(
-            [
-                AnyHashable(0): Utils.markOverflow(
-                    [AnyHashable(100): "target-child"],
-                    maxIndex: 100
-                )
-            ],
-            maxIndex: 0
-        )
-        let source: [AnyHashable: Any] = [
-            AnyHashable(0): Utils.markOverflow(
-                [AnyHashable(101): "source-child"],
-                maxIndex: 101
-            )
-        ]
-
-        let merged = try Utils.merge(target: parent, source: source) as? [AnyHashable: Any]
-        #expect(Utils.isOverflow(merged))
-
-        if let merged {
-            #expect(Utils.overflowMaxIndex(merged) == 0)
-
-            let appended = try Utils.merge(target: merged, source: "tail") as? [AnyHashable: Any]
-            #expect(Utils.isOverflow(appended))
-            #expect(appended?[AnyHashable(1)] as? String == "tail")
-            #expect(appended?[AnyHashable(102)] == nil)
-        }
-    }
-
-    @Test("Utils.refreshOverflowMaxIndex - recomputes max numeric key")
-    func testRefreshOverflowMaxIndex() async throws {
-        var dict: [AnyHashable: Any] = [
-            AnyHashable(0): "a",
-            AnyHashable(2): "b",
-            AnyHashable(NSNumber(value: 7)): "c",
-            AnyHashable("x"): "y",
-            AnyHashable(Utils.overflowKey): -1,
-        ]
-
-        Utils.refreshOverflowMaxIndex(&dict)
-        #expect(Utils.overflowMaxIndex(dict) == 7)
-    }
-
-    @Test("Utils.merge - handles deeply nested dictionary merges without recursion overflow")
-    func testMergeDeepDictionaries_NoRecursionOverflow() async throws {
-        let depth = 1_500
-
-        var target: [String: Any] = ["left": "a"]
-        var source: [String: Any] = ["right": "b"]
-        for _ in 0..<depth {
-            target = ["p": target]
-            source = ["p": source]
-        }
-
-        let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
-        #expect(merged != nil)
-
-        var node: Any? = merged
-        var traversed = 0
-        while traversed < depth {
-            guard let dict = node as? [AnyHashable: Any] else {
-                Issue.record("Expected dictionary at depth \(traversed)")
-                return
-            }
-            guard let next = dict[AnyHashable("p")] else {
-                Issue.record("Missing 'p' key at depth \(traversed)")
-                return
-            }
-            node = next
-            traversed += 1
-        }
-
-        let leaf = node as? [AnyHashable: Any]
-        #expect(leaf?[AnyHashable("left")] as? String == "a")
-        #expect(leaf?[AnyHashable("right")] as? String == "b")
-    }
-
-    // MARK: - Utils.interpretNumericEntities tests
-
-    @Test("Utils.interpretNumericEntities - returns input unchanged when there are no entities")
-    func testInterpretNumericEntitiesNoEntities() async throws {
-        #expect(Utils.interpretNumericEntities("hello world") == "hello world")
-        #expect(Utils.interpretNumericEntities("100% sure") == "100% sure")
-    }
-
-    @Test("Utils.interpretNumericEntities - decodes a single decimal entity")
-    func testInterpretNumericEntitiesSingleDecimal() async throws {
-        #expect(Utils.interpretNumericEntities("A = &#65;") == "A = A")
-        #expect(Utils.interpretNumericEntities("&#48;&#49;&#50;") == "012")
-    }
-
-    @Test("Utils.interpretNumericEntities - decodes multiple entities in a sentence")
-    func testInterpretNumericEntitiesMultipleEntities() async throws {
-        let input = "Hello &#87;&#111;&#114;&#108;&#100;!"
-        let expected = "Hello World!"
-        #expect(Utils.interpretNumericEntities(input) == expected)
-    }
-
-    @Test(
-        "Utils.interpretNumericEntities - decodes surrogate pair represented as two decimal entities (emoji)"
+  }
+
+  @Test("Utils.encode - encodes unicode with UTF-8 charset")
+  func testEncodeUnicodeUtf8() async throws {
+    #expect(Utils.encode("abc 123 💩") == "abc%20123%20%F0%9F%92%A9")
+  }
+
+  @Test("Utils.encode - encodes long strings efficiently")
+  func testEncodeLongStrings() async throws {
+    let longString = String(repeating: " ", count: 1500)
+    let expectedString = String(repeating: "%20", count: 1500)
+    #expect(Utils.encode(longString) == expectedString)
+  }
+
+  @Test("Utils.encode - preserves an emoji across the first qs chunk boundary")
+  func testEncodeEmojiAtFirstChunkBoundary() {
+    let prefix = String(repeating: "a", count: 1_023)
+    #expect(Utils.encode(prefix + "😀") == prefix + "%F0%9F%98%80")
+  }
+
+  @Test("Utils.encode - preserves an emoji across a later qs chunk boundary")
+  func testEncodeEmojiAtLaterChunkBoundary() {
+    let prefix = String(repeating: "a", count: 2_047)
+    #expect(Utils.encode(prefix + "😀") == prefix + "%F0%9F%98%80")
+  }
+
+  @Test("Utils.encode - encodes parentheses")
+  func testEncodeParentheses() async throws {
+    #expect(Utils.encode("()") == "%28%29")
+    #expect(Utils.encode("()", format: .rfc1738) == "()")
+  }
+
+  @Test("Utils.encode - encodes multi-byte unicode characters")
+  func testEncodeMultiByteUnicode() async throws {
+    #expect(Utils.encode("Āက豈") == "%C4%80%E1%80%80%EF%A4%80")
+  }
+
+  @Test("Utils.encode - encodes surrogate pairs")
+  func testEncodeSurrogatePairs() async throws {
+    #expect(Utils.encode("\u{1F4A9}") == "%F0%9F%92%A9")
+    #expect(Utils.encode("💩") == "%F0%9F%92%A9")
+  }
+
+  @Test("Utils.encode - encodes emoji with ISO-8859-1 charset")
+  func testEncodeEmojiIso88591() async throws {
+    #expect(Utils.encode("💩", charset: .isoLatin1) == "%26%2355357%3B%26%2356489%3B")
+  }
+
+  @Test("Utils.encode - encodes nil values")
+  func testEncodeNilValues() async throws {
+    #expect(Utils.encode(nil) == "")
+  }
+
+  @Test("Utils.encode - encodes byte arrays")
+  func testEncodeByteArrays() async throws {
+    let data = "test".data(using: .utf8)!
+    #expect(Utils.encode(data) == "test")
+  }
+
+  @Test("Utils.encode - returns empty string for unsupported types")
+  func testEncodeUnsupportedTypes() async throws {
+    #expect(Utils.encode([1, 2, 3]) == "")
+    #expect(Utils.encode(["a": "b"]) == "")
+    #expect(Utils.encode(Undefined()) == "")
+  }
+
+  @Test("Utils.encode - handles special characters")
+  func testEncodeSpecialCharacters() async throws {
+    #expect(Utils.encode("~._-") == "~._-")
+    #expect(Utils.encode("!@#$%^&*()") == "%21%40%23%24%25%5E%26%2A%28%29")
+  }
+
+  @Test("Utils.encode - latin1 encodes characters as numeric entities when not representable")
+  func testEncodeLatin1NumericEntities() async throws {
+    let out = Utils.encode("☺", charset: .isoLatin1, format: .rfc3986)
+    #expect(out == "%26%239786%3B")
+  }
+
+  @Test("Utils.encode - RFC1738 leaves parentheses unescaped")
+  func testEncodeRfc1738Parentheses() async throws {
+    let out = Utils.encode("()", charset: .utf8, format: .rfc1738)
+    #expect(out == "()")
+  }
+
+  @Test("Utils.encode - encodes surrogate pairs (emoji) correctly")
+  func testEncodeSurrogatePairsEmoji() async throws {
+    #expect(Utils.encode("😀") == "%F0%9F%98%80")
+  }
+
+  @Test("Utils.encode - encodes Data")
+  func testEncodeData() async throws {
+    let data = "ä".data(using: .utf8)!
+    #expect(Utils.encode(data) == "%C3%A4")
+
+    let hiData = "hi".data(using: .utf8)!
+    #expect(Utils.encode(hiData) == "hi")
+  }
+
+  // MARK: - Utils.decode tests
+
+  @Test("Utils.decode - decodes URL encoded strings")
+  func testDecodeUrlEncodedStrings() async throws {
+    #expect(Utils.decode("foo%2Bbar") == "foo+bar")
+  }
+
+  @Test("Utils.decode - handles exceptions (characters that don't need decoding)")
+  func testDecodeExceptions() async throws {
+    #expect(Utils.decode("foo-bar") == "foo-bar")
+    #expect(Utils.decode("foo_bar") == "foo_bar")
+    #expect(Utils.decode("foo~bar") == "foo~bar")
+    #expect(Utils.decode("foo.bar") == "foo.bar")
+  }
+
+  @Test("Utils.decode - decodes spaces")
+  func testDecodeSpaces() async throws {
+    #expect(Utils.decode("foo%20bar") == "foo bar")
+  }
+
+  @Test("Utils.decode - decodes parentheses")
+  func testDecodeParentheses() async throws {
+    #expect(Utils.decode("foo%28bar%29") == "foo(bar)")
+  }
+
+  @Test("Utils.decode - decodes utf8")
+  func testDecodeUtf8() async throws {
+    #expect(Utils.decode("foo%2Bbar", charset: .utf8) == "foo+bar")
+    // exceptions
+    #expect(Utils.decode("foo-bar", charset: .utf8) == "foo-bar")
+    #expect(Utils.decode("foo_bar", charset: .utf8) == "foo_bar")
+    #expect(Utils.decode("foo~bar", charset: .utf8) == "foo~bar")
+    #expect(Utils.decode("foo.bar", charset: .utf8) == "foo.bar")
+    // space
+    #expect(Utils.decode("foo%20bar", charset: .utf8) == "foo bar")
+    // parentheses
+    #expect(Utils.decode("foo%28bar%29", charset: .utf8) == "foo(bar)")
+  }
+
+  @Test("Utils.decode - decode latin1")
+  func testDecodeLatin1() async throws {
+    #expect(Utils.decode("foo+bar", charset: .isoLatin1) == "foo bar")
+    // exceptions
+    #expect(Utils.decode("foo-bar", charset: .isoLatin1) == "foo-bar")
+    #expect(Utils.decode("foo_bar", charset: .isoLatin1) == "foo_bar")
+    #expect(Utils.decode("foo%7Ebar", charset: .isoLatin1) == "foo~bar")
+    #expect(Utils.decode("foo.bar", charset: .isoLatin1) == "foo.bar")
+    // space
+    #expect(Utils.decode("foo%20bar", charset: .isoLatin1) == "foo bar")
+    // parentheses
+    #expect(Utils.decode("foo%28bar%29", charset: .isoLatin1) == "foo(bar)")
+  }
+
+  @Test("Utils.decode - decodes URL-encoded strings")
+  func testDecodeUrlEncodedStrings2() async throws {
+    #expect(Utils.decode("a+b") == "a b")
+    #expect(Utils.decode("name%2Eobj") == "name.obj")
+    #expect(Utils.decode("name%2Eobj%2Efoo", charset: .isoLatin1) == "name.obj.foo")
+  }
+
+  // MARK: - Utils.escape tests
+
+  @Test("Utils.escape - handles basic alphanumerics (remain unchanged)")
+  func testEscapeBasicAlphanumerics() async throws {
+    #expect(
+      Utils.escape("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@*_+-./")
+        == "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@*_+-./"
     )
-    func testInterpretNumericEntitiesSurrogatePairEmoji() async throws {
-        // U+1F4A9 (💩) as surrogate halves: 55357 (0xD83D), 56489 (0xDCA9)
-        #expect(Utils.interpretNumericEntities("&#55357;&#56489;") == "💩")
-    }
-
-    @Test("Utils.interpretNumericEntities - entities can appear at string boundaries")
-    func testInterpretNumericEntitiesStringBoundaries() async throws {
-        #expect(Utils.interpretNumericEntities("&#65;BC") == "ABC")
-        #expect(Utils.interpretNumericEntities("ABC&#33;") == "ABC!")
-        #expect(Utils.interpretNumericEntities("&#65;") == "A")
-    }
-
-    @Test("Utils.interpretNumericEntities - mixes literals and entities")
-    func testInterpretNumericEntitiesMixedLiteralsEntities() async throws {
-        // '=' is 61
-        #expect(Utils.interpretNumericEntities("x&#61;y") == "x=y")
-        #expect(Utils.interpretNumericEntities("x=&#61;y") == "x==y")
-    }
-
-    @Test("Utils.interpretNumericEntities - malformed or unsupported patterns remain unchanged")
-    func testInterpretNumericEntitiesMalformedPatternsUnchanged() async throws {
-        // No digits
-        #expect(Utils.interpretNumericEntities("&#;") == "&#;")
-        // Missing terminating semicolon
-        #expect(Utils.interpretNumericEntities("&#12") == "&#12")
-        // Space inside
-        #expect(Utils.interpretNumericEntities("&# 12;") == "&# 12;")
-        // Negative / non-digit after '#'
-        #expect(Utils.interpretNumericEntities("&#-12;") == "&#-12;")
-        // Mixed garbage
-        #expect(Utils.interpretNumericEntities("&#+;") == "&#+;")
-    }
-
-    @Test("Utils.interpretNumericEntities - out-of-range code points remain unchanged")
-    func testInterpretNumericEntitiesOutOfRangeUnchanged() async throws {
-        // Max valid is 0x10FFFF (1114111). One above should be left as literal.
-        #expect(Utils.interpretNumericEntities("&#1114112;") == "&#1114112;")
-    }
-
-    @Test("Utils.interpretNumericEntities - hex form basic cases (lower/upper X and hex digits)")
-    func testInterpretNumericEntitiesHexBasicCases() async throws {
-        // lower/upper X supported
-        #expect(Utils.interpretNumericEntities("&#x41;") == "A")
-        #expect(Utils.interpretNumericEntities("&#X41;") == "A")
-        // sequence of hex entities
-        #expect(Utils.interpretNumericEntities("&#x41;&#x42;&#x43;") == "ABC")
-        // lowercase hex digits
-        #expect(Utils.interpretNumericEntities("&#x4a;") == "J")  // 0x4A = 'J'
-    }
-
-    @Test("Utils.interpretNumericEntities - hex form handles supplementary planes and surrogate halves")
-    func testInterpretNumericEntitiesHexSupplementary() async throws {
-        // Single hex entity in supplementary plane
-        #expect(Utils.interpretNumericEntities("&#x1F4A9;") == "💩")
-        #expect(Utils.interpretNumericEntities("&#x1F600;") == "😀")
-        // Surrogate halves expressed in hex pair up
-        #expect(Utils.interpretNumericEntities("&#xD83D;&#xDCA9;") == "💩")
-        #expect(Utils.interpretNumericEntities("&#xD83D;&#xDE00;") == "😀")
-    }
-
-    @Test("Utils.interpretNumericEntities - hex boundaries and invalid remain literal")
-    func testInterpretNumericEntitiesHexBoundariesAndInvalid() async throws {
-        // Highest valid scalar decodes
-        let maxScalar = String(UnicodeScalar(0x10FFFF)!)
-        #expect(Utils.interpretNumericEntities("&#x10FFFF;") == maxScalar)
-        // One past max remains literal
-        #expect(Utils.interpretNumericEntities("&#x110000;") == "&#x110000;")
-        // Missing digits and bad hex stay literal
-        #expect(Utils.interpretNumericEntities("&#x;") == "&#x;")
-        #expect(Utils.interpretNumericEntities("&#xZZ;") == "&#xZZ;")
-    }
-
-    @Test("Utils.interpretNumericEntities - hex entities in context")
-    func testInterpretNumericEntitiesHexInContext() async throws {
-        // '=' is 0x3D
-        #expect(Utils.interpretNumericEntities("x&#x3D;y") == "x=y")
-        // mixed case and multiple
-        #expect(Utils.interpretNumericEntities("&#x65;&#88;&#x63;") == "eXc")
-        // boundaries
-        #expect(Utils.interpretNumericEntities("&#x41;BC") == "ABC")
-        #expect(Utils.interpretNumericEntities("ABC&#x21;") == "ABC!")
-    }
-
-    @Test("Utils.interpretNumericEntities - mixed base surrogate halves")
-    func testInterpretNumericEntitiesMixedSurrogates() async throws {
-        // High surrogate decimal, low surrogate hex
-        #expect(Utils.interpretNumericEntities("&#55357;&#xDCA9;") == "💩")
-        // High surrogate hex, low surrogate decimal
-        #expect(Utils.interpretNumericEntities("&#xD83D;&#56489;") == "💩")
-    }
-
-    // MARK: - Utils.apply tests
-
-    @Test("Utils.apply - apply on scalar and list")
-    func testApplyScalarAndList() async throws {
-        let scalarResult = Utils.apply(3) { (x: Int) in x * 2 } as? Int
-        #expect(scalarResult == 6)
-
-        let listResult = Utils.apply([1, 2]) { (x: Int) in x + 1 } as? [Int]
-        #expect(listResult == [2, 3])
-    }
-
-    // MARK: - Utils.isNonNullishPrimitive and isEmpty tests
-
-    @Test(
-        "Utils.isNonNullishPrimitive - treats URL as primitive, honors skipNulls for empty string")
-    func testIsNonNullishPrimitiveUrlAndEmptyString() async throws {
-        #expect(Utils.isNonNullishPrimitive(URL(string: "https://example.com")!) == true)
-        #expect(Utils.isNonNullishPrimitive(URL(string: "https://example.com")!, skipNulls: true) == true)
-        #expect(Utils.isNonNullishPrimitive("", skipNulls: true) == false)
-    }
-
-    @Test("Utils.isNonNullishPrimitive - generic arrays and dictionaries are not primitives")
-    func testIsNonNullishPrimitive_GenericContainersFallback() async throws {
-        let intArray = [1, 2, 3]
-        let intDict = [1: "one", 2: "two"]
-
-        #expect(Utils.isNonNullishPrimitive(intArray) == false)
-        #expect(Utils.isNonNullishPrimitive(intDict) == false)
-        // Repeat to exercise cached lookup path.
-        #expect(Utils.isNonNullishPrimitive(intArray) == false)
-        #expect(Utils.isNonNullishPrimitive(intDict) == false)
-    }
-
-    @Test("Utils.isEmpty - empty collections and maps")
-    func testIsEmptyCollectionsAndMaps() async throws {
-        let emptyDict: [String: Any?] = [:]
-        let emptyOrderedStrings: OrderedDictionary<String, Any> = [:]
-        var emptyOrderedHashable: OrderedDictionary<AnyHashable, Any> = [:]
-        #expect(Utils.isEmpty(nil as Any?) == true)
-        #expect(Utils.isEmpty(emptyDict) == true)
-        #expect(Utils.isEmpty(emptyOrderedStrings) == true)
-        #expect(Utils.isEmpty(emptyOrderedHashable) == true)
-        emptyOrderedHashable[AnyHashable("filled")] = 1
-        #expect(Utils.isEmpty(emptyOrderedHashable) == false)
-
-        let dict: [AnyHashable: Any] = [1: "value"]
-        #expect(Utils.isEmpty(dict) == false)
-    }
-
-    @Test("Utils.decode - decodes ISO-8859-1 percent bytes via regex branch")
-    func testDecodeIsoLatin1RegexPath() async throws {
-        let input = "%E4%F6%FC+encoded"
-        let decoded = Utils.decode(input, charset: .isoLatin1)
-        #expect(decoded == "äöü encoded")
-    }
-
-    // MARK: - Utils.deepBridgeToAnyIterative
-
-    // We keep TWO tests on purpose:
-    //
-    // 1) `testDecode_DeepMaps_NoTimeout_Safe`
-    //    - Runs on a worker thread (no @MainActor), with a conservative depth.
-    //    - Goal: cover normal decode + bridge path without tripping ARC’s recursive deinit.
-    //    - If this ever fails with EXC_BAD_ACCESS in `Swift._DictionaryStorage.deinit`,
-    //      reduce `depth` or investigate changes that reintroduced recursion.
-    //
-    // 2) `testDecode_DeepMaps_VeryDeep_Main` (@MainActor, DEBUG-only)
-    //    - Stress test for extremely deep single-key chains (e.g. > 3k).
-    //    - We run it on the main thread because the main thread typically has a larger stack.
-    //      Even though `deepBridgeToAnyIterative` is iterative, ARC can still deallocate
-    //      long linear dictionary chains recursively, which can blow the smaller stacks
-    //      of worker threads.
-    //    - Sanitizers (ASan/TSan/UBSan), Guard Malloc, or Malloc Stack Logging reduce headroom
-    //      and may cause this test to fail at lower depths—adjust `depth` accordingly.
-    //
-    // Notes:
-    // - Typical crash signature when stack headroom is exhausted:
-    //     EXC_BAD_ACCESS in `Swift._DictionaryStorage.deinit` with a long repeating backtrace.
-    // - If the stress test flakes in CI, either lower `depth`, make it @MainActor,
-    //   or disable sanitizers for this test target.
-    // - Search terms if you’re curious: “Swift recursive deallocation dictionary stack overflow”.
-    //
-    // These tests ensure the bridging code stays non-recursive and robust for deep chains,
-    // while keeping CI stable.
-    @Test("deep maps do not time out (safe depth)")
-    func testDecode_DeepMaps_NoTimeout_Safe() throws {
-        /// Keep the worker-thread safety test aligned with production's main-drop heuristic.
-        let depth = Qs.MAIN_DROP_THRESHOLD
-        var s = "foo"
-        for _ in 0..<depth { s += "[p]" }
-        s += "=bar"
-
-        let r = try Qs.decode(s, options: .init(depth: depth))
-        #expect(r.keys.contains("foo"))
-    }
-
-    @Test("Utils.compact removes Undefined entries and normalizes nested containers")
-    func utils_compact_removesUndefined() {
-        let undefined = Undefined.instance
-
-        // Dictionary branch: drop undefined keys, keep others intact
-        var dictRoot: [String: Any?] = [
-            "dict": ["keep": "value", "drop": undefined] as [String: Any?]
-        ]
-        let dictCompacted = Utils.compact(&dictRoot, allowSparseLists: false)
-        if let dict = dictCompacted["dict"] as? [String: Any?] {
-            #expect(dict["drop"] == nil)
-            #expect(dict["keep"] as? String == "value")
-        } else {
-            Issue.record("Expected dictionary branch result")
-        }
-
-        // Array branch: remove Undefined, recurse into dictionaries and arrays
-        var arrayRoot: [String: Any?] = [
-            "array": [
-                undefined,
-                ["nestedDrop": undefined, "nestedKeep": "ok"] as [String: Any?],
-                [undefined, "leaf"] as [Any],
-                "end",
-            ] as [Any]
-        ]
-        let arrayCompacted = Utils.compact(&arrayRoot, allowSparseLists: false)
-        if let array = arrayCompacted["array"] as? [Any] {
-            #expect(array.count == 3)
-            #expect(!array.contains { $0 is Undefined })
-            let nestedDict = array.first { $0 is [String: Any?] } as? [String: Any?]
-            #expect(nestedDict?["nestedDrop"] == nil)
-            #expect(nestedDict?["nestedKeep"] as? String == "ok")
-        } else {
-            Issue.record("Expected array branch result")
-        }
-
-        // Optional-array branch: nil → NSNull, Undefined removed
-        var optionalRoot: [String: Any?] = [
-            "optional": [Optional<Any>.none, Optional<Any>.some(undefined), Optional<Any>.some("tail")] as [Any?]
-        ]
-        let optionalCompacted = Utils.compact(&optionalRoot, allowSparseLists: false)
-        if let optional = optionalCompacted["optional"] as? [Any] {
-            #expect(!Utils.containsUndefined(optional))
-            #expect(optional.count == 2)
-            #expect(optional.first is NSNull)
-            #expect(optional.last as? String == "tail")
-        } else {
-            Issue.record("Expected optional array branch result")
-        }
-    }
-
-    @Test("Utils.compact preserves nil entries in typed dictionaries while dropping Undefined")
-    func utils_compact_preservesNilInTypedDictionaries() {
-        var root: [String: Any?] = [
-            "typed": [1: Optional<String>.none] as [Int: String?],
-            "drop": Undefined.instance,
-        ]
-
-        let compacted = Utils.compact(&root, allowSparseLists: false)
-        #expect(compacted.keys.contains("drop") == false)
-
-        if let typed = compacted["typed"] as? [String: Any?] {
-            #expect(typed.keys.contains("1"))
-            let preservesNilEntry: Bool
-            if case .some(.none) = typed["1"] {
-                preservesNilEntry = true
-            } else {
-                preservesNilEntry = false
-            }
-            if !preservesNilEntry {
-                Issue.record("Expected typed dictionary nil entry to be preserved")
-            }
-        } else {
-            Issue.record("Expected compacted typed dictionary")
-        }
-    }
-
-    @Test("Utils.compact preserves sparse lists when requested")
-    func utils_compact_allowSparseKeepsPlaceholders() {
-        let undefined = Undefined.instance
-        var root: [String: Any?] = [
-            "list": [undefined, "x"],
-            "optionalList": [Optional<Any>.some(undefined), Optional<Any>.some("y")],
-        ]
-
-        let compacted = Utils.compact(&root, allowSparseLists: true)
-
-        if let list = compacted["list"] as? [Any] {
-            #expect(list.first is NSNull)
-            #expect(list.last as? String == "x")
-        }
-
-        if let optionalList = compacted["optionalList"] as? [Any] {
-            #expect(optionalList.first is NSNull)
-            #expect(optionalList.last as? String == "y")
-        }
-    }
-
-    @Test("Utils.compactToAny drops Undefined and normalizes optionals")
-    func utils_compactToAny_normalizes() {
-        let undefined = Undefined.instance
-        let input: [String: Any?] = [
-            "drop": undefined,
-            "dict": ["inner": undefined, "keep": "value"],
-            "array": [Optional<Any>.some(undefined), Optional<Any>.none, Optional<Any>.some("z")],
-        ]
-
-        let out = Utils.compactToAny(input, allowSparseLists: true)
-
-        #expect(out["drop"] == nil)
-
-        if let dict = out["dict"] as? [String: Any] {
-            #expect(dict["inner"] == nil)
-            #expect(dict["keep"] as? String == "value")
-        } else {
-            Issue.record("dict missing after compactToAny")
-        }
-
-        if let array = out["array"] as? [Any] {
-            #expect(array.first is NSNull)
-            #expect(array[1] is NSNull)
-            #expect(array.last as? String == "z")
-        } else {
-            Issue.record("array missing after compactToAny")
-        }
-    }
-
-    @Test("Utils.compactToAny normalizes nested optional arrays")
-    func utils_compactToAny_nestedOptionals() {
-        let input: [String: Any?] = [
-            "array": [Optional<Any>.none, [Optional<Any>.none, Optional<Any>.some("value")]]
-        ]
-
-        let out = Utils.compactToAny(input, allowSparseLists: true)
-        if let array = out["array"] as? [Any] {
-            #expect(array.first is NSNull)
-            if let nested = array.dropFirst().first.flatMap(anyArray) {
-                #expect(nested.first is NSNull)
-                #expect(nested.last as? String == "value")
-            } else {
-                Issue.record("Expected nested array after normalization")
-            }
-        } else {
-            Issue.record("array missing after compactToAny nested normalization")
-        }
-    }
-
-    @Test("Utils.compact handles optional arrays when allowSparse=true")
-    func utils_compact_optionalArrays() async throws {
-        let undefined = Undefined.instance
-        let optionalArray: [Any?] = ["first", nil, undefined]
-        var root: [String: Any?] = ["opt": optionalArray]
-
-        let compacted = Utils.compact(&root, allowSparseLists: true)
-        if let arr = compacted["opt"] as? [Any] {
-            #expect(arr.count == 3)
-            #expect(arr[0] as? String == "first")
-            #expect(arr[1] is NSNull)
-            #expect(arr[2] is NSNull)
-        } else {
-            Issue.record("optional array branch missing")
-        }
-    }
-
-    @Test("Utils.compact normalizes nested optional arrays with allowSparse=true")
-    func utils_compact_nestedOptionalArrays() {
-        let undefined = Undefined.instance
-        let nested: [Any?] = ["inner", nil, undefined]
-        var root: [String: Any?] = ["opt": [nested, nil, undefined]]
-
-        let compacted = Utils.compact(&root, allowSparseLists: true)
-        if let arr = compacted["opt"] as? [Any] {
-            #expect(arr.count == 3)
-            let inner = anyArray(arr[0])
-            #expect(inner?.count == 3)
-            #expect(inner?[0] as? String == "inner")
-            #expect(inner?[1] is NSNull)
-            #expect(inner?[2] is NSNull)
-            #expect(arr[1] is NSNull)
-            #expect(arr[2] is NSNull)
-        } else {
-            Issue.record("nested optional array not bridged")
-        }
-    }
-
-    @Test("Utils.compact visits Swift [Any] arrays and preserves NSNull placeholders")
-    func utils_compact_swiftArrayBranch() {
-        let undefined = Undefined.instance
-        var root: [String: Any?] = [
-            "list": [Any](arrayLiteral: "value", undefined, ["drop": undefined])
-        ]
-
-        let compacted = Utils.compact(&root, allowSparseLists: true)
-        if let list = compacted["list"] as? [Any] {
-            #expect(list.count == 3)
-            #expect(list[0] as? String == "value")
-            #expect(list[1] is NSNull)
-            let dict = list[2] as? [String: Any?]
-            #expect(dict?.isEmpty == true)
-        } else {
-            Issue.record("Swift [Any] branch not exercised")
-        }
-    }
-
-    @Test("Utils.compact prunes Undefined in Swift [Any] when allowSparse=false")
-    func utils_compact_swiftArrayDropsUndefined_noSparse() {
-        let undefined = Undefined.instance
-        var root: [String: Any?] = [
-            "list": [Any](arrayLiteral: "keep", undefined, ["inner": undefined])
-        ]
-
-        let compacted = Utils.compact(&root)
-        if let list = compacted["list"] as? [Any] {
-            #expect(list.count == 2)
-            #expect(list[0] as? String == "keep")
-            let nested = list[1] as? [String: Any?]
-            #expect(nested?.isEmpty == true)
-        } else {
-            Issue.record("Swift [Any] allowSparse=false branch not exercised")
-        }
-    }
-
-    @Test("Utils.compact handles Swift [Any] containing nested [Any?]")
-    func utils_compact_swiftArrayNestedOptionals() {
-        let nested: [Any?] = ["inner", nil]
-        var root: [String: Any?] = ["list": [Any](arrayLiteral: nested)]
-
-        let compacted = Utils.compact(&root, allowSparseLists: true)
-        if let list = compacted["list"] as? [Any], let inner = anyArray(list[0]) {
-            #expect(inner.count == 2)
-            #expect(inner[0] as? String == "inner")
-            #expect(inner[1] is NSNull)
-        } else {
-            Issue.record("Nested optional arrays not compacted as expected")
-        }
-    }
-
-    @Test("Utils.compact normalizes optional elements that wrap [Any?] payloads")
-    func utils_compact_optionalElementsWrappingOptionalArrays() {
-        let undefined = Undefined.instance
-        let inner: [Any?] = [undefined, "leaf", nil]
-        var root: [String: Any?] = ["list": [Any?](arrayLiteral: inner, nil)]
-
-        let compacted = Utils.compact(&root, allowSparseLists: true)
-        if let list = compacted["list"] as? [Any] {
-            #expect(list.count == 2)
-            let nested = anyArray(list[0])
-            #expect(nested?.contains { ($0 as? String) == "leaf" } == true)
-            #expect(nested?.contains { $0 is NSNull } == true)
-            #expect(list.last is NSNull)
-        } else {
-            Issue.record("Expected compacted list for nested optional arrays")
-        }
-    }
-
-    @Test("Utils.compact handles Swift [Any] arrays without sparse placeholders")
-    func utils_compact_swiftAnyDense() {
-        let undefined = Undefined.instance
-        let nested: [String: Any?] = ["child": undefined]
-        var root: [String: Any?] = [
-            "list": [Any]([undefined, nested, "tail"])
-        ]
-
-        let compacted = Utils.compact(&root)
-        if let list = compacted["list"] as? [Any] {
-            #expect(list.count == 2)
-            #expect((list[0] as? [String: Any?])?.isEmpty == true)
-            #expect(list[1] as? String == "tail")
-        } else {
-            Issue.record("Dense Swift [Any] branch not compacted as expected")
-        }
-    }
-
-    @Test("Utils.compact preserves Undefined placeholders in Swift [Any] when allowSparse=true")
-    func utils_compact_swiftAnySparse() {
-        let undefined = Undefined.instance
-        var root: [String: Any?] = ["list": [Any]([undefined, "keep"])]
-
-        let compacted = Utils.compact(&root, allowSparseLists: true)
-        if let list = compacted["list"] as? [Any] {
-            #expect(list.count == 2)
-            #expect(list.first is NSNull)
-            #expect(list.last as? String == "keep")
-        } else {
-            Issue.record("Sparse Swift [Any] branch not compacted as expected")
-        }
-    }
-
-    @Test("Utils.compact recurses optional arrays nested inside optional elements")
-    func utils_compact_optionalArraysNestedOptionalElements() {
-        let undefined = Undefined.instance
-        let inner: [Any?] = [undefined, "leaf", nil]
-        let optionalInner: [Any?]? = inner
-        var root: [String: Any?] = ["list": [Any?](arrayLiteral: optionalInner, nil)]
-
-        let compacted = Utils.compact(&root, allowSparseLists: true)
-        if let list = compacted["list"] as? [Any], let nested = anyArray(list[0]) {
-            #expect(nested.count == 3)
-            #expect(nested.first is NSNull)
-            #expect(nested[1] as? String == "leaf")
-            #expect(nested.last is NSNull)
-            #expect(list.last is NSNull)
-        } else {
-            Issue.record("Nested optional arrays branch not exercised")
-        }
-    }
-
-    @Test("Utils.compact handles Foundation arrays and nested optionals across sparse modes")
-    func utils_compact_foundationAndNestedBranches() {
-        let undefined = Undefined.instance
-        let nestedOptional: [Any?] = [
-            undefined,
-            ["deep": undefined, "keep": "value"] as [String: Any?],
-            nil,
-            "leaf",
-        ]
-        let optionalList: [Any?] = [undefined, nestedOptional, undefined]
-        let foundationArray: NSArray = [undefined, ["inner": undefined], nestedOptional, "scalar"]
-        let plainArray: [Any] = [undefined, ["inner": undefined], "plain"]
-
-        var sparseRoot: [String: Any?] = [
-            "drop": undefined,
-            "foundation": foundationArray,
-            "optional": optionalList,
-            "plain": plainArray,
-        ]
-
-        let sparse = Utils.compact(&sparseRoot, allowSparseLists: true)
-        #expect(sparse["drop"] == nil)
-
-        if let foundation = sparse["foundation"] as? [Any] {
-            #expect(foundation.first is NSNull)
-            let emptied = foundation.compactMap(compactDict).first
-            #expect(emptied?.isEmpty == true)
-            let nested = foundation.compactMap(anyArray).first
-            #expect(nested?.first is NSNull)
-        } else {
-            Issue.record("Foundation-backed array branch not exercised")
-        }
-
-        if let optional = sparse["optional"] as? [Any] {
-            #expect(optional.first is NSNull)
-            if let nested: [Any] = optional.dropFirst().first.flatMap(anyArray) {
-                #expect(nested.first is NSNull)
-                let nestedDict = nested.compactMap(compactDict).first
-                #expect(nestedDict?.keys.contains("keep") == true)
-                #expect(nested.last as? String == "leaf")
-            } else {
-                Issue.record("Nested optional array not normalized")
-            }
-            #expect(optional.last is NSNull)
-        } else {
-            Issue.record("Optional array branch not exercised")
-        }
-
-        if let plain = sparse["plain"] as? [Any] {
-            #expect(plain.first is NSNull)
-            #expect(plain.contains { ($0 as? String) == "plain" })
-        } else {
-            Issue.record("Swift [Any] branch not exercised")
-        }
-
-        var denseRoot: [String: Any?] = [
-            "foundation": foundationArray,
-            "optional": optionalList,
-            "plain": plainArray,
-        ]
-
-        let dense = Utils.compact(&denseRoot)
-        if let foundationDense = dense["foundation"] as? [Any] {
-            #expect(!foundationDense.contains { $0 is NSNull })
-        } else {
-            Issue.record("Foundation array (no sparse) not exercised")
-        }
-
-        if let optionalDense = dense["optional"] as? [Any] {
-            #expect(optionalDense.contains { $0 is NSNull } == false)
-        } else {
-            Issue.record("Optional array (no sparse) not exercised")
-        }
-
-        if let plainDense = dense["plain"] as? [Any] {
-            #expect(plainDense.contains { $0 is NSNull } == false)
-        } else {
-            Issue.record("Swift [Any] (no sparse) not exercised")
-        }
-    }
-
-    @Test("Utils.compactToAny normalizes dictionary elements in arrays and explicit nil roots")
-    func utils_compactToAny_dictElementsAndNilRoots() {
-        let undefined = Undefined.instance
-        let nestedDict: [String: Any?] = [
-            "inner": undefined,
-            "value": 9,
-        ]
-        let nestedOptional: [Any?] = [undefined, ["deep": undefined, "keep": "leaf"] as [String: Any?]]
-        let input: [String: Any?] = [
-            "list": [undefined, nestedDict, nestedOptional, nil],
-            "noneRoot": nil,
-        ]
-
-        let sparse = Utils.compactToAny(input, allowSparseLists: true)
-        if let list = sparse["list"] as? [Any] {
-            #expect(list.count == 4)
-            #expect(list[0] is NSNull)
-
-            let dict = list[1] as? [String: Any]
-            #expect(dict?["inner"] == nil)
-            #expect(dict?["value"] as? Int == 9)
-
-            if let nested = list[2] as? [Any] {
-                #expect(nested.first is NSNull)
-                let tail = nested.last as? [String: Any]
-                #expect(tail?["keep"] as? String == "leaf")
-                #expect(tail?["deep"] == nil)
-            } else {
-                Issue.record("Expected nested optional array normalization")
-            }
-
-            #expect(list[3] is NSNull)
-        } else {
-            Issue.record("Sparse list normalization failed")
-        }
-
-        #expect(sparse["noneRoot"] is NSNull)
-
-        let dense = Utils.compactToAny(input, allowSparseLists: false)
-        if let denseList = dense["list"] as? [Any] {
-            #expect(!denseList.contains { $0 is Undefined })
-            #expect(denseList.contains { $0 is NSNull })
-        } else {
-            Issue.record("Dense list normalization failed")
-        }
-    }
-
-    @Test("Utils.compactToAny normalizes Foundation and AnyHashable containers inside arrays")
-    func utils_compactToAny_arrayElementsBridgeFoundationAndHashableContainers() {
-        let input: [String: Any?] = [
-            "list": [
-                NSDictionary(dictionary: [1: "x", "drop": Undefined.instance]),
-                [AnyHashable(2): "y"] as [AnyHashable: Any],
-                NSArray(array: [Undefined.instance, "z"]),
-            ]
-        ]
-
-        let sparse = Utils.compactToAny(input, allowSparseLists: true)
-        if let list = sparse["list"] as? [Any] {
-            #expect(list.count == 3)
-
-            let foundationDict = list.first as? [String: Any]
-            #expect(foundationDict?["1"] as? String == "x")
-            #expect(foundationDict?["drop"] == nil)
-
-            let hashableDict = list.dropFirst().first as? [String: Any]
-            #expect(hashableDict?["2"] as? String == "y")
-
-            let foundationArray = list.dropFirst(2).first as? [Any]
-            #expect(foundationArray?.count == 2)
-            #expect(foundationArray?.first is NSNull)
-            #expect(foundationArray?.dropFirst().first as? String == "z")
-        } else {
-            Issue.record("Expected normalized list from compactToAny")
-        }
-
-        let dense = Utils.compactToAny(input, allowSparseLists: false)
-        if let list = dense["list"] as? [Any] {
-            #expect(list.count == 3)
-
-            let foundationArray = list.dropFirst(2).first as? [Any]
-            #expect(foundationArray?.count == 1)
-            #expect(foundationArray?.first as? String == "z")
-        } else {
-            Issue.record("Expected dense normalized list from compactToAny")
-        }
-    }
-
-    @Test("Utils.compact and compactToAny normalize deep Foundation and pure-Swift containers consistently")
-    func utils_compact_deepFoundationMatchesPureSwift() {
-        let undefined = Undefined.instance
-        let swiftNested: [Any] = [
-            [1: [undefined, "x"]] as [Int: [Any]],
-            ["inner": [undefined, ["deep": undefined, "keep": "leaf"] as [String: Any?], nil] as [Any?]]
-                as [String: [Any?]],
-        ]
-        let foundationNested = NSArray(array: [
-            NSDictionary(dictionary: [1: NSArray(array: [undefined, "x"])]),
-            NSDictionary(dictionary: [
-                "inner": NSArray(array: [
-                    undefined,
-                    NSDictionary(dictionary: ["deep": undefined, "keep": "leaf"]),
-                    NSNull(),
-                ])
-            ]),
-        ])
-
-        func expectDeepNormalizedShape(_ value: Any?, label: String) {
-            guard let array = value as? [Any] else {
-                Issue.record("Expected normalized array for \(label), got: \(String(describing: value))")
-                return
-            }
-
-            guard array.count == 2 else {
-                Issue.record("Expected 2 elements for \(label), got \(array.count)")
-                return
-            }
-
-            guard let first = anyDict(array.first) else {
-                Issue.record("Expected first dictionary for \(label)")
-                return
-            }
-            guard let firstInner = anyArray(first["1"]) else {
-                Issue.record("Expected first inner array for \(label)")
-                return
-            }
-            guard firstInner.count == 2 else {
-                Issue.record("Expected first inner array count 2 for \(label), got \(firstInner.count)")
-                return
-            }
-            #expect(firstInner.first is NSNull)
-            #expect(firstInner.dropFirst().first as? String == "x")
-
-            guard let second = anyDict(array.dropFirst().first) else {
-                Issue.record("Expected second dictionary for \(label)")
-                return
-            }
-            guard let secondInner = anyArray(second["inner"]) else {
-                Issue.record("Expected second inner array for \(label)")
-                return
-            }
-            guard secondInner.count == 3 else {
-                Issue.record("Expected second inner array count 3 for \(label), got \(secondInner.count)")
-                return
-            }
-            #expect(secondInner.first is NSNull)
-            guard let deepDict = anyDict(secondInner.dropFirst().first) else {
-                Issue.record("Expected deep dictionary for \(label)")
-                return
-            }
-            #expect(deepDict["deep"] == nil)
-            #expect(deepDict["keep"] as? String == "leaf")
-            #expect(secondInner.dropFirst(2).first is NSNull)
-        }
-
-        var compactRoot: [String: Any?] = [
-            "swift": swiftNested,
-            "foundation": foundationNested,
-        ]
-        let compacted = Utils.compact(&compactRoot, allowSparseLists: true)
-        expectDeepNormalizedShape(compacted["swift"] ?? nil, label: "compact swift")
-        expectDeepNormalizedShape(compacted["foundation"] ?? nil, label: "compact foundation")
-
-        let compactedAny = Utils.compactToAny(
-            [
-                "swift": swiftNested,
-                "foundation": foundationNested,
-            ], allowSparseLists: true)
-        expectDeepNormalizedShape(compactedAny["swift"], label: "compactToAny swift")
-        expectDeepNormalizedShape(compactedAny["foundation"], label: "compactToAny foundation")
-    }
-
-    @Test("Utils.compact and compactToAny handle deep typed and Foundation chains")
-    func utils_compact_deepExactContainerChains() {
-        let depth = Qs.MAIN_DROP_THRESHOLD + 50
-        let undefined = Undefined.instance
-
-        func buildTypedChain(depth: Int, leaf: Any) -> Any {
-            var current: Any = leaf
-            for _ in 0..<depth {
-                current = [1: current] as [Int: Any]
-            }
-            return current
-        }
-
-        func buildFoundationChain(depth: Int, leaf: Any) -> Any {
-            var current: Any = leaf
-            for _ in 0..<depth {
-                current = NSDictionary(dictionary: [1: current])
-            }
-            return current
-        }
-
-        func descendStringifiedChain(_ value: Any?, depth: Int) -> [String: Any]? {
-            var current = value
-            for _ in 0..<depth {
-                current = anyDict(current)?["1"]
-            }
-            return anyDict(current)
-        }
-
-        let typedChain = buildTypedChain(
-            depth: depth,
-            leaf: ["keep": "typed", "drop": undefined] as [String: Any?]
-        )
-        let foundationChain = buildFoundationChain(
-            depth: depth,
-            leaf: NSDictionary(dictionary: ["keep": "foundation", "drop": undefined])
-        )
-
-        var compactRoot: [String: Any?] = [
-            "typed": typedChain,
-            "foundation": foundationChain,
-        ]
-        let compacted = Utils.compact(&compactRoot, allowSparseLists: false)
-
-        let compactedTypedLeaf = descendStringifiedChain(compacted["typed"] ?? nil, depth: depth)
-        #expect(compactedTypedLeaf?["keep"] as? String == "typed")
-        #expect(compactedTypedLeaf?["drop"] == nil)
-
-        let compactedFoundationLeaf = descendStringifiedChain(compacted["foundation"] ?? nil, depth: depth)
-        #expect(compactedFoundationLeaf?["keep"] as? String == "foundation")
-        #expect(compactedFoundationLeaf?["drop"] == nil)
-
-        let compactedAny = Utils.compactToAny(
-            [
-                "typed": typedChain,
-                "foundation": foundationChain,
-            ],
-            allowSparseLists: false
-        )
-
-        let compactedAnyTypedLeaf = descendStringifiedChain(compactedAny["typed"], depth: depth)
-        #expect(compactedAnyTypedLeaf?["keep"] as? String == "typed")
-        #expect(compactedAnyTypedLeaf?["drop"] == nil)
-
-        let compactedAnyFoundationLeaf = descendStringifiedChain(compactedAny["foundation"], depth: depth)
-        #expect(compactedAnyFoundationLeaf?["keep"] as? String == "foundation")
-        #expect(compactedAnyFoundationLeaf?["drop"] == nil)
-    }
-
-    @Test("Utils.compact and compactToAny tolerate Foundation self-cycles")
-    func utils_compact_foundationSelfCycles() throws {
-        #if os(Linux)
-            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
-                #expect(
-                    Bool(false),
-                    Comment("Skipped: cannot safely build a cyclic Foundation container on Linux"))
-            }
-        #else
-            let cyclicDict = NSMutableDictionary()
-            cyclicDict["self"] = cyclicDict
-            cyclicDict["leaf"] = "x"
-
-            var compactRoot: [String: Any?] = ["dict": cyclicDict]
-            let compacted = Utils.compact(&compactRoot, allowSparseLists: true)
-            if let dict = compacted["dict"] as? [String: Any?] {
-                #expect(dict["leaf"] as? String == "x")
-                #expect((dict["self"] ?? nil) is NSNull)
-            } else {
-                Issue.record("Expected compacted cyclic dictionary")
-            }
-
-            let compactedAny = Utils.compactToAny(["dict": cyclicDict], allowSparseLists: true)
-            if let dict = compactedAny["dict"] as? [String: Any] {
-                #expect(dict["leaf"] as? String == "x")
-                #expect(dict["self"] is NSNull)
-            } else {
-                Issue.record("Expected compactToAny cyclic dictionary")
-            }
-
-            let cyclicArray = NSMutableArray()
-            cyclicArray.add(cyclicArray)
-            cyclicArray.add("y")
-
-            var compactArrayRoot: [String: Any?] = ["array": cyclicArray]
-            let compactedArray = Utils.compact(&compactArrayRoot, allowSparseLists: true)
-            if let array = compactedArray["array"] as? [Any] {
-                #expect(array.count == 2)
-                #expect(array[0] is NSNull)
-                #expect(array[1] as? String == "y")
-            } else {
-                Issue.record("Expected compacted cyclic array")
-            }
-
-            let compactedAnyArray = Utils.compactToAny(["array": cyclicArray], allowSparseLists: true)
-            if let array = compactedAnyArray["array"] as? [Any] {
-                #expect(array.count == 2)
-                #expect(array[0] is NSNull)
-                #expect(array[1] as? String == "y")
-            } else {
-                Issue.record("Expected compactToAny cyclic array")
-            }
-        #endif
-    }
-
-    @Test("Utils.compact and compactToAny replace multi-step Foundation cycle back-edges with NSNull")
-    func utils_compact_foundationMultiStepCycle() throws {
-        #if os(Linux)
-            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary cycles")) {
-                #expect(
-                    Bool(false),
-                    Comment("Skipped: cannot safely build cyclic Foundation containers on Linux"))
-            }
-        #else
-            let root = NSMutableDictionary()
-            let middle = NSMutableDictionary()
-            let leaf = NSMutableDictionary()
-            root["b"] = middle
-            middle["c"] = leaf
-            leaf["d"] = root
-            leaf["keep"] = "x"
-
-            var compactRoot: [String: Any?] = ["root": root]
-            let compacted = Utils.compact(&compactRoot, allowSparseLists: true)
-            let compactedRoot = compacted["root"] as? [String: Any?]
-            let compactedMiddle = compactedRoot?["b"] as? [String: Any?]
-            let compactedLeaf = compactedMiddle?["c"] as? [String: Any?]
-            #expect(compactedLeaf?["keep"] as? String == "x")
-            #expect((compactedLeaf?["d"] ?? nil) is NSNull)
-
-            let compactedAny = Utils.compactToAny(["root": root], allowSparseLists: true)
-            let anyRoot = compactedAny["root"] as? [String: Any]
-            let anyMiddle = anyRoot?["b"] as? [String: Any]
-            let anyLeaf = anyMiddle?["c"] as? [String: Any]
-            #expect(anyLeaf?["keep"] as? String == "x")
-            #expect(anyLeaf?["d"] is NSNull)
-        #endif
-    }
-
-    @Test("Utils.containsUndefined detects sentinel in nested structures")
-    func utils_containsUndefined_detects() {
-        let undefined = Undefined.instance
-        let sample: [String: Any?] = [
-            "array": [undefined, "x"],
-            "dict": ["inner": undefined],
-        ]
-
-        #expect(Utils.containsUndefined(sample))
-
-        var compacted = sample
-        _ = Utils.compact(&compacted)
-        #expect(!Utils.containsUndefined(compacted))
-    }
-
-    @Test("Utils.containsUndefined inspects Swift [Any] roots")
-    func utils_containsUndefined_swiftArrayRoot() {
-        let payload: [Any] = ["value", Undefined.instance]
-        #expect(Utils.containsUndefined(payload))
-    }
-
-    @Test("Utils.containsUndefined detects boxed optional sentinels in Swift [Any]")
-    func utils_containsUndefined_boxedOptionalSwiftArrayRoot() {
-        let payload: [Any] = [Optional<Undefined>.some(Undefined.instance) as Any, "value"]
-        #expect(Utils.containsUndefined(payload))
-    }
-
-    @Test("Utils.containsUndefined inspects Foundation containers")
-    func utils_containsUndefined_foundationContainers() {
-        let payload = NSDictionary(dictionary: [
-            "array": NSArray(array: [Undefined.instance, "x"])
-        ])
-        #expect(Utils.containsUndefined(payload))
-    }
-
-    @Test("Utils.containsUndefined detects boxed optional sentinels in Foundation containers")
-    func utils_containsUndefined_boxedOptionalFoundationContainers() {
-        let payload = NSDictionary(dictionary: [
-            "array": NSArray(array: [Optional<Undefined>.some(Undefined.instance) as Any, "x"])
-        ])
-        #expect(Utils.containsUndefined(payload))
-    }
-
-    @Test("Utils.containsUndefined tolerates Foundation self-cycles")
-    func utils_containsUndefined_foundationSelfCycles() throws {
-        #if os(Linux)
-            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
-                #expect(
-                    Bool(false),
-                    Comment("Skipped: cannot safely build a cyclic Foundation container on Linux"))
-            }
-        #else
-            let cyclic = NSMutableDictionary()
-            cyclic["self"] = cyclic
-            #expect(!Utils.containsUndefined(cyclic))
-
-            cyclic["sentinel"] = Undefined.instance
-            #expect(Utils.containsUndefined(cyclic))
-        #endif
-    }
-
-    @Test("Utils.containsUndefined inspects typed Swift containers")
-    func utils_containsUndefined_typedSwiftContainers() {
-        let payload: [Int: [String: Undefined]] = [
-            1: ["drop": Undefined.instance]
-        ]
-        #expect(Utils.containsUndefined(payload))
-    }
-
-    @Test("Utils.containsUndefined reports true for direct sentinel input")
-    func utils_containsUndefined_directSentinel() {
-        #expect(Utils.containsUndefined(Undefined.instance))
-    }
-
-    @Test("Utils.estimateSingleKeyChainDepth traverses AnyHashable optional chains")
-    func utils_estimateSingleKeyChainDepth_optionalChain() {
-        let level2: [AnyHashable: Any?] = [AnyHashable("c"): nil]
-        let level1: [AnyHashable: Any?] = [AnyHashable("b"): level2]
-        let root: [AnyHashable: Any?] = [AnyHashable("a"): level1]
-        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 3)
-    }
-
-    @Test("Utils.estimateSingleKeyChainDepth traverses AnyHashable non-optional chains")
-    func utils_estimateSingleKeyChainDepth_nonOptionalChain() {
-        let child: [AnyHashable: Any] = [AnyHashable(2): "end"]
-        let root: [AnyHashable: Any] = [AnyHashable(1): child]
-        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
-    }
-
-    @Test("Utils.estimateSingleKeyChainDepth traverses typed Swift dictionary chains")
-    func utils_estimateSingleKeyChainDepth_typedSwiftChain() {
-        let child: [Int: String] = [2: "end"]
-        let root: [Int: [Int: String]] = [1: child]
-        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
-    }
-
-    @Test("Utils.estimateSingleKeyChainDepth ignores overflow bookkeeping in AnyHashable dictionaries")
-    func utils_estimateSingleKeyChainDepth_ignoresOverflowMetadata() {
-        let child: [AnyHashable: Any] = [
-            AnyHashable("b"): "end",
-            AnyHashable(Utils.overflowKey): 9,
-        ]
-        let root: [AnyHashable: Any] = [
-            AnyHashable("a"): child,
-            AnyHashable(Utils.overflowKey): 3,
-        ]
-
-        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
-    }
-
-    @Test("Utils.estimateSingleKeyChainDepth ignores overflow bookkeeping in OrderedDictionary chains")
-    func utils_estimateSingleKeyChainDepth_ignoresOverflowMetadataInOrderedDictionary() {
-        var child = OrderedDictionary<AnyHashable, Any>()
-        child[AnyHashable("b")] = "end"
-        child[AnyHashable(Utils.overflowKey)] = 9
-
-        var root = OrderedDictionary<AnyHashable, Any>()
-        root[AnyHashable("a")] = child
-        root[AnyHashable(Utils.overflowKey)] = 3
-
-        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
-    }
-
-    @Test("Utils.estimateSingleKeyChainDepth unwraps boxed optional dictionary links")
-    func utils_estimateSingleKeyChainDepth_boxedOptionalChain() {
-        let level2: [String: Any] = ["c": "end"]
-        let level1: [String: Any] = ["b": Optional<[String: Any]>.some(level2) as Any]
-        let root: [String: Any] = ["a": Optional<[String: Any]>.some(level1) as Any]
-        #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 3)
-    }
-
-    @Test("Utils.merge handles heterogeneous containers")
-    func utils_merge_coversBranches() throws {
-        let undefined = Undefined.instance
-
-        // [Any?] target merged with dictionary source
-        let targetArray: [Any?] = ["a", nil, undefined]
-        let sourceDict: [AnyHashable: Any] = ["extra": "value"]
-        let merged1 = try Utils.merge(target: targetArray, source: sourceDict, options: .init())
-        #expect(merged1 is [AnyHashable: Any])
-        if let mergedDict1 = merged1 as? [AnyHashable: Any] {
-            #expect(mergedDict1["extra"] as? String == "value")
-            #expect(mergedDict1[0] as? String == "a")
-        }
-
-        // Dictionary target merged with array source
-        let merged2 = try Utils.merge(target: merged1, source: [undefined, "tail"], options: .init())
-        #expect(merged2 is [AnyHashable: Any])
-
-        // OrderedSet union and sequence merging
-        let ordered = OrderedSet<AnyHashable>([1, 2])
-        let mergedOrdered = try Utils.merge(target: ordered, source: OrderedSet([2, 3]), options: .init())
-        #expect(mergedOrdered is OrderedSet<AnyHashable>)
-        if let orderedResult = mergedOrdered as? OrderedSet<AnyHashable> {
-            #expect(!orderedResult.isEmpty)
-        }
-
-        let orderedWithSequence = try Utils.merge(
-            target: OrderedSet(["a"]), source: [undefined, "b"], options: .init())
-        if let orderedSequenceArray = orderedWithSequence as? [Any?] {
-            #expect(orderedSequenceArray.contains { ($0 as? String) == "b" })
-        }
-
-        // Set union and sequence merging
-        let mergedSet = try Utils.merge(target: Set([1, 2]), source: [undefined, 3], options: .init())
-        if let setResult = mergedSet as? Set<AnyHashable> {
-            #expect(setResult.contains { ($0 as? Int) == 3 })
-        }
-
-        // Array target with Undefined elements and parseLists disabled
-        let options = DecodeOptions(parseLists: false)
-        let arrayWithUndefined: [Any] = [undefined, "a"]
-        let mergedArray =
-            try Utils.merge(target: arrayWithUndefined, source: ["b", undefined], options: options) as? [Any]
-        #expect(mergedArray?.compactMap { $0 as? String }.contains("b") == true)
-
-        // Array target + sequence of maps recursively merges scalar collisions.
-        let targetMaps: [Any] = [["k": "v"], Undefined.instance]
-        let sourceMaps: [Any] = [["k": "override"], ["new": "value"]]
-        if let mergedMaps = try Utils.merge(target: targetMaps, source: sourceMaps, options: .init()) as? [Any?] {
-            let first = mergedMaps[0] as? [AnyHashable: Any]
-            #expect(first?["k"] as? [String] == ["v", "override"])
-        }
-
-        // Dictionary target with non-sequence source coerces key from description
-        let dictTarget: [AnyHashable: Any] = ["keep": 1]
-        if let mergedDict = try Utils.merge(target: dictTarget, source: "flag", options: .init()) as? [AnyHashable: Any]
-        {
-            #expect(mergedDict.keys.contains { ($0 as? String) == "flag" })
-        }
-
-        // Nil target with array source produces array with filtered Undefined
-        if let mergedFromNil = try Utils.merge(target: nil, source: ["a", undefined], options: .init()) as? [Any?] {
-            #expect(mergedFromNil.contains { ($0 as? String) == "a" })
-        }
-    }
-
-    @Test("Utils.merge extends OrderedSet<AnyHashable> with sequences and skips Undefined")
-    func utils_merge_orderedSet_anyHashable_sequence() throws {
-        let undefined = Undefined.instance
-        let target = OrderedSet<AnyHashable>([AnyHashable("a")])
-        let merged = try Utils.merge(target: target, source: [undefined, "b", "a"], options: .init())
-
-        if let ordered = merged as? OrderedSet<AnyHashable> {
-            #expect(ordered.contains("a"))
-            #expect(ordered.contains("b"))
-            #expect(ordered.count == 2)
-        } else {
-            Issue.record("OrderedSet branch did not return OrderedSet: \(String(describing: merged))")
-        }
-
-        if let unioned = try Utils.merge(target: target, source: OrderedSet([AnyHashable("b")]), options: .init())
-            as? OrderedSet<AnyHashable>
-        {
-            #expect(unioned.elementsEqual([AnyHashable("a"), AnyHashable("b")]))
-        } else {
-            Issue.record("OrderedSet union branch not exercised")
-        }
-
-        if let unchanged = try Utils.merge(target: target, source: undefined, options: .init())
-            as? OrderedSet<AnyHashable>
-        {
-            #expect(unchanged.elementsEqual(target))
-        } else {
-            Issue.record("OrderedSet Undefined branch not exercised")
-        }
-    }
-
-    @Test("Utils.merge unions Set<AnyHashable> with sequence input")
-    func utils_merge_set_anyHashable_sequence() throws {
-        let undefined = Undefined.instance
-        let target = Set<AnyHashable>(["seed"])
-        let merged = try Utils.merge(target: target, source: [undefined, "extra"], options: .init())
-
-        if let setResult = merged as? Set<AnyHashable> {
-            #expect(setResult.contains("seed"))
-            #expect(setResult.contains("extra"))
-        } else {
-            Issue.record("Set branch did not return Set: \(String(describing: merged))")
-        }
-
-        if let unchanged = try Utils.merge(target: target, source: undefined, options: .init()) as? Set<AnyHashable> {
-            #expect(unchanged == target)
-        } else {
-            Issue.record("Set Undefined branch not exercised")
-        }
-    }
-
-    @Test("Utils.merge applies qs collision rules to Swift [Any] sequence indices")
-    func utils_merge_arraySequenceCollisions() throws {
-        let undefined = Undefined.instance
-        let target = [Any](arrayLiteral: undefined, "keep")
-        let source: [Any] = ["replaced", "new"]
-        if let merged = try Utils.merge(target: target, source: source, options: .init(parseLists: true)) as? [Any?] {
-            #expect(merged[0] as? String == "replaced")
-            #expect(merged[1] as? String == "keep")
-            #expect(merged[2] as? String == "new")
-            #expect(merged.count == 3)
-        } else {
-            Issue.record("Sequence collision branch not exercised")
-        }
-    }
-
-    @Test("Utils.merge promotes array target to dictionary when merging with map")
-    func utils_merge_arrayToDictionaryTarget() throws {
-        let undefined = Undefined.instance
-        let target: [Any] = ["a", undefined]
-        let sourceDict: [AnyHashable: Any] = ["b": 2]
-        let merged = try Utils.merge(target: target, source: sourceDict, options: .init())
-        if let dict = merged as? [AnyHashable: Any] {
-            #expect(dict[0] as? String == "a")
-            #expect(dict["b"] as? Int == 2)
-        } else {
-            Issue.record("Array→dictionary promotion not exercised")
-        }
-    }
-
-    @Test("Utils.merge dictionary target consumes OrderedSet sequences")
-    func utils_merge_dictionaryOrderedSetSequence() throws {
-        let target: [AnyHashable: Any] = ["existing": "value"]
-        let ordered = OrderedSet<AnyHashable>([AnyHashable("first"), AnyHashable(2)])
-
-        if let merged = try Utils.merge(target: target, source: ordered, options: .init()) as? [AnyHashable: Any] {
-            #expect(merged["existing"] as? String == "value")
-            #expect(merged[0] as? AnyHashable == AnyHashable("first"))
-            #expect(merged[1] as? AnyHashable == AnyHashable(2))
-        } else {
-            Issue.record("OrderedSet sequence branch not exercised")
-        }
-    }
-
-    @Test("Utils.merge merges nil targets with typed [Any] sources and preserves sparse positions")
-    func utils_merge_nilTarget_typedArraySource() throws {
-        let source: [Any] = [Undefined.instance, "ok", 42]
-        if let merged = try Utils.merge(target: nil, source: source, options: .init()) as? [Any?] {
-            #expect(merged.count == 4)
-            let head = merged.first.flatMap { $0 }
-            #expect(head == nil)
-            #expect(merged[1] is Undefined)
-            #expect(merged[2] as? String == "ok")
-            #expect(merged[3] as? Int == 42)
-        } else {
-            Issue.record("Nil-target array merge branch not exercised")
-        }
-    }
-
-    @Test("Utils.merge overlays arrays with scalars when no sequence is available")
-    func utils_merge_arrayAppendsScalarOnNonSequenceSource() throws {
-        let undefined = Undefined.instance
-        let target: [Any] = [undefined, "keep"]
-        let merged = try Utils.merge(target: target, source: "tail", options: .init())
-
-        if let out = merged as? [Any?] {
-            #expect(out.count == 3)
-            #expect(out.first is Undefined)
-            #expect(out.last as? String == "tail")
-        } else if let out = merged as? [Any] {
-            #expect(out.count == 3)
-            #expect(out.first is Undefined)
-            #expect(out.last as? String == "tail")
-        } else {
-            Issue.record("Array scalar overlay branch not exercised")
-        }
-    }
-
-    @Test("Utils.deepBridgeToAnyIterative handles nil roots and AnyHashable dictionaries")
-    func utils_deepBridge_nilAndHashable() {
-        let bridgedNil = Utils.deepBridgeToAnyIterative(nil)
-        #expect(bridgedNil is NSNull)
-
-        let boxedRoot = Optional<[String: Any]>.some(["leaf": "value"]) as Any
-        let bridgedBoxedRoot = Utils.deepBridgeToAnyIterative(boxedRoot)
-        #expect((bridgedBoxedRoot as? [String: Any])?["leaf"] as? String == "value")
-
-        let boxedNilRoot = Optional<[String: Any]>.none as Any
-        let bridgedBoxedNilRoot = Utils.deepBridgeToAnyIterative(boxedNilRoot)
-        #expect(bridgedBoxedNilRoot is NSNull)
-
-        let dict: [AnyHashable: Any] = [
-            1: ["nested": NSNull()],
-            "two": 2,
-        ]
-        let bridged = Utils.deepBridgeToAnyIterative(dict)
-        if let map = bridged as? [String: Any] {
-            #expect(map["1"] is [String: Any])
-            #expect(map["two"] as? Int == 2)
-        } else {
-            Issue.record("Expected bridged dictionary, got: \(type(of: bridged))")
-        }
-
-        let optionalArray: [Any?] = [nil, "value"]
-        let bridgedArray = Utils.deepBridgeToAnyIterative(optionalArray)
-        if Swift.type(of: bridgedArray) == [Any?].self, let arrOpt = bridgedArray as? [Any?] {
-            let firstElementIsNone: Bool
-            if case .some(.none) = arrOpt.first {
-                firstElementIsNone = true
-            } else {
-                firstElementIsNone = false
-            }
-            if !firstElementIsNone {
-                Issue.record("Expected first element to be .none")
-            }
-
-            switch arrOpt.last {
-            case .some(.some(let value)):
-                #expect(value as? String == "value")
-            default:
-                Issue.record("Expected last element to unwrap to String")
-            }
-        } else if let arr = bridgedArray as? [Any] {
-            let first = arr.first
-            let firstMirror = first.map { Mirror(reflecting: $0) }
-            let firstValue = firstMirror?.displayStyle == .optional ? firstMirror?.children.first?.value : first
-            #expect(firstValue is NSNull)
-
-            let last = arr.last
-            let lastMirror = last.map { Mirror(reflecting: $0) }
-            let lastValue = lastMirror?.displayStyle == .optional ? lastMirror?.children.first?.value : last
-            #expect(lastValue as? String == "value")
-        } else {
-            Issue.record("Optional array branch not exercised")
-        }
-    }
-
-    @Test("Utils.deepBridgeToAnyIterative bridges Foundation containers")
-    func utils_deepBridge_foundationContainers() {
-        let foundation: NSDictionary = [
-            1: "x",
-            "nested": NSArray(array: ["y"]),
-        ]
-
-        let bridged = Utils.deepBridgeToAnyIterative(foundation)
-        let dict = bridged as? [String: Any]
-        #expect(dict?["1"] as? String == "x")
-        #expect((dict?["nested"] as? [Any])?.first as? String == "y")
-    }
-
-    @Test("Utils.deepBridgeToAnyIterative unwraps boxed optionals in raw array containers")
-    func utils_deepBridge_unwrapsBoxedOptionalsInRawArrays() {
-        func expectNormalizedArray(_ bridged: Any, expectedValues: [Any?], label: String) {
-            guard let array = bridged as? [Any] else {
-                Issue.record("Expected bridged array for \(label), got: \(type(of: bridged))")
-                return
-            }
-
-            #expect(array.count == expectedValues.count)
-            for (index, expected) in expectedValues.enumerated() {
-                let actual = array[index]
-                if let expected {
-                    switch expected {
-                    case let string as String:
-                        #expect(actual as? String == string)
-                    case let int as Int:
-                        #expect(actual as? Int == int)
-                    default:
-                        Issue.record("Unhandled expected value for \(label) at index \(index): \(expected)")
-                    }
-                } else {
-                    #expect(actual is NSNull)
-                }
-            }
-        }
-
-        let boxedNil: Any = Optional<String>.none as Any
-        let boxedSome: Any = Optional<String>.some("x") as Any
-        let boxedInt: Any = Optional<Int>.some(42) as Any
-
-        expectNormalizedArray(
-            Utils.deepBridgeToAnyIterative([boxedNil, boxedSome, boxedInt] as [Any]),
-            expectedValues: [nil, "x", 42],
-            label: "[Any]"
-        )
-
-        expectNormalizedArray(
-            Utils.deepBridgeToAnyIterative([boxedNil, boxedSome, nil, boxedInt] as [Any?]),
-            expectedValues: [nil, "x", nil, 42],
-            label: "[Any?]"
-        )
-    }
-
-    @Test(
-        "Utils.deepBridgeToAnyIterative preserves OrderedDictionary entry order",
-        .enabled(if: deterministicHashing, "requires SWIFT_DETERMINISTIC_HASHING=1 for stable dictionary iteration")
+    #expect(Utils.escape("abc123") == "abc123")
+  }
+
+  @Test("Utils.escape - handles accented characters (Latin-1 range uses %XX)")
+  func testEscapeAccentedCharacters() async throws {
+    #expect(Utils.escape("äöü") == "%E4%F6%FC")
+  }
+
+  @Test("Utils.escape - handles non-ASCII that falls outside Latin-1 uses %uXXXX")
+  func testEscapeNonAsciiOutsideLatin1() async throws {
+    #expect(Utils.escape("ć") == "%u0107")
+  }
+
+  @Test("Utils.escape - handles characters that are defined as safe")
+  func testEscapeSafeCharacters() async throws {
+    #expect(Utils.escape("@*_+-./") == "@*_+-./")
+  }
+
+  @Test("Utils.escape - handles parentheses (in RFC3986 they are encoded)")
+  func testEscapeParenthesesRfc3986() async throws {
+    #expect(Utils.escape("(") == "%28")
+    #expect(Utils.escape(")") == "%29")
+  }
+
+  @Test("Utils.escape - handles space character")
+  func testEscapeSpaceCharacter() async throws {
+    #expect(Utils.escape(" ") == "%20")
+  }
+
+  @Test("Utils.escape - handles tilde as safe")
+  func testEscapeTildeAsSafe() async throws {
+    #expect(Utils.escape("~") == "%7E")
+  }
+
+  @Test("Utils.escape - handles unsafe punctuation")
+  func testEscapeUnsafePunctuation() async throws {
+    #expect(Utils.escape("!") == "%21")
+    #expect(Utils.escape(",") == "%2C")
+  }
+
+  @Test("Utils.escape - handles mixed safe and unsafe characters")
+  func testEscapeMixedSafeUnsafe() async throws {
+    #expect(Utils.escape("hello world!") == "hello%20world%21")
+  }
+
+  @Test("Utils.escape - handles multiple spaces")
+  func testEscapeMultipleSpaces() async throws {
+    #expect(Utils.escape("a b c") == "a%20b%20c")
+  }
+
+  @Test("Utils.escape - handles string with various punctuation")
+  func testEscapeVariousPunctuation() async throws {
+    #expect(Utils.escape("Hello, World!") == "Hello%2C%20World%21")
+  }
+
+  @Test("Utils.escape - handles null character")
+  func testEscapeNullCharacter() async throws {
+    #expect(Utils.escape("\u{0000}") == "%00")
+  }
+
+  @Test("Utils.escape - handles emoji")
+  func testEscapeEmoji() async throws {
+    #expect(Utils.escape("😀") == "%uD83D%uDE00")
+  }
+
+  @Test("Utils.escape - handles RFC1738 format where parentheses are safe")
+  func testEscapeRfc1738Parentheses() async throws {
+    #expect(Utils.escape("(", format: .rfc1738) == "(")
+    #expect(Utils.escape(")", format: .rfc1738) == ")")
+  }
+
+  @Test("Utils.escape - handles mixed test with RFC1738")
+  func testEscapeMixedRfc1738() async throws {
+    #expect(Utils.escape("(hello)!", format: .rfc1738) == "(hello)%21")
+  }
+
+  @Test("Utils.escape - escape huge string")
+  func testEscapeHugeString() async throws {
+    let hugeString = String(repeating: "äöü", count: 1_000_000)
+    let expectedString = String(repeating: "%E4%F6%FC", count: 1_000_000)
+    #expect(Utils.escape(hugeString) == expectedString)
+  }
+
+  // MARK: - Utils.unescape tests
+
+  @Test("Utils.unescape - No escapes")
+  func testUnescapeNoEscapes() async throws {
+    #expect(Utils.unescape("abc123") == "abc123")
+  }
+
+  @Test("Utils.unescape - Hex escapes with uppercase hex digits")
+  func testUnescapeHexUppercase() async throws {
+    #expect(Utils.unescape("%E4%F6%FC") == "äöü")
+  }
+
+  @Test("Utils.unescape - Hex escapes with lowercase hex digits")
+  func testUnescapeHexLowercase() async throws {
+    #expect(Utils.unescape("%e4%f6%fc") == "äöü")
+  }
+
+  @Test("Utils.unescape - Unicode escape")
+  func testUnescapeUnicode() async throws {
+    #expect(Utils.unescape("%u0107") == "ć")
+  }
+
+  @Test("Utils.unescape - Unicode escape with lowercase digits")
+  func testUnescapeUnicodeLowercase() async throws {
+    #expect(Utils.unescape("%u0061") == "a")
+  }
+
+  @Test("Utils.unescape - Characters that do not need escaping")
+  func testUnescapeNoEscapingNeeded() async throws {
+    #expect(Utils.unescape("@*_+-./") == "@*_+-./")
+  }
+
+  @Test("Utils.unescape - Hex escapes for punctuation")
+  func testUnescapeHexPunctuation() async throws {
+    #expect(Utils.unescape("%28") == "(")
+    #expect(Utils.unescape("%29") == ")")
+    #expect(Utils.unescape("%20") == " ")
+    #expect(Utils.unescape("%7E") == "~")
+  }
+
+  @Test("Utils.unescape - A long string with only safe characters")
+  func testUnescapeLongSafeString() async throws {
+    #expect(
+      Utils.unescape("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@*_+-./")
+        == "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@*_+-./"
     )
-    func utils_deepBridge_preservesOrderedDictionaryOrder() {
-        let entries: [(AnyHashable, Any)] = [
-            (AnyHashable("first"), 1),
-            (AnyHashable(2), "two"),
-            (AnyHashable("third"), 3),
-        ]
-        let ordered = OrderedDictionary<AnyHashable, Any>(uniqueKeysWithValues: entries)
+  }
 
-        let bridged = Utils.deepBridgeToAnyIterative(ordered)
-        if let dict = bridged as? [String: Any] {
-            // This is intentionally implementation-sensitive: it guards against reversing
-            // OrderedDictionary scheduling in deepBridgeToAnyIterative when hashing is deterministic.
-            #expect(Array(dict.keys) == ["first", "2", "third"])
-            #expect(dict["2"] as? String == "two")
-        } else {
-            Issue.record("Expected bridged ordered dictionary, got: \(type(of: bridged))")
-        }
+  @Test("Utils.unescape - A mix of Unicode and hex escapes")
+  func testUnescapeMixedUnicodeHex() async throws {
+    #expect(Utils.unescape("%u0041%20%42") == "A B")
+  }
+
+  @Test("Utils.unescape - A mix of literal text and hex escapes")
+  func testUnescapeMixedLiteralHex() async throws {
+    #expect(Utils.unescape("hello%20world") == "hello world")
+  }
+
+  @Test(
+    "Utils.unescape - A literal percent sign that is not followed by a valid escape remains unchanged"
+  )
+  func testUnescapeLiteralPercent() async throws {
+    #expect(Utils.unescape("100% sure") == "100% sure")
+  }
+
+  @Test("Utils.unescape - Mixed Unicode and hex escapes")
+  func testUnescapeMixedUnicodeHex2() async throws {
+    #expect(Utils.unescape("%u0041%65") == "Ae")
+  }
+
+  @Test("Utils.unescape - Escaped percent signs that do not form a valid escape remain unchanged")
+  func testUnescapeInvalidEscapePercent() async throws {
+    #expect(Utils.unescape("50%% off") == "50%% off")
+  }
+
+  @Test("Utils.unescape - Consecutive escapes producing multiple spaces")
+  func testUnescapeConsecutiveEscapes() async throws {
+    #expect(Utils.unescape("%20%u0020") == "  ")
+  }
+
+  @Test("Utils.unescape - An invalid escape sequence should remain unchanged")
+  func testUnescapeInvalidEscapeSequence() async throws {
+    #expect(Utils.unescape("abc%g") == "abc%g")
+  }
+
+  @Test("Utils.unescape - An invalid Unicode escape sequence should remain unchanged")
+  func testUnescapeInvalidUnicodeEscape() async throws {
+    #expect(Utils.unescape("%uZZZZ") == "%uZZZZ")
+    #expect(Utils.unescape("%u12") == "%u12")
+    #expect(Utils.unescape("abc%") == "abc%")
+  }
+
+  @Test("Utils.unescape - huge string")
+  func testUnescapeHugeString() async throws {
+    let hugeString = String(repeating: "%E4%F6%FC", count: 1_000_000)
+    let expectedString = String(repeating: "äöü", count: 1_000_000)
+    #expect(Utils.unescape(hugeString) == expectedString)
+  }
+
+  @Test("Utils.unescape - leaves trailing '%' literal when incomplete escape")
+  func testUnescapeTrailingPercent() async throws {
+    #expect(Utils.unescape("%") == "%")
+  }
+
+  @Test("Utils.unescape - leaves incomplete %uXXXX literal")
+  func testUnescapeIncompleteUnicode() async throws {
+    #expect(Utils.unescape("%u12") == "%u12")
+  }
+
+  @Test("Utils.unescape - handles bad hex after %")
+  func testUnescapeBadHex() async throws {
+    #expect(Utils.unescape("%GZ") == "%GZ")
+  }
+
+  // MARK: - Utils.merge tests
+
+  @Test("Utils.merge - merges Map with List")
+  func testMergeMapWithList() async throws {
+    let result = try Utils.merge(target: [0: "a"], source: [Undefined(), "b"])
+    let out: [AnyHashable: Any] = result as! [AnyHashable: Any]
+    // Compare contents directly to avoid NSNumber/Int key-bridging differences on Linux
+    #expect(out.count == 2)
+    #expect(out[AnyHashable(0)] as? String == "a")
+    #expect(out[AnyHashable(1)] as? String == "b")
+  }
+
+  @Test("Utils.merge - merges two objects with the same key and different values")
+  func testMergeTwoObjectsSameKeyDifferentValues() async throws {
+    let target = ["foo": [["a": "a", "b": "b"], ["a": "aa"]]]
+    let source = ["foo": [Undefined(), ["b": "bb"]]]
+    let result = try Utils.merge(target: target, source: source)
+    let expected = ["foo": [["a": "a", "b": "b"], ["a": "aa", "b": "bb"]]]
+
+    // Deep comparison needed for nested structures
+    let resultDict = result as! [String: Any]
+    let expectedDict = expected as [String: Any]
+    #expect(resultDict.keys == expectedDict.keys)
+  }
+
+  @Test("Utils.merge - merges two objects with the same key and different list values")
+  func testMergeTwoObjectsSameKeyDifferentListValues() async throws {
+    let target = ["foo": [["baz": ["15"]]]]
+    let source = ["foo": [["baz": [Undefined(), "16"]]]]
+    let result = try Utils.merge(target: target, source: source)
+    let expected = ["foo": [["baz": ["15", "16"]]]]
+
+    let resultDict = result as! [String: Any]
+    let expectedDict = expected as [String: Any]
+    #expect(resultDict.keys == expectedDict.keys)
+  }
+
+  @Test("Utils.merge - merges two objects with the same key and different values into a list")
+  func testMergeTwoObjectsSameKeyIntoList() async throws {
+    let target = ["foo": [["a": "b"]]]
+    let source = ["foo": [["c": "d"]]]
+    let result = try Utils.merge(target: target, source: source)
+    let expected = ["foo": [["a": "b", "c": "d"]]]
+
+    let resultDict = result as! [String: Any]
+    let expectedDict = expected as [String: Any]
+    #expect(resultDict.keys == expectedDict.keys)
+  }
+
+  @Test("Utils.merge - merges true into null")
+  func testMergeTrueIntoNull() async throws {
+    let result = try Utils.merge(target: nil, source: true)
+    let resultArray = result as! [Any?]
+    #expect(resultArray.count == 2)
+    #expect(resultArray[0] == nil)
+    #expect(resultArray[1] as! Bool == true)
+  }
+
+  @Test("Utils.merge - merges null into a list")
+  func testMergeNullIntoList() async throws {
+    let result = try Utils.merge(target: nil, source: [42])
+    let resultArray = result as! [Any?]
+    #expect(resultArray.count == 2)
+    #expect(resultArray[0] == nil)
+    #expect(resultArray[1] as! Int == 42)
+  }
+
+  @Test("Utils.merge - merges null into a set")
+  func testMergeNullIntoSet() async throws {
+    let result = try Utils.merge(target: nil, source: Set(["foo"]))
+    let resultArray = result as! [Any?]
+    #expect(resultArray.count == 2)
+    #expect(resultArray[0] == nil)
+    #expect(resultArray[1] as! String == "foo")
+  }
+
+  @Test("Utils.merge - merges String into set")
+  func testMergeStringIntoSet() async throws {
+    let result = try Utils.merge(target: Set(["foo"]), source: "bar")
+    let resultSet = result as! Set<AnyHashable>
+    #expect(resultSet.contains("foo"))
+    #expect(resultSet.contains("bar"))
+    #expect(resultSet.count == 2)
+  }
+
+  @Test("Utils.merge - merges two objects with the same key")
+  func testMergeTwoObjectsSameKey() async throws {
+    let result = try Utils.merge(target: ["a": "b"], source: ["a": "c"])
+    let resultDict = result as! [String: Any]
+    #expect(resultDict.keys.contains("a"))
+
+    let valueArray = resultDict["a"] as! [String]
+    #expect(valueArray.contains("b"))
+    #expect(valueArray.contains("c"))
+  }
+
+  @Test("Utils.merge - merges a standalone and an object into a list")
+  func testMergeStandaloneAndObjectIntoList() async throws {
+    let target = ["foo": "bar"]
+    let source = ["foo": ["first": "123"]]
+    let result = try Utils.merge(target: target, source: source)
+    let resultDict = result as! [String: Any]
+    #expect(resultDict.keys.contains("foo"))
+
+    let valueArray = resultDict["foo"] as! [Any]
+    #expect(valueArray.count == 2)
+  }
+
+  @Test("Utils.merge - merges a standalone and two objects into a list")
+  func testMergeStandaloneAndTwoObjectsIntoList() async throws {
+    let target = ["foo": ["bar", ["first": "123"]]]
+    let source = ["foo": ["second": "456"]]
+    let result = try Utils.merge(target: target, source: source)
+    let resultDict = result as! [String: Any]
+    #expect(resultDict.keys.contains("foo"))
+  }
+
+  @Test("Utils.merge - merges an object sandwiched by two standalones into a list")
+  func testMergeObjectSandwichedByStandalones() async throws {
+    let target = ["foo": ["bar", ["first": "123", "second": "456"]]]
+    let source = ["foo": "baz"]
+    let result = try Utils.merge(target: target, source: source)
+    let resultDict = result as! [String: Any]
+    #expect(resultDict.keys.contains("foo"))
+
+    let valueArray = resultDict["foo"] as! [Any]
+    #expect(valueArray.count == 3)
+  }
+
+  @Test("Utils.merge - merges two lists into a list")
+  func testMergeTwoListsIntoList() async throws {
+    let result1 = try Utils.merge(target: ["foo"], source: ["bar", "xyzzy"])
+    let resultArray1 = result1 as! [String]
+    #expect(resultArray1 == ["foo", "bar", "xyzzy"])
+
+    let result2 = try Utils.merge(target: ["foo": ["baz"]], source: ["foo": ["bar", "xyzzy"]])
+    let resultDict2 = result2 as! [String: Any]
+    #expect(resultDict2.keys.contains("foo"))
+
+    let valueArray = resultDict2["foo"] as! [String]
+    #expect(valueArray.count == 3)
+  }
+
+  @Test("Utils.merge - merges two sets into a list")
+  func testMergeTwoSetsIntoList() async throws {
+    let result1 = try Utils.merge(target: Set(["foo"]), source: Set(["bar", "xyzzy"]))
+    let resultSet1 = result1 as! Set<AnyHashable>
+    #expect(resultSet1.contains("foo"))
+    #expect(resultSet1.contains("bar"))
+    #expect(resultSet1.contains("xyzzy"))
+
+    let result2 = try Utils.merge(
+      target: ["foo": Set(["baz"])],
+      source: ["foo": Set(["bar", "xyzzy"])]
+    )
+    let resultDict2 = result2 as! [String: Any]
+    #expect(resultDict2.keys.contains("foo"))
+  }
+
+  @Test("Utils.merge - merges a set into a list")
+  func testMergeSetIntoList() async throws {
+    let result = try Utils.merge(target: ["foo": ["baz"]], source: ["foo": Set(["bar"])])
+    let resultDict = result as! [String: Any]
+    #expect(resultDict.keys.contains("foo"))
+
+    let valueArray = resultDict["foo"] as! [String]
+    #expect(valueArray.contains("baz"))
+    #expect(valueArray.contains("bar"))
+  }
+
+  @Test("Utils.merge - merges a list into a set")
+  func testMergeListIntoSet() async throws {
+    let result = try Utils.merge(target: ["foo": Set(["baz"])], source: ["foo": ["bar"]])
+    let resultDict = result as! [String: Any]
+    #expect(resultDict.keys.contains("foo"))
+
+    let valueSet = resultDict["foo"] as! Set<AnyHashable>
+    #expect(valueSet.contains("baz"))
+    #expect(valueSet.contains("bar"))
+  }
+
+  @Test("Utils.merge - merges a set into a list with multiple elements")
+  func testMergeSetIntoListMultipleElements() async throws {
+    let result = try Utils.merge(target: ["foo": ["baz"]], source: ["foo": Set(["bar", "xyzzy"])])
+    let resultDict = result as! [String: Any]
+    #expect(resultDict.keys.contains("foo"))
+
+    let valueArray = resultDict["foo"] as! [String]
+    #expect(valueArray.count == 3)
+  }
+
+  @Test("Utils.merge - merges an object into a list")
+  func testMergeObjectIntoList() async throws {
+    let result = try Utils.merge(target: ["foo": ["bar"]], source: ["foo": ["baz": "xyzzy"]])
+    let resultDict = result as! [String: Any]
+    #expect(resultDict.keys.contains("foo"))
+  }
+
+  @Test("Utils.merge - merges a list into an object")
+  func testMergeListIntoObject() async throws {
+    let result = try Utils.merge(target: ["foo": ["bar": "baz"]], source: ["foo": ["xyzzy"]])
+    let resultDict = result as! [String: Any]
+    #expect(resultDict.keys.contains("foo"))
+  }
+
+  @Test("Utils.merge - merge set with undefined with another set")
+  func testMergeSetWithUndefinedWithAnotherSet() async throws {
+    let undefined = Undefined()
+
+    let result1 = try Utils.merge(
+      target: ["foo": Set<AnyHashable>(["bar"])],
+      source: ["foo": Set<AnyHashable>([undefined, "baz"])]
+    )
+    let resultDict1 = result1 as! [String: Any]
+    #expect(resultDict1.keys.contains("foo"))
+
+    let valueSet1 = resultDict1["foo"] as! Set<AnyHashable>
+    #expect(valueSet1.contains("bar"))
+    #expect(valueSet1.contains("baz"))
+
+    let result2 = try Utils.merge(
+      target: ["foo": Set<AnyHashable>([undefined, "bar"])],
+      source: ["foo": Set<AnyHashable>(["baz"])]
+    )
+    let resultDict2 = result2 as! [String: Any]
+    #expect(resultDict2.keys.contains("foo"))
+  }
+
+  @Test("Utils.merge - merge set of Maps with another set of Maps")
+  func testMergeSetOfMapsWithAnotherSetOfMaps() async throws {
+    let result1 = try Utils.merge(
+      target: Set<AnyHashable>([["bar": "baz"]]),
+      source: Set<AnyHashable>([["baz": "xyzzy"]])
+    )
+    let resultSet1 = result1 as! Set<AnyHashable>
+    #expect(resultSet1.count >= 1)
+
+    let result2 = try Utils.merge(
+      target: ["foo": Set<AnyHashable>([["bar": "baz"]])],
+      source: ["foo": Set<AnyHashable>([["baz": "xyzzy"]])]
+    )
+    let resultDict2 = result2 as! [String: Any]
+    #expect(resultDict2.keys.contains("foo"))
+  }
+
+  @Test("Utils.merge - array overlay with Undefined preserves/replaces by index (default options)")
+  func testMergeArrayOverlayWithUndefined_Default() async throws {
+    let target: [Any?] = ["x", Undefined(), "z"]
+    let source: [Any?] = [Undefined(), "Y", Undefined()]
+    let merged = try Utils.merge(target: target, source: source) as! [Any?]
+    #expect(merged.count == 3)
+    #expect(merged[0] as? String == "x")  // undefined in source leaves target
+    #expect(merged[1] as? String == "Y")  // replaced
+    #expect(merged[2] as? String == "z")  // undefined in source leaves target
+  }
+
+  @Test("Utils.merge - array overlay with parseLists=false prunes remaining Undefined")
+  func testMergeArrayOverlayWithUndefined_ParseListsFalsePrunes() async throws {
+    let target: [Any?] = [Undefined(), "b", Undefined()]
+    let source: [Any?] = [Undefined(), Undefined()]
+    let opts = DecodeOptions(parseLists: false)
+    let merged = try Utils.merge(target: target, source: source, options: opts) as! [Any?]
+    // remaining Undefined entries are pruned under parseLists=false
+    #expect(merged.count == 1)
+    #expect(merged[0] as? String == "b")
+  }
+
+  @Test("Utils.merge - non-sequence source appends to array")
+  func testMergeArrayWithNonSequenceSourceAppends() async throws {
+    let target: [Any] = ["a", "b"]
+    let merged = try Utils.merge(target: target, source: 42) as! [Any]
+    #expect(merged.count == 3)
+    #expect(merged[0] as? String == "a")
+    #expect(merged[1] as? String == "b")
+    #expect(merged[2] as? Int == 42)
+  }
+
+  @Test("Utils.merge - set target stays Set<AnyHashable> and ignores Undefined in source")
+  func testMergeSetTargetPreservesTypeAndIgnoresUndefined() async throws {
+    let undefined = Undefined()
+    let target = Set<AnyHashable>(["a"])
+    let source: [Any?] = [undefined, "c", "a"]
+    let merged = try Utils.merge(target: target, source: source) as! Set<AnyHashable>
+    #expect(merged.contains("a"))
+    #expect(merged.contains("c"))
+    #expect(merged.count == 2)
+  }
+
+  // MARK: - Utils.combine tests
+
+  @Test("Utils.combine - combines both lists")
+  func testCombineBothLists() async throws {
+    let a = [1]
+    let b = [2]
+    let combined: [Int] = Utils.combine(a, b)
+
+    // Verify original arrays are unchanged
+    #expect(a == [1])
+    #expect(b == [2])
+
+    // Verify the combined result
+    #expect(combined == [1, 2])
+  }
+
+  @Test("Utils.combine - combines one list and one non-list")
+  func testCombineOneListOneNonList() async throws {
+    let aN = 1
+    let a = [aN]
+    let bN = 2
+    let b = [bN]
+
+    let combinedAnB: [Int] = Utils.combine(aN, b)
+    #expect(b == [bN])
+    #expect(combinedAnB == [1, 2])
+
+    let combinedABn: [Int] = Utils.combine(a, bN)
+    #expect(a == [aN])
+    #expect(combinedABn == [1, 2])
+  }
+
+  @Test("Utils.combine - combines neither is a list")
+  func testCombineNeitherIsList() async throws {
+    let a = 1
+    let b = 2
+    let combined: [Int] = Utils.combine(a, b)
+
+    #expect(combined == [1, 2])
+  }
+
+  @Test("Utils.combine - preserves order when combining list and scalar")
+  func testCombineListAndScalarPreservesOrder() async throws {
+    let result1: [String] = Utils.combine(["a"], "b")
+    #expect(result1 == ["a", "b"])
+
+    let result2: [Int] = Utils.combine(1, [2, 3])
+    #expect(result2 == [1, 2, 3])
+  }
+
+  @Test("Utils.combine - applies list limit and overflow tracking")
+  func testCombineListLimitOverflow() async throws {
+    let under = try Utils.combine(
+      ["a", "b"],
+      "c",
+      options: DecodeOptions(listLimit: 10)
+    )
+    #expect((under as? [Any]) != nil)
+
+    let exact = try Utils.combine(
+      ["a", "b"],
+      "c",
+      options: DecodeOptions(listLimit: 3)
+    )
+    #expect((exact as? [Any]) != nil)
+
+    let over = try Utils.combine(
+      ["a", "b", "c"],
+      "d",
+      options: DecodeOptions(listLimit: 3)
+    )
+    let overDict = over as? [AnyHashable: Any]
+    #expect(overDict != nil)
+    #expect(Utils.isOverflow(overDict))
+    if let overDict {
+      let cleaned = overDict.filter { !Utils.isOverflowKey($0.key) }
+      #expect(cleaned[AnyHashable(0)] as? String == "a")
+      #expect(cleaned[AnyHashable(3)] as? String == "d")
     }
 
-    @Test("Utils.deepBridgeToAnyIterative tolerates Foundation self-cycles")
-    func utils_deepBridge_foundationSelfCycles() throws {
-        #if os(Linux)
-            try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
-                #expect(
-                    Bool(false),
-                    Comment("Skipped: cannot safely build a cyclic Foundation container on Linux"))
-            }
-        #else
-            let cyclicDict = NSMutableDictionary()
-            cyclicDict["self"] = cyclicDict
-            cyclicDict["leaf"] = "x"
+    let zero = try Utils.combine([], "a", options: DecodeOptions(listLimit: 0))
+    let zeroDict = zero as? [AnyHashable: Any]
+    #expect(zeroDict != nil)
+    if let zeroDict {
+      let cleaned = zeroDict.filter { !Utils.isOverflowKey($0.key) }
+      #expect(cleaned[AnyHashable(0)] as? String == "a")
+    }
+  }
 
-            let bridgedDict = Utils.deepBridgeToAnyIterative(cyclicDict)
-            if let dict = bridgedDict as? [String: Any] {
-                #expect(dict["leaf"] as? String == "x")
-                #expect(dict["self"] is NSNull)
-            } else {
-                Issue.record("Expected bridged cyclic dictionary, got: \(type(of: bridgedDict))")
-            }
+  @Test("Utils.combine - appends to overflow objects")
+  func testCombineAppendsToOverflow() async throws {
+    let overflow = try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))
+    let overflowDict = overflow as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(overflowDict))
 
-            let cyclicArray = NSMutableArray()
-            cyclicArray.add(cyclicArray)
-            cyclicArray.add("y")
+    let combined = try Utils.combine(overflow, "c", options: DecodeOptions(listLimit: 10))
+    let combinedDict = combined as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(combinedDict))
+    if let combinedDict {
+      let cleaned = combinedDict.filter { !Utils.isOverflowKey($0.key) }
+      #expect(cleaned[AnyHashable(0)] as? String == "a")
+      #expect(cleaned[AnyHashable(2)] as? String == "c")
+    }
+  }
 
-            let bridgedArray = Utils.deepBridgeToAnyIterative(cyclicArray)
-            if let array = bridgedArray as? [Any] {
-                #expect(array.count == 2)
-                #expect(array[0] is NSNull)
-                #expect(array[1] as? String == "y")
-            } else {
-                Issue.record("Expected bridged cyclic array, got: \(type(of: bridgedArray))")
-            }
-        #endif
+  @Test("Utils.combine - enforces strict and negative list limits")
+  func testCombineStrictAndNegativeLimits() throws {
+    let exact = try Utils.combine(
+      ["a"],
+      "b",
+      options: DecodeOptions(listLimit: 2, throwOnLimitExceeded: true)
+    )
+    #expect(exact as? [String] == ["a", "b"])
+
+    #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+      _ = try Utils.combine(
+        ["a"],
+        "b",
+        options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+      )
     }
 
-    @Test("Utils.deepBridgeToAnyIterative bridges typed Swift containers")
-    func utils_deepBridge_typedSwiftContainers() {
-        let typed: [String: Any] = [
-            "dict": [1: "x"] as [Int: String],
-            "array": [nil, "y"] as [String?],
-        ]
+    let negative = try Utils.combine([], "a", options: DecodeOptions(listLimit: -1))
+    #expect(Utils.isOverflow(negative as? [AnyHashable: Any]))
 
-        let bridged = Utils.deepBridgeToAnyIterative(typed)
-        let dict = bridged as? [String: Any]
-        let nestedDict = dict?["dict"] as? [String: Any]
-        let nestedArray = dict?["array"] as? [Any]
-        #expect(nestedDict?["1"] as? String == "x")
-        #expect(nestedArray?.count == 2)
-        #expect(nestedArray?.first is NSNull)
-        #expect(nestedArray?[1] as? String == "y")
+    #expect(throws: DecodeError.listLimitExceeded(limit: -1)) {
+      _ = try Utils.combine(
+        [],
+        "a",
+        options: DecodeOptions(listLimit: -1, throwOnLimitExceeded: true)
+      )
+    }
+  }
+
+  @Test("Utils.combine - strict mode rejects an existing overflow without mutation")
+  func testCombineStrictExistingOverflow() throws {
+    let overflow = try #require(
+      try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))
+        as? [AnyHashable: Any]
+    )
+
+    #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+      _ = try Utils.combine(
+        overflow,
+        ["c", "d"],
+        options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+      )
+    }
+    #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+      _ = try Utils.merge(
+        target: overflow,
+        source: "c",
+        options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+      )
+    }
+    #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+      _ = try Utils.merge(
+        target: "z",
+        source: overflow,
+        options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+      )
+    }
+    #expect(overflow[AnyHashable(2)] == nil)
+    #expect(Utils.overflowMaxIndex(overflow) == 1)
+  }
+
+  @Test("Utils.merge - enforces list limits in every array and primitive direction")
+  func testMergeListLimitDirections() throws {
+    let soft = DecodeOptions(listLimit: 1)
+    let strict = DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+
+    for (target, source) in [
+      (["a"] as Any, "b" as Any),
+      ("a" as Any, ["b", "c"] as Any),
+      (["a"] as Any, ["b"] as Any),
+    ] {
+      let merged = try Utils.merge(target: target, source: source, options: soft)
+      #expect(Utils.isOverflow(merged as? [AnyHashable: Any]))
+      #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+        _ = try Utils.merge(target: target, source: source, options: strict)
+      }
     }
 
-    @Test("Utils.needsMainDrop short-circuits when threshold is non-positive")
-    func utils_needsMainDrop_thresholdShortCircuit() {
-        let root: [String: Any?] = ["k": nil]
-        #expect(!Utils.needsMainDrop(root, threshold: 0))
-        #expect(!Utils.needsMainDrop(root, threshold: -3))
+    let exact = try Utils.merge(target: [Any](), source: "a", options: strict)
+    #expect(exact as? [String] == ["a"])
+
+    let negative = try Utils.merge(
+      target: [Any](),
+      source: "a",
+      options: DecodeOptions(listLimit: -1)
+    )
+    #expect(Utils.isOverflow(negative as? [AnyHashable: Any]))
+  }
+
+  @Test("Utils.merge - enforces limits after nested array merges")
+  func testMergeNestedArrayLimit() throws {
+    let target: [Any] = [[AnyHashable("a"): 1]]
+    let source: [Any] = [
+      [AnyHashable("b"): 2],
+      [AnyHashable("c"): 3],
+    ]
+
+    let merged = try #require(
+      try Utils.merge(
+        target: target,
+        source: source,
+        options: DecodeOptions(listLimit: 1)
+      ) as? [AnyHashable: Any]
+    )
+    #expect(Utils.isOverflow(merged))
+    let first = merged[AnyHashable(0)] as? [AnyHashable: Any]
+    #expect(first?[AnyHashable("a")] as? Int == 1)
+    #expect(first?[AnyHashable("b")] as? Int == 2)
+    #expect((merged[AnyHashable(1)] as? [AnyHashable: Any])?[AnyHashable("c")] as? Int == 3)
+
+    #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+      _ = try Utils.merge(
+        target: target,
+        source: source,
+        options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+      )
+    }
+  }
+
+  @Test("Utils.merge - recursively merges nested arrays before limit enforcement")
+  func testMergeNestedArraysBeforeLimitEnforcement() throws {
+    let target: [Any] = [["1", "2"]]
+    let source: [Any] = [["1", "", "3"]]
+
+    #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+      _ = try Utils.merge(
+        target: target,
+        source: source,
+        options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+      )
     }
 
-    @Test("Utils.needsMainDrop sees boxed optional single-key chains")
-    func utils_needsMainDrop_boxedOptionalChain() {
-        let level2: [String: Any] = ["c": "end"]
-        let level1: [String: Any] = ["b": Optional<[String: Any]>.some(level2) as Any]
-        let root: [String: Any?] = ["a": Optional<[String: Any]>.some(level1) as Any]
-        #expect(Utils.needsMainDrop(root, threshold: 2))
+    let merged = try #require(
+      try Utils.merge(
+        target: target,
+        source: source,
+        options: DecodeOptions(listLimit: 3)
+      ) as? [Any?]
+    )
+    let inner = try #require(merged[0] as? [AnyHashable: Any])
+    #expect(Utils.isOverflow(inner))
+    #expect(inner[AnyHashable(0)] as? String == "1")
+    #expect(inner[AnyHashable(1)] as? String == "2")
+    #expect(inner[AnyHashable(2)] as? String == "1")
+    #expect(inner[AnyHashable(3)] as? String == "")
+    #expect(inner[AnyHashable(4)] as? String == "3")
+  }
+
+  @Test("Utils.merge - sparse collisions append at the logical end")
+  func testMergeSparseCollisionLimit() throws {
+    let target: [Any] = [["1", "2"], Undefined.instance, ["1", "2"]]
+    let source: [Any] = ["y"]
+
+    #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+      _ = try Utils.merge(
+        target: target,
+        source: source,
+        options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+      )
     }
 
-    @Test("Utils.dropOnMainThread tolerates nil payloads")
-    func utils_dropOnMainThread_nilPayload() {
-        Utils.dropOnMainThread(nil as Any?)
-        Utils.dropOnMainThread(nil as AnyObject?)
+    let merged = try #require(
+      try Utils.merge(
+        target: target,
+        source: source,
+        options: DecodeOptions(listLimit: 3)
+      ) as? [AnyHashable: Any]
+    )
+    #expect(Utils.isOverflow(merged))
+    #expect((merged[AnyHashable(0)] as? [String]) == ["1", "2"])
+    #expect(merged[AnyHashable(1)] == nil)
+    #expect((merged[AnyHashable(2)] as? [String]) == ["1", "2"])
+    #expect(merged[AnyHashable(3)] as? String == "y")
+  }
+
+  @Test("Utils.merge - ignores falsy sources before list-limit enforcement")
+  func testMergeFalsySourcesDoNotGrowLists() throws {
+    for source: Any in ["", false, 0, NSNull()] {
+      let merged = try Utils.merge(
+        target: ["x"],
+        source: source,
+        options: DecodeOptions(listLimit: 1, throwOnLimitExceeded: true)
+      )
+      #expect(merged as? [String] == ["x"])
+    }
+  }
+
+  @Test("Utils.merge - preserves sparse positions for later cumulative growth")
+  func testMergePreservesSparsePositionsForCumulativeGrowth() throws {
+    let first = try #require(
+      try Utils.merge(
+        target: "x",
+        source: [Undefined.instance, ""],
+        options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+      ) as? [Any?]
+    )
+    try #require(first.count == 3)
+    #expect(first[0] as? String == "x")
+    #expect(first[1] is Undefined)
+    #expect(first[2] as? String == "")
+
+    #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+      _ = try Utils.merge(
+        target: first,
+        source: ["y"],
+        options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+      )
+    }
+  }
+
+  @Test("Utils.merge - treats numeric strings and integer indices as the same property")
+  func testMergeNumericPropertyKeyEquivalence() {
+    let nested = ["1", "2", "3"]
+    let options = DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+
+    #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+      _ = try Utils.merge(
+        target: [AnyHashable("0"): nested],
+        source: ["1", "", "3"],
+        options: options
+      )
+    }
+    #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+      _ = try Utils.merge(
+        target: ["1", "", "3"],
+        source: [AnyHashable("0"): nested],
+        options: options
+      )
+    }
+  }
+
+  @Test("Utils.merge - sparse primitive-array growth counts holes but omits them from overflow")
+  func testMergeSparsePrimitiveArrayLimit() throws {
+    let sparse: [Any] = [Undefined.instance, Undefined.instance, "y"]
+
+    #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+      _ = try Utils.merge(
+        target: "x",
+        source: sparse,
+        options: DecodeOptions(listLimit: 3, throwOnLimitExceeded: true)
+      )
     }
 
-    @Test("Utils.apply returns nil when the value cannot be cast to generic type")
-    func utils_apply_typeMismatchReturnsNil() {
-        let transformed = Utils.apply("not-an-int") { (value: Int) -> Int in value * 2 }
-        #expect(transformed == nil)
+    let soft = try #require(
+      try Utils.merge(
+        target: "x",
+        source: sparse,
+        options: DecodeOptions(listLimit: 3)
+      ) as? [AnyHashable: Any]
+    )
+    #expect(Utils.isOverflow(soft))
+    #expect(Utils.overflowMaxIndex(soft) == 3)
+    #expect(soft[AnyHashable(0)] as? String == "x")
+    #expect(soft[AnyHashable(1)] == nil)
+    #expect(soft[AnyHashable(2)] == nil)
+    #expect(soft[AnyHashable(3)] as? String == "y")
+
+    let withinLimit =
+      try Utils.merge(
+        target: "x",
+        source: sparse,
+        options: DecodeOptions(listLimit: 4, throwOnLimitExceeded: true)
+      ) as? [Any?]
+    try #require(withinLimit?.count == 4)
+    #expect(withinLimit?[0] as? String == "x")
+    #expect(withinLimit?[1] is Undefined)
+    #expect(withinLimit?[2] is Undefined)
+    #expect(withinLimit?[3] as? String == "y")
+  }
+
+  @Test("Overflow index arithmetic preserves values at Int.max without trapping")
+  func testOverflowIndexArithmeticAtIntMax() throws {
+    let boundary = Utils.markOverflow(
+      [AnyHashable(Int.max): "x"],
+      maxIndex: Int.max
+    )
+    let options = DecodeOptions(listLimit: 20)
+
+    let combined = try #require(
+      try Utils.combine(boundary, "y", options: options) as? [Any]
+    )
+    let combinedMap = try #require(combined[0] as? [AnyHashable: Any])
+    #expect(!Utils.isOverflow(combinedMap))
+    #expect(combinedMap[AnyHashable(Int.max)] as? String == "x")
+    #expect(combined[1] as? String == "y")
+
+    let merged = try #require(
+      try Utils.merge(
+        target: boundary,
+        source: OrderedSet<AnyHashable>(["y", "z"]),
+        options: options
+      ) as? [Any]
+    )
+    let mergedMap = try #require(merged[0] as? [AnyHashable: Any])
+    #expect(!Utils.isOverflow(mergedMap))
+    #expect(mergedMap[AnyHashable(Int.max)] as? String == "x")
+    #expect(merged[1] as? String == "y")
+    #expect(merged[2] as? String == "z")
+
+    let shifted = try #require(
+      try Utils.merge(target: "z", source: boundary, options: options) as? [Any]
+    )
+    #expect(shifted[0] as? String == "z")
+    let shiftedMap = try #require(shifted[1] as? [AnyHashable: Any])
+    #expect(!Utils.isOverflow(shiftedMap))
+    #expect(shiftedMap[AnyHashable(Int.max)] as? String == "x")
+  }
+
+  @Test("Utils.combine - keeps arrays nested when appending to overflow objects")
+  func testCombineKeepsOverflowAppendNested() async throws {
+    let overflow = try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))
+    let combined = try Utils.combine(
+      overflow,
+      ["c", "d"],
+      options: DecodeOptions(listLimit: 10)
+    )
+    let combinedDict = combined as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(combinedDict))
+    if let combinedDict {
+      let cleaned = combinedDict.filter { !Utils.isOverflowKey($0.key) }
+      #expect(cleaned[AnyHashable(0)] as? String == "a")
+      #expect(cleaned[AnyHashable(1)] as? String == "b")
+      #expect(cleaned[AnyHashable(2)] as? [String] == ["c", "d"])
     }
 
-    #if DEBUG && os(macOS)
-        @MainActor
-        @Test("bridge tolerates very deep single-key maps on MainActor")
-        func testDecode_DeepMaps_VeryDeep_Main() {
-            let depth = 6000
-            var leaf: Any? = "bar"
-            for _ in 0..<depth { leaf = ["p": leaf] }
+    let combinedWithNil = try Utils.combine(
+      overflow,
+      [nil, "e"],
+      options: DecodeOptions(listLimit: 10)
+    )
+    let combinedNilDict = combinedWithNil as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(combinedNilDict))
+    if let combinedNilDict {
+      let cleaned = combinedNilDict.filter { !Utils.isOverflowKey($0.key) }
+      let nested = cleaned[AnyHashable(2)] as? [Any?]
+      #expect(nested?.count == 2)
+      #expect(nested?[0] == nil)
+      #expect(nested?[1] as? String == "e")
+    }
+  }
 
-            let root: [String: Any?] = ["foo": leaf]
-            let bridged = Utils.deepBridgeToAnyIterative(root) as! [String: Any]
+  @Test("Utils.merge - handles overflow objects")
+  func testMergeOverflowObjects() async throws {
+    let overflow =
+      try Utils.combine(
+        ["a"],
+        "b",
+        options: DecodeOptions(listLimit: 1)
+      ) as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(overflow))
 
-            #expect(bridged["foo"] != nil)
-        }
+    if let overflow {
+      let merged = try Utils.merge(target: overflow, source: "c") as? [AnyHashable: Any]
+      #expect(Utils.isOverflow(merged))
+      if let merged {
+        let cleaned = merged.filter { !Utils.isOverflowKey($0.key) }
+        #expect(cleaned[AnyHashable(0)] as? String == "a")
+        #expect(cleaned[AnyHashable(2)] as? String == "c")
+      }
+
+      let mergedIntoPrimitive = try Utils.merge(target: "z", source: overflow) as? [AnyHashable: Any]
+      #expect(Utils.isOverflow(mergedIntoPrimitive))
+      if let mergedIntoPrimitive {
+        let cleaned = mergedIntoPrimitive.filter { !Utils.isOverflowKey($0.key) }
+        #expect(cleaned[AnyHashable(0)] as? String == "z")
+        #expect(cleaned[AnyHashable(2)] as? String == "b")
+      }
+    }
+  }
+
+  @Test("Utils.merge - merges an array target into overflow values by numeric index")
+  func testMergeOverflowIntoArrayTarget() async throws {
+    let overflow =
+      try Utils.combine(
+        ["a"],
+        "b",
+        options: DecodeOptions(listLimit: 1)
+      ) as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(overflow))
+
+    if let overflow {
+      let merged = try Utils.merge(target: ["z"], source: overflow) as? [AnyHashable: Any]
+      #expect(Utils.isOverflow(merged))
+
+      let appended = try Utils.merge(target: merged, source: "c") as? [AnyHashable: Any]
+      #expect(Utils.isOverflow(appended))
+      if let appended {
+        let cleaned = appended.filter { !Utils.isOverflowKey($0.key) }
+        #expect(cleaned[AnyHashable(0)] as? [String] == ["z", "a"])
+        #expect(cleaned[AnyHashable(1)] as? String == "b")
+        #expect(cleaned[AnyHashable(2)] as? String == "c")
+      }
+    }
+  }
+
+  @Test("Utils.merge - array target adopts larger overflow max index from source metadata")
+  func testMergeArrayTarget_OverflowSourceMaxPropagation() async throws {
+    let target: [Any?] = ["z"]
+    let source = Utils.markOverflow(
+      [
+        AnyHashable(0): "a",
+        AnyHashable(1): "b",
+      ],
+      maxIndex: 9
+    )
+
+    let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(merged))
+    if let merged {
+      #expect(Utils.overflowMaxIndex(merged) == 9)
+      #expect(merged[AnyHashable(0)] as? [String] == ["z", "a"])
+      #expect(merged[AnyHashable(1)] as? String == "b")
+    }
+  }
+
+  @Test("Utils.merge - overflow target merges array source by numeric index")
+  func testMergeOverflowTarget_ArraySourceIndexPath() async throws {
+    let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 2)
+    let source: [Any?] = ["x", nil, Undefined.instance]
+
+    let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(merged))
+    if let merged {
+      #expect(merged[AnyHashable(0)] as? [String] == ["a", "x"])
+      #expect(merged[AnyHashable(1)] is NSNull)
+      #expect(Utils.overflowMaxIndex(merged) == 2)
+    }
+  }
+
+  @Test("Utils.merge - overflow target appends sequence source by index")
+  func testMergeOverflowTarget_SequenceSourceAppendPath() async throws {
+    let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 0)
+    let source = OrderedSet<AnyHashable>([AnyHashable("x"), AnyHashable("y")])
+
+    let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(merged))
+    if let merged {
+      #expect((merged[AnyHashable(1)] as? AnyHashable)?.base as? String == "x")
+      #expect((merged[AnyHashable(2)] as? AnyHashable)?.base as? String == "y")
+      #expect(Utils.overflowMaxIndex(merged) == 2)
+    }
+  }
+
+  @Test("Utils.merge - nil target with overflow source seeds NSNull at index zero")
+  func testMergeNilTarget_OverflowSourceSeedsNSNull() async throws {
+    let source = Utils.markOverflow(
+      [
+        AnyHashable(0): "a",
+        AnyHashable(2): "c",
+        AnyHashable("k"): "v",
+      ],
+      maxIndex: 2
+    )
+
+    let merged = try Utils.merge(target: nil, source: source) as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(merged))
+    if let merged {
+      #expect(merged[AnyHashable(0)] is NSNull)
+      #expect(merged[AnyHashable(1)] as? String == "a")
+      #expect(merged[AnyHashable(3)] as? String == "c")
+      #expect(merged[AnyHashable("k")] as? String == "v")
+      #expect(Utils.overflowMaxIndex(merged) == 3)
+    }
+  }
+
+  @Test("Utils.merge - array target with plain dictionary source produces keyed map")
+  func testMergeArrayTarget_PlainDictionaryConversionPath() async throws {
+    let target: [Any] = ["left", "right"]
+    let source: [AnyHashable: Any] = [
+      AnyHashable("extra"): "value",
+      AnyHashable(3): "tail",
+    ]
+
+    let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+    #expect(merged != nil)
+    if let merged {
+      #expect(merged[AnyHashable(0)] as? String == "left")
+      #expect(merged[AnyHashable(1)] as? String == "right")
+      #expect(merged[AnyHashable("extra")] as? String == "value")
+      #expect(merged[AnyHashable(3)] as? String == "tail")
+    }
+  }
+
+  @Test("Utils.merge - iterative dictionary merge preserves larger source overflow max")
+  func testMergeIterativeDictionary_OverflowMaxReconciliation() async throws {
+    let target = Utils.markOverflow([AnyHashable(0): "a"], maxIndex: 0)
+    let source = Utils.markOverflow([AnyHashable(1): "b"], maxIndex: 10)
+
+    let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(merged))
+    if let merged {
+      #expect(merged[AnyHashable(1)] as? String == "b")
+      #expect(Utils.overflowMaxIndex(merged) == 10)
+    }
+  }
+
+  @Test("Utils.merge - does not propagate child overflow max into parent overflow metadata")
+  func testMergeNestedOverflowDoesNotInflateParentMax() async throws {
+    let parent: [AnyHashable: Any] = Utils.markOverflow(
+      [
+        AnyHashable(0): Utils.markOverflow(
+          [AnyHashable(100): "target-child"],
+          maxIndex: 100
+        )
+      ],
+      maxIndex: 0
+    )
+    let source: [AnyHashable: Any] = [
+      AnyHashable(0): Utils.markOverflow(
+        [AnyHashable(101): "source-child"],
+        maxIndex: 101
+      )
+    ]
+
+    let merged = try Utils.merge(target: parent, source: source) as? [AnyHashable: Any]
+    #expect(Utils.isOverflow(merged))
+
+    if let merged {
+      #expect(Utils.overflowMaxIndex(merged) == 0)
+
+      let appended = try Utils.merge(target: merged, source: "tail") as? [AnyHashable: Any]
+      #expect(Utils.isOverflow(appended))
+      #expect(appended?[AnyHashable(1)] as? String == "tail")
+      #expect(appended?[AnyHashable(102)] == nil)
+    }
+  }
+
+  @Test("Utils.refreshOverflowMaxIndex - recomputes max numeric key")
+  func testRefreshOverflowMaxIndex() async throws {
+    var dict: [AnyHashable: Any] = [
+      AnyHashable(0): "a",
+      AnyHashable(2): "b",
+      AnyHashable(NSNumber(value: 7)): "c",
+      AnyHashable("x"): "y",
+      AnyHashable(Utils.overflowKey): -1,
+    ]
+
+    Utils.refreshOverflowMaxIndex(&dict)
+    #expect(Utils.overflowMaxIndex(dict) == 7)
+  }
+
+  @Test("Utils.merge - handles deeply nested dictionary merges without recursion overflow")
+  func testMergeDeepDictionaries_NoRecursionOverflow() async throws {
+    let depth = 1_500
+
+    var target: [String: Any] = ["left": "a"]
+    var source: [String: Any] = ["right": "b"]
+    for _ in 0..<depth {
+      target = ["p": target]
+      source = ["p": source]
+    }
+
+    let merged = try Utils.merge(target: target, source: source) as? [AnyHashable: Any]
+    #expect(merged != nil)
+
+    var node: Any? = merged
+    var traversed = 0
+    while traversed < depth {
+      guard let dict = node as? [AnyHashable: Any] else {
+        Issue.record("Expected dictionary at depth \(traversed)")
+        return
+      }
+      guard let next = dict[AnyHashable("p")] else {
+        Issue.record("Missing 'p' key at depth \(traversed)")
+        return
+      }
+      node = next
+      traversed += 1
+    }
+
+    let leaf = node as? [AnyHashable: Any]
+    #expect(leaf?[AnyHashable("left")] as? String == "a")
+    #expect(leaf?[AnyHashable("right")] as? String == "b")
+  }
+
+  // MARK: - Utils.interpretNumericEntities tests
+
+  @Test("Utils.interpretNumericEntities - returns input unchanged when there are no entities")
+  func testInterpretNumericEntitiesNoEntities() async throws {
+    #expect(Utils.interpretNumericEntities("hello world") == "hello world")
+    #expect(Utils.interpretNumericEntities("100% sure") == "100% sure")
+  }
+
+  @Test("Utils.interpretNumericEntities - decodes a single decimal entity")
+  func testInterpretNumericEntitiesSingleDecimal() async throws {
+    #expect(Utils.interpretNumericEntities("A = &#65;") == "A = A")
+    #expect(Utils.interpretNumericEntities("&#48;&#49;&#50;") == "012")
+  }
+
+  @Test("Utils.interpretNumericEntities - decodes multiple entities in a sentence")
+  func testInterpretNumericEntitiesMultipleEntities() async throws {
+    let input = "Hello &#87;&#111;&#114;&#108;&#100;!"
+    let expected = "Hello World!"
+    #expect(Utils.interpretNumericEntities(input) == expected)
+  }
+
+  @Test(
+    "Utils.interpretNumericEntities - decodes surrogate pair represented as two decimal entities (emoji)"
+  )
+  func testInterpretNumericEntitiesSurrogatePairEmoji() async throws {
+    // U+1F4A9 (💩) as surrogate halves: 55357 (0xD83D), 56489 (0xDCA9)
+    #expect(Utils.interpretNumericEntities("&#55357;&#56489;") == "💩")
+  }
+
+  @Test("Utils.interpretNumericEntities - entities can appear at string boundaries")
+  func testInterpretNumericEntitiesStringBoundaries() async throws {
+    #expect(Utils.interpretNumericEntities("&#65;BC") == "ABC")
+    #expect(Utils.interpretNumericEntities("ABC&#33;") == "ABC!")
+    #expect(Utils.interpretNumericEntities("&#65;") == "A")
+  }
+
+  @Test("Utils.interpretNumericEntities - mixes literals and entities")
+  func testInterpretNumericEntitiesMixedLiteralsEntities() async throws {
+    // '=' is 61
+    #expect(Utils.interpretNumericEntities("x&#61;y") == "x=y")
+    #expect(Utils.interpretNumericEntities("x=&#61;y") == "x==y")
+  }
+
+  @Test("Utils.interpretNumericEntities - malformed or unsupported patterns remain unchanged")
+  func testInterpretNumericEntitiesMalformedPatternsUnchanged() async throws {
+    // No digits
+    #expect(Utils.interpretNumericEntities("&#;") == "&#;")
+    // Missing terminating semicolon
+    #expect(Utils.interpretNumericEntities("&#12") == "&#12")
+    // Space inside
+    #expect(Utils.interpretNumericEntities("&# 12;") == "&# 12;")
+    // Negative / non-digit after '#'
+    #expect(Utils.interpretNumericEntities("&#-12;") == "&#-12;")
+    // Mixed garbage
+    #expect(Utils.interpretNumericEntities("&#+;") == "&#+;")
+  }
+
+  @Test("Utils.interpretNumericEntities - out-of-range code points remain unchanged")
+  func testInterpretNumericEntitiesOutOfRangeUnchanged() async throws {
+    // Max valid is 0x10FFFF (1114111). One above should be left as literal.
+    #expect(Utils.interpretNumericEntities("&#1114112;") == "&#1114112;")
+  }
+
+  @Test("Utils.interpretNumericEntities - hex form basic cases (lower/upper X and hex digits)")
+  func testInterpretNumericEntitiesHexBasicCases() async throws {
+    // lower/upper X supported
+    #expect(Utils.interpretNumericEntities("&#x41;") == "A")
+    #expect(Utils.interpretNumericEntities("&#X41;") == "A")
+    // sequence of hex entities
+    #expect(Utils.interpretNumericEntities("&#x41;&#x42;&#x43;") == "ABC")
+    // lowercase hex digits
+    #expect(Utils.interpretNumericEntities("&#x4a;") == "J")  // 0x4A = 'J'
+  }
+
+  @Test("Utils.interpretNumericEntities - hex form handles supplementary planes and surrogate halves")
+  func testInterpretNumericEntitiesHexSupplementary() async throws {
+    // Single hex entity in supplementary plane
+    #expect(Utils.interpretNumericEntities("&#x1F4A9;") == "💩")
+    #expect(Utils.interpretNumericEntities("&#x1F600;") == "😀")
+    // Surrogate halves expressed in hex pair up
+    #expect(Utils.interpretNumericEntities("&#xD83D;&#xDCA9;") == "💩")
+    #expect(Utils.interpretNumericEntities("&#xD83D;&#xDE00;") == "😀")
+  }
+
+  @Test("Utils.interpretNumericEntities - hex boundaries and invalid remain literal")
+  func testInterpretNumericEntitiesHexBoundariesAndInvalid() async throws {
+    // Highest valid scalar decodes
+    let maxScalar = String(UnicodeScalar(0x10FFFF)!)
+    #expect(Utils.interpretNumericEntities("&#x10FFFF;") == maxScalar)
+    // One past max remains literal
+    #expect(Utils.interpretNumericEntities("&#x110000;") == "&#x110000;")
+    // Missing digits and bad hex stay literal
+    #expect(Utils.interpretNumericEntities("&#x;") == "&#x;")
+    #expect(Utils.interpretNumericEntities("&#xZZ;") == "&#xZZ;")
+  }
+
+  @Test("Utils.interpretNumericEntities - hex entities in context")
+  func testInterpretNumericEntitiesHexInContext() async throws {
+    // '=' is 0x3D
+    #expect(Utils.interpretNumericEntities("x&#x3D;y") == "x=y")
+    // mixed case and multiple
+    #expect(Utils.interpretNumericEntities("&#x65;&#88;&#x63;") == "eXc")
+    // boundaries
+    #expect(Utils.interpretNumericEntities("&#x41;BC") == "ABC")
+    #expect(Utils.interpretNumericEntities("ABC&#x21;") == "ABC!")
+  }
+
+  @Test("Utils.interpretNumericEntities - mixed base surrogate halves")
+  func testInterpretNumericEntitiesMixedSurrogates() async throws {
+    // High surrogate decimal, low surrogate hex
+    #expect(Utils.interpretNumericEntities("&#55357;&#xDCA9;") == "💩")
+    // High surrogate hex, low surrogate decimal
+    #expect(Utils.interpretNumericEntities("&#xD83D;&#56489;") == "💩")
+  }
+
+  // MARK: - Utils.apply tests
+
+  @Test("Utils.apply - apply on scalar and list")
+  func testApplyScalarAndList() async throws {
+    let scalarResult = Utils.apply(3) { (x: Int) in x * 2 } as? Int
+    #expect(scalarResult == 6)
+
+    let listResult = Utils.apply([1, 2]) { (x: Int) in x + 1 } as? [Int]
+    #expect(listResult == [2, 3])
+  }
+
+  // MARK: - Utils.isNonNullishPrimitive and isEmpty tests
+
+  @Test(
+    "Utils.isNonNullishPrimitive - treats URL as primitive, honors skipNulls for empty string"
+  )
+  func testIsNonNullishPrimitiveUrlAndEmptyString() async throws {
+    #expect(Utils.isNonNullishPrimitive(URL(string: "https://example.com")!) == true)
+    #expect(Utils.isNonNullishPrimitive(URL(string: "https://example.com")!, skipNulls: true) == true)
+    #expect(Utils.isNonNullishPrimitive("", skipNulls: true) == false)
+  }
+
+  @Test("Utils.isNonNullishPrimitive - generic arrays and dictionaries are not primitives")
+  func testIsNonNullishPrimitive_GenericContainersFallback() async throws {
+    let intArray = [1, 2, 3]
+    let intDict = [1: "one", 2: "two"]
+
+    #expect(Utils.isNonNullishPrimitive(intArray) == false)
+    #expect(Utils.isNonNullishPrimitive(intDict) == false)
+    // Repeat to exercise cached lookup path.
+    #expect(Utils.isNonNullishPrimitive(intArray) == false)
+    #expect(Utils.isNonNullishPrimitive(intDict) == false)
+  }
+
+  @Test("Utils.isEmpty - empty collections and maps")
+  func testIsEmptyCollectionsAndMaps() async throws {
+    let emptyDict: [String: Any?] = [:]
+    let emptyOrderedStrings: OrderedDictionary<String, Any> = [:]
+    var emptyOrderedHashable: OrderedDictionary<AnyHashable, Any> = [:]
+    #expect(Utils.isEmpty(nil as Any?) == true)
+    #expect(Utils.isEmpty(emptyDict) == true)
+    #expect(Utils.isEmpty(emptyOrderedStrings) == true)
+    #expect(Utils.isEmpty(emptyOrderedHashable) == true)
+    emptyOrderedHashable[AnyHashable("filled")] = 1
+    #expect(Utils.isEmpty(emptyOrderedHashable) == false)
+
+    let dict: [AnyHashable: Any] = [1: "value"]
+    #expect(Utils.isEmpty(dict) == false)
+  }
+
+  @Test("Utils.decode - decodes ISO-8859-1 percent bytes via regex branch")
+  func testDecodeIsoLatin1RegexPath() async throws {
+    let input = "%E4%F6%FC+encoded"
+    let decoded = Utils.decode(input, charset: .isoLatin1)
+    #expect(decoded == "äöü encoded")
+  }
+
+  // MARK: - Utils.deepBridgeToAnyIterative
+
+  // We keep TWO tests on purpose:
+  //
+  // 1) `testDecode_DeepMaps_NoTimeout_Safe`
+  //    - Runs on a worker thread (no @MainActor), with a conservative depth.
+  //    - Goal: cover normal decode + bridge path without tripping ARC’s recursive deinit.
+  //    - If this ever fails with EXC_BAD_ACCESS in `Swift._DictionaryStorage.deinit`,
+  //      reduce `depth` or investigate changes that reintroduced recursion.
+  //
+  // 2) `testDecode_DeepMaps_VeryDeep_Main` (@MainActor, DEBUG-only)
+  //    - Stress test for extremely deep single-key chains (e.g. > 3k).
+  //    - We run it on the main thread because the main thread typically has a larger stack.
+  //      Even though `deepBridgeToAnyIterative` is iterative, ARC can still deallocate
+  //      long linear dictionary chains recursively, which can blow the smaller stacks
+  //      of worker threads.
+  //    - Sanitizers (ASan/TSan/UBSan), Guard Malloc, or Malloc Stack Logging reduce headroom
+  //      and may cause this test to fail at lower depths—adjust `depth` accordingly.
+  //
+  // Notes:
+  // - Typical crash signature when stack headroom is exhausted:
+  //     EXC_BAD_ACCESS in `Swift._DictionaryStorage.deinit` with a long repeating backtrace.
+  // - If the stress test flakes in CI, either lower `depth`, make it @MainActor,
+  //   or disable sanitizers for this test target.
+  // - Search terms if you’re curious: “Swift recursive deallocation dictionary stack overflow”.
+  //
+  // These tests ensure the bridging code stays non-recursive and robust for deep chains,
+  // while keeping CI stable.
+  @Test("deep maps do not time out (safe depth)")
+  func testDecode_DeepMaps_NoTimeout_Safe() throws {
+    /// Keep the worker-thread safety test aligned with production's main-drop heuristic.
+    let depth = Qs.MAIN_DROP_THRESHOLD
+    var s = "foo"
+    for _ in 0..<depth { s += "[p]" }
+    s += "=bar"
+
+    let r = try Qs.decode(s, options: .init(depth: depth))
+    #expect(r.keys.contains("foo"))
+  }
+
+  @Test("Utils.compact removes Undefined entries and normalizes nested containers")
+  func utils_compact_removesUndefined() {
+    let undefined = Undefined.instance
+
+    // Dictionary branch: drop undefined keys, keep others intact
+    var dictRoot: [String: Any?] = [
+      "dict": ["keep": "value", "drop": undefined] as [String: Any?]
+    ]
+    let dictCompacted = Utils.compact(&dictRoot, allowSparseLists: false)
+    if let dict = dictCompacted["dict"] as? [String: Any?] {
+      #expect(dict["drop"] == nil)
+      #expect(dict["keep"] as? String == "value")
+    } else {
+      Issue.record("Expected dictionary branch result")
+    }
+
+    // Array branch: remove Undefined, recurse into dictionaries and arrays
+    var arrayRoot: [String: Any?] = [
+      "array": [
+        undefined,
+        ["nestedDrop": undefined, "nestedKeep": "ok"] as [String: Any?],
+        [undefined, "leaf"] as [Any],
+        "end",
+      ] as [Any]
+    ]
+    let arrayCompacted = Utils.compact(&arrayRoot, allowSparseLists: false)
+    if let array = arrayCompacted["array"] as? [Any] {
+      #expect(array.count == 3)
+      #expect(!array.contains { $0 is Undefined })
+      let nestedDict = array.first { $0 is [String: Any?] } as? [String: Any?]
+      #expect(nestedDict?["nestedDrop"] == nil)
+      #expect(nestedDict?["nestedKeep"] as? String == "ok")
+    } else {
+      Issue.record("Expected array branch result")
+    }
+
+    // Optional-array branch: nil → NSNull, Undefined removed
+    var optionalRoot: [String: Any?] = [
+      "optional": [Optional<Any>.none, Optional<Any>.some(undefined), Optional<Any>.some("tail")] as [Any?]
+    ]
+    let optionalCompacted = Utils.compact(&optionalRoot, allowSparseLists: false)
+    if let optional = optionalCompacted["optional"] as? [Any] {
+      #expect(!Utils.containsUndefined(optional))
+      #expect(optional.count == 2)
+      #expect(optional.first is NSNull)
+      #expect(optional.last as? String == "tail")
+    } else {
+      Issue.record("Expected optional array branch result")
+    }
+  }
+
+  @Test("Utils.compact preserves nil entries in typed dictionaries while dropping Undefined")
+  func utils_compact_preservesNilInTypedDictionaries() {
+    var root: [String: Any?] = [
+      "typed": [1: Optional<String>.none] as [Int: String?],
+      "drop": Undefined.instance,
+    ]
+
+    let compacted = Utils.compact(&root, allowSparseLists: false)
+    #expect(compacted.keys.contains("drop") == false)
+
+    if let typed = compacted["typed"] as? [String: Any?] {
+      #expect(typed.keys.contains("1"))
+      let preservesNilEntry: Bool
+      if case .some(.none) = typed["1"] {
+        preservesNilEntry = true
+      } else {
+        preservesNilEntry = false
+      }
+      if !preservesNilEntry {
+        Issue.record("Expected typed dictionary nil entry to be preserved")
+      }
+    } else {
+      Issue.record("Expected compacted typed dictionary")
+    }
+  }
+
+  @Test("Utils.compact preserves sparse lists when requested")
+  func utils_compact_allowSparseKeepsPlaceholders() {
+    let undefined = Undefined.instance
+    var root: [String: Any?] = [
+      "list": [undefined, "x"],
+      "optionalList": [Optional<Any>.some(undefined), Optional<Any>.some("y")],
+    ]
+
+    let compacted = Utils.compact(&root, allowSparseLists: true)
+
+    if let list = compacted["list"] as? [Any] {
+      #expect(list.first is NSNull)
+      #expect(list.last as? String == "x")
+    }
+
+    if let optionalList = compacted["optionalList"] as? [Any] {
+      #expect(optionalList.first is NSNull)
+      #expect(optionalList.last as? String == "y")
+    }
+  }
+
+  @Test("Utils.compactToAny drops Undefined and normalizes optionals")
+  func utils_compactToAny_normalizes() {
+    let undefined = Undefined.instance
+    let input: [String: Any?] = [
+      "drop": undefined,
+      "dict": ["inner": undefined, "keep": "value"],
+      "array": [Optional<Any>.some(undefined), Optional<Any>.none, Optional<Any>.some("z")],
+    ]
+
+    let out = Utils.compactToAny(input, allowSparseLists: true)
+
+    #expect(out["drop"] == nil)
+
+    if let dict = out["dict"] as? [String: Any] {
+      #expect(dict["inner"] == nil)
+      #expect(dict["keep"] as? String == "value")
+    } else {
+      Issue.record("dict missing after compactToAny")
+    }
+
+    if let array = out["array"] as? [Any] {
+      #expect(array.first is NSNull)
+      #expect(array[1] is NSNull)
+      #expect(array.last as? String == "z")
+    } else {
+      Issue.record("array missing after compactToAny")
+    }
+  }
+
+  @Test("Utils.compactToAny normalizes nested optional arrays")
+  func utils_compactToAny_nestedOptionals() {
+    let input: [String: Any?] = [
+      "array": [Optional<Any>.none, [Optional<Any>.none, Optional<Any>.some("value")]]
+    ]
+
+    let out = Utils.compactToAny(input, allowSparseLists: true)
+    if let array = out["array"] as? [Any] {
+      #expect(array.first is NSNull)
+      if let nested = array.dropFirst().first.flatMap(anyArray) {
+        #expect(nested.first is NSNull)
+        #expect(nested.last as? String == "value")
+      } else {
+        Issue.record("Expected nested array after normalization")
+      }
+    } else {
+      Issue.record("array missing after compactToAny nested normalization")
+    }
+  }
+
+  @Test("Utils.compact handles optional arrays when allowSparse=true")
+  func utils_compact_optionalArrays() async throws {
+    let undefined = Undefined.instance
+    let optionalArray: [Any?] = ["first", nil, undefined]
+    var root: [String: Any?] = ["opt": optionalArray]
+
+    let compacted = Utils.compact(&root, allowSparseLists: true)
+    if let arr = compacted["opt"] as? [Any] {
+      #expect(arr.count == 3)
+      #expect(arr[0] as? String == "first")
+      #expect(arr[1] is NSNull)
+      #expect(arr[2] is NSNull)
+    } else {
+      Issue.record("optional array branch missing")
+    }
+  }
+
+  @Test("Utils.compact normalizes nested optional arrays with allowSparse=true")
+  func utils_compact_nestedOptionalArrays() {
+    let undefined = Undefined.instance
+    let nested: [Any?] = ["inner", nil, undefined]
+    var root: [String: Any?] = ["opt": [nested, nil, undefined]]
+
+    let compacted = Utils.compact(&root, allowSparseLists: true)
+    if let arr = compacted["opt"] as? [Any] {
+      #expect(arr.count == 3)
+      let inner = anyArray(arr[0])
+      #expect(inner?.count == 3)
+      #expect(inner?[0] as? String == "inner")
+      #expect(inner?[1] is NSNull)
+      #expect(inner?[2] is NSNull)
+      #expect(arr[1] is NSNull)
+      #expect(arr[2] is NSNull)
+    } else {
+      Issue.record("nested optional array not bridged")
+    }
+  }
+
+  @Test("Utils.compact visits Swift [Any] arrays and preserves NSNull placeholders")
+  func utils_compact_swiftArrayBranch() {
+    let undefined = Undefined.instance
+    var root: [String: Any?] = [
+      "list": [Any](arrayLiteral: "value", undefined, ["drop": undefined])
+    ]
+
+    let compacted = Utils.compact(&root, allowSparseLists: true)
+    if let list = compacted["list"] as? [Any] {
+      #expect(list.count == 3)
+      #expect(list[0] as? String == "value")
+      #expect(list[1] is NSNull)
+      let dict = list[2] as? [String: Any?]
+      #expect(dict?.isEmpty == true)
+    } else {
+      Issue.record("Swift [Any] branch not exercised")
+    }
+  }
+
+  @Test("Utils.compact prunes Undefined in Swift [Any] when allowSparse=false")
+  func utils_compact_swiftArrayDropsUndefined_noSparse() {
+    let undefined = Undefined.instance
+    var root: [String: Any?] = [
+      "list": [Any](arrayLiteral: "keep", undefined, ["inner": undefined])
+    ]
+
+    let compacted = Utils.compact(&root)
+    if let list = compacted["list"] as? [Any] {
+      #expect(list.count == 2)
+      #expect(list[0] as? String == "keep")
+      let nested = list[1] as? [String: Any?]
+      #expect(nested?.isEmpty == true)
+    } else {
+      Issue.record("Swift [Any] allowSparse=false branch not exercised")
+    }
+  }
+
+  @Test("Utils.compact handles Swift [Any] containing nested [Any?]")
+  func utils_compact_swiftArrayNestedOptionals() {
+    let nested: [Any?] = ["inner", nil]
+    var root: [String: Any?] = ["list": [Any](arrayLiteral: nested)]
+
+    let compacted = Utils.compact(&root, allowSparseLists: true)
+    if let list = compacted["list"] as? [Any], let inner = anyArray(list[0]) {
+      #expect(inner.count == 2)
+      #expect(inner[0] as? String == "inner")
+      #expect(inner[1] is NSNull)
+    } else {
+      Issue.record("Nested optional arrays not compacted as expected")
+    }
+  }
+
+  @Test("Utils.compact normalizes optional elements that wrap [Any?] payloads")
+  func utils_compact_optionalElementsWrappingOptionalArrays() {
+    let undefined = Undefined.instance
+    let inner: [Any?] = [undefined, "leaf", nil]
+    var root: [String: Any?] = ["list": [Any?](arrayLiteral: inner, nil)]
+
+    let compacted = Utils.compact(&root, allowSparseLists: true)
+    if let list = compacted["list"] as? [Any] {
+      #expect(list.count == 2)
+      let nested = anyArray(list[0])
+      #expect(nested?.contains { ($0 as? String) == "leaf" } == true)
+      #expect(nested?.contains { $0 is NSNull } == true)
+      #expect(list.last is NSNull)
+    } else {
+      Issue.record("Expected compacted list for nested optional arrays")
+    }
+  }
+
+  @Test("Utils.compact handles Swift [Any] arrays without sparse placeholders")
+  func utils_compact_swiftAnyDense() {
+    let undefined = Undefined.instance
+    let nested: [String: Any?] = ["child": undefined]
+    var root: [String: Any?] = [
+      "list": [Any]([undefined, nested, "tail"])
+    ]
+
+    let compacted = Utils.compact(&root)
+    if let list = compacted["list"] as? [Any] {
+      #expect(list.count == 2)
+      #expect((list[0] as? [String: Any?])?.isEmpty == true)
+      #expect(list[1] as? String == "tail")
+    } else {
+      Issue.record("Dense Swift [Any] branch not compacted as expected")
+    }
+  }
+
+  @Test("Utils.compact preserves Undefined placeholders in Swift [Any] when allowSparse=true")
+  func utils_compact_swiftAnySparse() {
+    let undefined = Undefined.instance
+    var root: [String: Any?] = ["list": [Any]([undefined, "keep"])]
+
+    let compacted = Utils.compact(&root, allowSparseLists: true)
+    if let list = compacted["list"] as? [Any] {
+      #expect(list.count == 2)
+      #expect(list.first is NSNull)
+      #expect(list.last as? String == "keep")
+    } else {
+      Issue.record("Sparse Swift [Any] branch not compacted as expected")
+    }
+  }
+
+  @Test("Utils.compact recurses optional arrays nested inside optional elements")
+  func utils_compact_optionalArraysNestedOptionalElements() {
+    let undefined = Undefined.instance
+    let inner: [Any?] = [undefined, "leaf", nil]
+    let optionalInner: [Any?]? = inner
+    var root: [String: Any?] = ["list": [Any?](arrayLiteral: optionalInner, nil)]
+
+    let compacted = Utils.compact(&root, allowSparseLists: true)
+    if let list = compacted["list"] as? [Any], let nested = anyArray(list[0]) {
+      #expect(nested.count == 3)
+      #expect(nested.first is NSNull)
+      #expect(nested[1] as? String == "leaf")
+      #expect(nested.last is NSNull)
+      #expect(list.last is NSNull)
+    } else {
+      Issue.record("Nested optional arrays branch not exercised")
+    }
+  }
+
+  @Test("Utils.compact handles Foundation arrays and nested optionals across sparse modes")
+  func utils_compact_foundationAndNestedBranches() {
+    let undefined = Undefined.instance
+    let nestedOptional: [Any?] = [
+      undefined,
+      ["deep": undefined, "keep": "value"] as [String: Any?],
+      nil,
+      "leaf",
+    ]
+    let optionalList: [Any?] = [undefined, nestedOptional, undefined]
+    let foundationArray: NSArray = [undefined, ["inner": undefined], nestedOptional, "scalar"]
+    let plainArray: [Any] = [undefined, ["inner": undefined], "plain"]
+
+    var sparseRoot: [String: Any?] = [
+      "drop": undefined,
+      "foundation": foundationArray,
+      "optional": optionalList,
+      "plain": plainArray,
+    ]
+
+    let sparse = Utils.compact(&sparseRoot, allowSparseLists: true)
+    #expect(sparse["drop"] == nil)
+
+    if let foundation = sparse["foundation"] as? [Any] {
+      #expect(foundation.first is NSNull)
+      let emptied = foundation.compactMap(compactDict).first
+      #expect(emptied?.isEmpty == true)
+      let nested = foundation.compactMap(anyArray).first
+      #expect(nested?.first is NSNull)
+    } else {
+      Issue.record("Foundation-backed array branch not exercised")
+    }
+
+    if let optional = sparse["optional"] as? [Any] {
+      #expect(optional.first is NSNull)
+      if let nested: [Any] = optional.dropFirst().first.flatMap(anyArray) {
+        #expect(nested.first is NSNull)
+        let nestedDict = nested.compactMap(compactDict).first
+        #expect(nestedDict?.keys.contains("keep") == true)
+        #expect(nested.last as? String == "leaf")
+      } else {
+        Issue.record("Nested optional array not normalized")
+      }
+      #expect(optional.last is NSNull)
+    } else {
+      Issue.record("Optional array branch not exercised")
+    }
+
+    if let plain = sparse["plain"] as? [Any] {
+      #expect(plain.first is NSNull)
+      #expect(plain.contains { ($0 as? String) == "plain" })
+    } else {
+      Issue.record("Swift [Any] branch not exercised")
+    }
+
+    var denseRoot: [String: Any?] = [
+      "foundation": foundationArray,
+      "optional": optionalList,
+      "plain": plainArray,
+    ]
+
+    let dense = Utils.compact(&denseRoot)
+    if let foundationDense = dense["foundation"] as? [Any] {
+      #expect(!foundationDense.contains { $0 is NSNull })
+    } else {
+      Issue.record("Foundation array (no sparse) not exercised")
+    }
+
+    if let optionalDense = dense["optional"] as? [Any] {
+      #expect(optionalDense.contains { $0 is NSNull } == false)
+    } else {
+      Issue.record("Optional array (no sparse) not exercised")
+    }
+
+    if let plainDense = dense["plain"] as? [Any] {
+      #expect(plainDense.contains { $0 is NSNull } == false)
+    } else {
+      Issue.record("Swift [Any] (no sparse) not exercised")
+    }
+  }
+
+  @Test("Utils.compactToAny normalizes dictionary elements in arrays and explicit nil roots")
+  func utils_compactToAny_dictElementsAndNilRoots() {
+    let undefined = Undefined.instance
+    let nestedDict: [String: Any?] = [
+      "inner": undefined,
+      "value": 9,
+    ]
+    let nestedOptional: [Any?] = [undefined, ["deep": undefined, "keep": "leaf"] as [String: Any?]]
+    let input: [String: Any?] = [
+      "list": [undefined, nestedDict, nestedOptional, nil],
+      "noneRoot": nil,
+    ]
+
+    let sparse = Utils.compactToAny(input, allowSparseLists: true)
+    if let list = sparse["list"] as? [Any] {
+      #expect(list.count == 4)
+      #expect(list[0] is NSNull)
+
+      let dict = list[1] as? [String: Any]
+      #expect(dict?["inner"] == nil)
+      #expect(dict?["value"] as? Int == 9)
+
+      if let nested = list[2] as? [Any] {
+        #expect(nested.first is NSNull)
+        let tail = nested.last as? [String: Any]
+        #expect(tail?["keep"] as? String == "leaf")
+        #expect(tail?["deep"] == nil)
+      } else {
+        Issue.record("Expected nested optional array normalization")
+      }
+
+      #expect(list[3] is NSNull)
+    } else {
+      Issue.record("Sparse list normalization failed")
+    }
+
+    #expect(sparse["noneRoot"] is NSNull)
+
+    let dense = Utils.compactToAny(input, allowSparseLists: false)
+    if let denseList = dense["list"] as? [Any] {
+      #expect(!denseList.contains { $0 is Undefined })
+      #expect(denseList.contains { $0 is NSNull })
+    } else {
+      Issue.record("Dense list normalization failed")
+    }
+  }
+
+  @Test("Utils.compactToAny normalizes Foundation and AnyHashable containers inside arrays")
+  func utils_compactToAny_arrayElementsBridgeFoundationAndHashableContainers() {
+    let input: [String: Any?] = [
+      "list": [
+        NSDictionary(dictionary: [1: "x", "drop": Undefined.instance]),
+        [AnyHashable(2): "y"] as [AnyHashable: Any],
+        NSArray(array: [Undefined.instance, "z"]),
+      ]
+    ]
+
+    let sparse = Utils.compactToAny(input, allowSparseLists: true)
+    if let list = sparse["list"] as? [Any] {
+      #expect(list.count == 3)
+
+      let foundationDict = list.first as? [String: Any]
+      #expect(foundationDict?["1"] as? String == "x")
+      #expect(foundationDict?["drop"] == nil)
+
+      let hashableDict = list.dropFirst().first as? [String: Any]
+      #expect(hashableDict?["2"] as? String == "y")
+
+      let foundationArray = list.dropFirst(2).first as? [Any]
+      #expect(foundationArray?.count == 2)
+      #expect(foundationArray?.first is NSNull)
+      #expect(foundationArray?.dropFirst().first as? String == "z")
+    } else {
+      Issue.record("Expected normalized list from compactToAny")
+    }
+
+    let dense = Utils.compactToAny(input, allowSparseLists: false)
+    if let list = dense["list"] as? [Any] {
+      #expect(list.count == 3)
+
+      let foundationArray = list.dropFirst(2).first as? [Any]
+      #expect(foundationArray?.count == 1)
+      #expect(foundationArray?.first as? String == "z")
+    } else {
+      Issue.record("Expected dense normalized list from compactToAny")
+    }
+  }
+
+  @Test("Utils.compact and compactToAny normalize deep Foundation and pure-Swift containers consistently")
+  func utils_compact_deepFoundationMatchesPureSwift() {
+    let undefined = Undefined.instance
+    let swiftNested: [Any] = [
+      [1: [undefined, "x"]] as [Int: [Any]],
+      ["inner": [undefined, ["deep": undefined, "keep": "leaf"] as [String: Any?], nil] as [Any?]]
+        as [String: [Any?]],
+    ]
+    let foundationNested = NSArray(array: [
+      NSDictionary(dictionary: [1: NSArray(array: [undefined, "x"])]),
+      NSDictionary(dictionary: [
+        "inner": NSArray(array: [
+          undefined,
+          NSDictionary(dictionary: ["deep": undefined, "keep": "leaf"]),
+          NSNull(),
+        ])
+      ]),
+    ])
+
+    func expectDeepNormalizedShape(_ value: Any?, label: String) {
+      guard let array = value as? [Any] else {
+        Issue.record("Expected normalized array for \(label), got: \(String(describing: value))")
+        return
+      }
+
+      guard array.count == 2 else {
+        Issue.record("Expected 2 elements for \(label), got \(array.count)")
+        return
+      }
+
+      guard let first = anyDict(array.first) else {
+        Issue.record("Expected first dictionary for \(label)")
+        return
+      }
+      guard let firstInner = anyArray(first["1"]) else {
+        Issue.record("Expected first inner array for \(label)")
+        return
+      }
+      guard firstInner.count == 2 else {
+        Issue.record("Expected first inner array count 2 for \(label), got \(firstInner.count)")
+        return
+      }
+      #expect(firstInner.first is NSNull)
+      #expect(firstInner.dropFirst().first as? String == "x")
+
+      guard let second = anyDict(array.dropFirst().first) else {
+        Issue.record("Expected second dictionary for \(label)")
+        return
+      }
+      guard let secondInner = anyArray(second["inner"]) else {
+        Issue.record("Expected second inner array for \(label)")
+        return
+      }
+      guard secondInner.count == 3 else {
+        Issue.record("Expected second inner array count 3 for \(label), got \(secondInner.count)")
+        return
+      }
+      #expect(secondInner.first is NSNull)
+      guard let deepDict = anyDict(secondInner.dropFirst().first) else {
+        Issue.record("Expected deep dictionary for \(label)")
+        return
+      }
+      #expect(deepDict["deep"] == nil)
+      #expect(deepDict["keep"] as? String == "leaf")
+      #expect(secondInner.dropFirst(2).first is NSNull)
+    }
+
+    var compactRoot: [String: Any?] = [
+      "swift": swiftNested,
+      "foundation": foundationNested,
+    ]
+    let compacted = Utils.compact(&compactRoot, allowSparseLists: true)
+    expectDeepNormalizedShape(compacted["swift"] ?? nil, label: "compact swift")
+    expectDeepNormalizedShape(compacted["foundation"] ?? nil, label: "compact foundation")
+
+    let compactedAny = Utils.compactToAny(
+      [
+        "swift": swiftNested,
+        "foundation": foundationNested,
+      ],
+      allowSparseLists: true
+    )
+    expectDeepNormalizedShape(compactedAny["swift"], label: "compactToAny swift")
+    expectDeepNormalizedShape(compactedAny["foundation"], label: "compactToAny foundation")
+  }
+
+  @Test("Utils.compact and compactToAny handle deep typed and Foundation chains")
+  func utils_compact_deepExactContainerChains() {
+    let depth = Qs.MAIN_DROP_THRESHOLD + 50
+    let undefined = Undefined.instance
+
+    func buildTypedChain(depth: Int, leaf: Any) -> Any {
+      var current: Any = leaf
+      for _ in 0..<depth {
+        current = [1: current] as [Int: Any]
+      }
+      return current
+    }
+
+    func buildFoundationChain(depth: Int, leaf: Any) -> Any {
+      var current: Any = leaf
+      for _ in 0..<depth {
+        current = NSDictionary(dictionary: [1: current])
+      }
+      return current
+    }
+
+    func descendStringifiedChain(_ value: Any?, depth: Int) -> [String: Any]? {
+      var current = value
+      for _ in 0..<depth {
+        current = anyDict(current)?["1"]
+      }
+      return anyDict(current)
+    }
+
+    let typedChain = buildTypedChain(
+      depth: depth,
+      leaf: ["keep": "typed", "drop": undefined] as [String: Any?]
+    )
+    let foundationChain = buildFoundationChain(
+      depth: depth,
+      leaf: NSDictionary(dictionary: ["keep": "foundation", "drop": undefined])
+    )
+
+    var compactRoot: [String: Any?] = [
+      "typed": typedChain,
+      "foundation": foundationChain,
+    ]
+    let compacted = Utils.compact(&compactRoot, allowSparseLists: false)
+
+    let compactedTypedLeaf = descendStringifiedChain(compacted["typed"] ?? nil, depth: depth)
+    #expect(compactedTypedLeaf?["keep"] as? String == "typed")
+    #expect(compactedTypedLeaf?["drop"] == nil)
+
+    let compactedFoundationLeaf = descendStringifiedChain(compacted["foundation"] ?? nil, depth: depth)
+    #expect(compactedFoundationLeaf?["keep"] as? String == "foundation")
+    #expect(compactedFoundationLeaf?["drop"] == nil)
+
+    let compactedAny = Utils.compactToAny(
+      [
+        "typed": typedChain,
+        "foundation": foundationChain,
+      ],
+      allowSparseLists: false
+    )
+
+    let compactedAnyTypedLeaf = descendStringifiedChain(compactedAny["typed"], depth: depth)
+    #expect(compactedAnyTypedLeaf?["keep"] as? String == "typed")
+    #expect(compactedAnyTypedLeaf?["drop"] == nil)
+
+    let compactedAnyFoundationLeaf = descendStringifiedChain(compactedAny["foundation"], depth: depth)
+    #expect(compactedAnyFoundationLeaf?["keep"] as? String == "foundation")
+    #expect(compactedAnyFoundationLeaf?["drop"] == nil)
+  }
+
+  @Test("Utils.compact and compactToAny tolerate Foundation self-cycles")
+  func utils_compact_foundationSelfCycles() throws {
+    #if os(Linux)
+      try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
+        #expect(
+          Bool(false),
+          Comment("Skipped: cannot safely build a cyclic Foundation container on Linux")
+        )
+      }
+    #else
+      let cyclicDict = NSMutableDictionary()
+      cyclicDict["self"] = cyclicDict
+      cyclicDict["leaf"] = "x"
+
+      var compactRoot: [String: Any?] = ["dict": cyclicDict]
+      let compacted = Utils.compact(&compactRoot, allowSparseLists: true)
+      if let dict = compacted["dict"] as? [String: Any?] {
+        #expect(dict["leaf"] as? String == "x")
+        #expect((dict["self"] ?? nil) is NSNull)
+      } else {
+        Issue.record("Expected compacted cyclic dictionary")
+      }
+
+      let compactedAny = Utils.compactToAny(["dict": cyclicDict], allowSparseLists: true)
+      if let dict = compactedAny["dict"] as? [String: Any] {
+        #expect(dict["leaf"] as? String == "x")
+        #expect(dict["self"] is NSNull)
+      } else {
+        Issue.record("Expected compactToAny cyclic dictionary")
+      }
+
+      let cyclicArray = NSMutableArray()
+      cyclicArray.add(cyclicArray)
+      cyclicArray.add("y")
+
+      var compactArrayRoot: [String: Any?] = ["array": cyclicArray]
+      let compactedArray = Utils.compact(&compactArrayRoot, allowSparseLists: true)
+      if let array = compactedArray["array"] as? [Any] {
+        #expect(array.count == 2)
+        #expect(array[0] is NSNull)
+        #expect(array[1] as? String == "y")
+      } else {
+        Issue.record("Expected compacted cyclic array")
+      }
+
+      let compactedAnyArray = Utils.compactToAny(["array": cyclicArray], allowSparseLists: true)
+      if let array = compactedAnyArray["array"] as? [Any] {
+        #expect(array.count == 2)
+        #expect(array[0] is NSNull)
+        #expect(array[1] as? String == "y")
+      } else {
+        Issue.record("Expected compactToAny cyclic array")
+      }
     #endif
+  }
 
-    @Test("dropOnMainThread eventually releases")
-    func DropOnMain_Releases() async {
-        weak var weakRef: AnyObject?
-        do {
-            let deep = [
-                "k": (0..<6000).reduce(into: ["p": Any?("x")]) { acc, _ in acc = ["p": acc] }
-            ]
-            let box = Holder(deep)
-            weakRef = box
-            Utils.dropOnMainThread(box)  // schedule last release on main
-        }
+  @Test("Utils.compact and compactToAny replace multi-step Foundation cycle back-edges with NSNull")
+  func utils_compact_foundationMultiStepCycle() throws {
+    #if os(Linux)
+      try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary cycles")) {
+        #expect(
+          Bool(false),
+          Comment("Skipped: cannot safely build cyclic Foundation containers on Linux")
+        )
+      }
+    #else
+      let root = NSMutableDictionary()
+      let middle = NSMutableDictionary()
+      let leaf = NSMutableDictionary()
+      root["b"] = middle
+      middle["c"] = leaf
+      leaf["d"] = root
+      leaf["keep"] = "x"
 
-        // Pump the main runloop a few times so the async release runs.
-        for _ in 0..<4 {
-            await MainActor.run {
-                RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.002))
-            }
-        }
+      var compactRoot: [String: Any?] = ["root": root]
+      let compacted = Utils.compact(&compactRoot, allowSparseLists: true)
+      let compactedRoot = compacted["root"] as? [String: Any?]
+      let compactedMiddle = compactedRoot?["b"] as? [String: Any?]
+      let compactedLeaf = compactedMiddle?["c"] as? [String: Any?]
+      #expect(compactedLeaf?["keep"] as? String == "x")
+      #expect((compactedLeaf?["d"] ?? nil) is NSNull)
 
-        #expect(weakRef == nil)
+      let compactedAny = Utils.compactToAny(["root": root], allowSparseLists: true)
+      let anyRoot = compactedAny["root"] as? [String: Any]
+      let anyMiddle = anyRoot?["b"] as? [String: Any]
+      let anyLeaf = anyMiddle?["c"] as? [String: Any]
+      #expect(anyLeaf?["keep"] as? String == "x")
+      #expect(anyLeaf?["d"] is NSNull)
+    #endif
+  }
+
+  @Test("Utils.containsUndefined detects sentinel in nested structures")
+  func utils_containsUndefined_detects() {
+    let undefined = Undefined.instance
+    let sample: [String: Any?] = [
+      "array": [undefined, "x"],
+      "dict": ["inner": undefined],
+    ]
+
+    #expect(Utils.containsUndefined(sample))
+
+    var compacted = sample
+    _ = Utils.compact(&compacted)
+    #expect(!Utils.containsUndefined(compacted))
+  }
+
+  @Test("Utils.containsUndefined inspects Swift [Any] roots")
+  func utils_containsUndefined_swiftArrayRoot() {
+    let payload: [Any] = ["value", Undefined.instance]
+    #expect(Utils.containsUndefined(payload))
+  }
+
+  @Test("Utils.containsUndefined detects boxed optional sentinels in Swift [Any]")
+  func utils_containsUndefined_boxedOptionalSwiftArrayRoot() {
+    let payload: [Any] = [Optional<Undefined>.some(Undefined.instance) as Any, "value"]
+    #expect(Utils.containsUndefined(payload))
+  }
+
+  @Test("Utils.containsUndefined inspects Foundation containers")
+  func utils_containsUndefined_foundationContainers() {
+    let payload = NSDictionary(dictionary: [
+      "array": NSArray(array: [Undefined.instance, "x"])
+    ])
+    #expect(Utils.containsUndefined(payload))
+  }
+
+  @Test("Utils.containsUndefined detects boxed optional sentinels in Foundation containers")
+  func utils_containsUndefined_boxedOptionalFoundationContainers() {
+    let payload = NSDictionary(dictionary: [
+      "array": NSArray(array: [Optional<Undefined>.some(Undefined.instance) as Any, "x"])
+    ])
+    #expect(Utils.containsUndefined(payload))
+  }
+
+  @Test("Utils.containsUndefined tolerates Foundation self-cycles")
+  func utils_containsUndefined_foundationSelfCycles() throws {
+    #if os(Linux)
+      try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
+        #expect(
+          Bool(false),
+          Comment("Skipped: cannot safely build a cyclic Foundation container on Linux")
+        )
+      }
+    #else
+      let cyclic = NSMutableDictionary()
+      cyclic["self"] = cyclic
+      #expect(!Utils.containsUndefined(cyclic))
+
+      cyclic["sentinel"] = Undefined.instance
+      #expect(Utils.containsUndefined(cyclic))
+    #endif
+  }
+
+  @Test("Utils.containsUndefined inspects typed Swift containers")
+  func utils_containsUndefined_typedSwiftContainers() {
+    let payload: [Int: [String: Undefined]] = [
+      1: ["drop": Undefined.instance]
+    ]
+    #expect(Utils.containsUndefined(payload))
+  }
+
+  @Test("Utils.containsUndefined reports true for direct sentinel input")
+  func utils_containsUndefined_directSentinel() {
+    #expect(Utils.containsUndefined(Undefined.instance))
+  }
+
+  @Test("Utils.estimateSingleKeyChainDepth traverses AnyHashable optional chains")
+  func utils_estimateSingleKeyChainDepth_optionalChain() {
+    let level2: [AnyHashable: Any?] = [AnyHashable("c"): nil]
+    let level1: [AnyHashable: Any?] = [AnyHashable("b"): level2]
+    let root: [AnyHashable: Any?] = [AnyHashable("a"): level1]
+    #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 3)
+  }
+
+  @Test("Utils.estimateSingleKeyChainDepth traverses AnyHashable non-optional chains")
+  func utils_estimateSingleKeyChainDepth_nonOptionalChain() {
+    let child: [AnyHashable: Any] = [AnyHashable(2): "end"]
+    let root: [AnyHashable: Any] = [AnyHashable(1): child]
+    #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
+  }
+
+  @Test("Utils.estimateSingleKeyChainDepth traverses typed Swift dictionary chains")
+  func utils_estimateSingleKeyChainDepth_typedSwiftChain() {
+    let child: [Int: String] = [2: "end"]
+    let root: [Int: [Int: String]] = [1: child]
+    #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
+  }
+
+  @Test("Utils.estimateSingleKeyChainDepth ignores overflow bookkeeping in AnyHashable dictionaries")
+  func utils_estimateSingleKeyChainDepth_ignoresOverflowMetadata() {
+    let child: [AnyHashable: Any] = [
+      AnyHashable("b"): "end",
+      AnyHashable(Utils.overflowKey): 9,
+    ]
+    let root: [AnyHashable: Any] = [
+      AnyHashable("a"): child,
+      AnyHashable(Utils.overflowKey): 3,
+    ]
+
+    #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
+  }
+
+  @Test("Utils.estimateSingleKeyChainDepth ignores overflow bookkeeping in OrderedDictionary chains")
+  func utils_estimateSingleKeyChainDepth_ignoresOverflowMetadataInOrderedDictionary() {
+    var child = OrderedDictionary<AnyHashable, Any>()
+    child[AnyHashable("b")] = "end"
+    child[AnyHashable(Utils.overflowKey)] = 9
+
+    var root = OrderedDictionary<AnyHashable, Any>()
+    root[AnyHashable("a")] = child
+    root[AnyHashable(Utils.overflowKey)] = 3
+
+    #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 2)
+  }
+
+  @Test("Utils.estimateSingleKeyChainDepth unwraps boxed optional dictionary links")
+  func utils_estimateSingleKeyChainDepth_boxedOptionalChain() {
+    let level2: [String: Any] = ["c": "end"]
+    let level1: [String: Any] = ["b": Optional<[String: Any]>.some(level2) as Any]
+    let root: [String: Any] = ["a": Optional<[String: Any]>.some(level1) as Any]
+    #expect(Utils.estimateSingleKeyChainDepth(root, cap: 10) == 3)
+  }
+
+  @Test("Utils.merge handles heterogeneous containers")
+  func utils_merge_coversBranches() throws {
+    let undefined = Undefined.instance
+
+    // [Any?] target merged with dictionary source
+    let targetArray: [Any?] = ["a", nil, undefined]
+    let sourceDict: [AnyHashable: Any] = ["extra": "value"]
+    let merged1 = try Utils.merge(target: targetArray, source: sourceDict, options: .init())
+    #expect(merged1 is [AnyHashable: Any])
+    if let mergedDict1 = merged1 as? [AnyHashable: Any] {
+      #expect(mergedDict1["extra"] as? String == "value")
+      #expect(mergedDict1[0] as? String == "a")
     }
+
+    // Dictionary target merged with array source
+    let merged2 = try Utils.merge(target: merged1, source: [undefined, "tail"], options: .init())
+    #expect(merged2 is [AnyHashable: Any])
+
+    // OrderedSet union and sequence merging
+    let ordered = OrderedSet<AnyHashable>([1, 2])
+    let mergedOrdered = try Utils.merge(target: ordered, source: OrderedSet([2, 3]), options: .init())
+    #expect(mergedOrdered is OrderedSet<AnyHashable>)
+    if let orderedResult = mergedOrdered as? OrderedSet<AnyHashable> {
+      #expect(!orderedResult.isEmpty)
+    }
+
+    let orderedWithSequence = try Utils.merge(
+      target: OrderedSet(["a"]),
+      source: [undefined, "b"],
+      options: .init()
+    )
+    if let orderedSequenceArray = orderedWithSequence as? [Any?] {
+      #expect(orderedSequenceArray.contains { ($0 as? String) == "b" })
+    }
+
+    // Set union and sequence merging
+    let mergedSet = try Utils.merge(target: Set([1, 2]), source: [undefined, 3], options: .init())
+    if let setResult = mergedSet as? Set<AnyHashable> {
+      #expect(setResult.contains { ($0 as? Int) == 3 })
+    }
+
+    // Array target with Undefined elements and parseLists disabled
+    let options = DecodeOptions(parseLists: false)
+    let arrayWithUndefined: [Any] = [undefined, "a"]
+    let mergedArray =
+      try Utils.merge(target: arrayWithUndefined, source: ["b", undefined], options: options) as? [Any]
+    #expect(mergedArray?.compactMap { $0 as? String }.contains("b") == true)
+
+    // Array target + sequence of maps recursively merges scalar collisions.
+    let targetMaps: [Any] = [["k": "v"], Undefined.instance]
+    let sourceMaps: [Any] = [["k": "override"], ["new": "value"]]
+    if let mergedMaps = try Utils.merge(target: targetMaps, source: sourceMaps, options: .init()) as? [Any?] {
+      let first = mergedMaps[0] as? [AnyHashable: Any]
+      #expect(first?["k"] as? [String] == ["v", "override"])
+    }
+
+    // Dictionary target with non-sequence source coerces key from description
+    let dictTarget: [AnyHashable: Any] = ["keep": 1]
+    if let mergedDict = try Utils.merge(target: dictTarget, source: "flag", options: .init()) as? [AnyHashable: Any] {
+      #expect(mergedDict.keys.contains { ($0 as? String) == "flag" })
+    }
+
+    // Nil target with array source produces array with filtered Undefined
+    if let mergedFromNil = try Utils.merge(target: nil, source: ["a", undefined], options: .init()) as? [Any?] {
+      #expect(mergedFromNil.contains { ($0 as? String) == "a" })
+    }
+  }
+
+  @Test("Utils.merge extends OrderedSet<AnyHashable> with sequences and skips Undefined")
+  func utils_merge_orderedSet_anyHashable_sequence() throws {
+    let undefined = Undefined.instance
+    let target = OrderedSet<AnyHashable>([AnyHashable("a")])
+    let merged = try Utils.merge(target: target, source: [undefined, "b", "a"], options: .init())
+
+    if let ordered = merged as? OrderedSet<AnyHashable> {
+      #expect(ordered.contains("a"))
+      #expect(ordered.contains("b"))
+      #expect(ordered.count == 2)
+    } else {
+      Issue.record("OrderedSet branch did not return OrderedSet: \(String(describing: merged))")
+    }
+
+    if let unioned = try Utils.merge(target: target, source: OrderedSet([AnyHashable("b")]), options: .init())
+      as? OrderedSet<AnyHashable>
+    {
+      #expect(unioned.elementsEqual([AnyHashable("a"), AnyHashable("b")]))
+    } else {
+      Issue.record("OrderedSet union branch not exercised")
+    }
+
+    if let unchanged = try Utils.merge(target: target, source: undefined, options: .init())
+      as? OrderedSet<AnyHashable>
+    {
+      #expect(unchanged.elementsEqual(target))
+    } else {
+      Issue.record("OrderedSet Undefined branch not exercised")
+    }
+  }
+
+  @Test("Utils.merge unions Set<AnyHashable> with sequence input")
+  func utils_merge_set_anyHashable_sequence() throws {
+    let undefined = Undefined.instance
+    let target = Set<AnyHashable>(["seed"])
+    let merged = try Utils.merge(target: target, source: [undefined, "extra"], options: .init())
+
+    if let setResult = merged as? Set<AnyHashable> {
+      #expect(setResult.contains("seed"))
+      #expect(setResult.contains("extra"))
+    } else {
+      Issue.record("Set branch did not return Set: \(String(describing: merged))")
+    }
+
+    if let unchanged = try Utils.merge(target: target, source: undefined, options: .init()) as? Set<AnyHashable> {
+      #expect(unchanged == target)
+    } else {
+      Issue.record("Set Undefined branch not exercised")
+    }
+  }
+
+  @Test("Utils.merge applies qs collision rules to Swift [Any] sequence indices")
+  func utils_merge_arraySequenceCollisions() throws {
+    let undefined = Undefined.instance
+    let target = [Any](arrayLiteral: undefined, "keep")
+    let source: [Any] = ["replaced", "new"]
+    if let merged = try Utils.merge(target: target, source: source, options: .init(parseLists: true)) as? [Any?] {
+      #expect(merged[0] as? String == "replaced")
+      #expect(merged[1] as? String == "keep")
+      #expect(merged[2] as? String == "new")
+      #expect(merged.count == 3)
+    } else {
+      Issue.record("Sequence collision branch not exercised")
+    }
+  }
+
+  @Test("Utils.merge promotes array target to dictionary when merging with map")
+  func utils_merge_arrayToDictionaryTarget() throws {
+    let undefined = Undefined.instance
+    let target: [Any] = ["a", undefined]
+    let sourceDict: [AnyHashable: Any] = ["b": 2]
+    let merged = try Utils.merge(target: target, source: sourceDict, options: .init())
+    if let dict = merged as? [AnyHashable: Any] {
+      #expect(dict[0] as? String == "a")
+      #expect(dict["b"] as? Int == 2)
+    } else {
+      Issue.record("Array→dictionary promotion not exercised")
+    }
+  }
+
+  @Test("Utils.merge dictionary target consumes OrderedSet sequences")
+  func utils_merge_dictionaryOrderedSetSequence() throws {
+    let target: [AnyHashable: Any] = ["existing": "value"]
+    let ordered = OrderedSet<AnyHashable>([AnyHashable("first"), AnyHashable(2)])
+
+    if let merged = try Utils.merge(target: target, source: ordered, options: .init()) as? [AnyHashable: Any] {
+      #expect(merged["existing"] as? String == "value")
+      #expect(merged[0] as? AnyHashable == AnyHashable("first"))
+      #expect(merged[1] as? AnyHashable == AnyHashable(2))
+    } else {
+      Issue.record("OrderedSet sequence branch not exercised")
+    }
+  }
+
+  @Test("Utils.merge merges nil targets with typed [Any] sources and preserves sparse positions")
+  func utils_merge_nilTarget_typedArraySource() throws {
+    let source: [Any] = [Undefined.instance, "ok", 42]
+    if let merged = try Utils.merge(target: nil, source: source, options: .init()) as? [Any?] {
+      #expect(merged.count == 4)
+      let head = merged.first.flatMap { $0 }
+      #expect(head == nil)
+      #expect(merged[1] is Undefined)
+      #expect(merged[2] as? String == "ok")
+      #expect(merged[3] as? Int == 42)
+    } else {
+      Issue.record("Nil-target array merge branch not exercised")
+    }
+  }
+
+  @Test("Utils.merge overlays arrays with scalars when no sequence is available")
+  func utils_merge_arrayAppendsScalarOnNonSequenceSource() throws {
+    let undefined = Undefined.instance
+    let target: [Any] = [undefined, "keep"]
+    let merged = try Utils.merge(target: target, source: "tail", options: .init())
+
+    if let out = merged as? [Any?] {
+      #expect(out.count == 3)
+      #expect(out.first is Undefined)
+      #expect(out.last as? String == "tail")
+    } else if let out = merged as? [Any] {
+      #expect(out.count == 3)
+      #expect(out.first is Undefined)
+      #expect(out.last as? String == "tail")
+    } else {
+      Issue.record("Array scalar overlay branch not exercised")
+    }
+  }
+
+  @Test("Utils.deepBridgeToAnyIterative handles nil roots and AnyHashable dictionaries")
+  func utils_deepBridge_nilAndHashable() {
+    let bridgedNil = Utils.deepBridgeToAnyIterative(nil)
+    #expect(bridgedNil is NSNull)
+
+    let boxedRoot = Optional<[String: Any]>.some(["leaf": "value"]) as Any
+    let bridgedBoxedRoot = Utils.deepBridgeToAnyIterative(boxedRoot)
+    #expect((bridgedBoxedRoot as? [String: Any])?["leaf"] as? String == "value")
+
+    let boxedNilRoot = Optional<[String: Any]>.none as Any
+    let bridgedBoxedNilRoot = Utils.deepBridgeToAnyIterative(boxedNilRoot)
+    #expect(bridgedBoxedNilRoot is NSNull)
+
+    let dict: [AnyHashable: Any] = [
+      1: ["nested": NSNull()],
+      "two": 2,
+    ]
+    let bridged = Utils.deepBridgeToAnyIterative(dict)
+    if let map = bridged as? [String: Any] {
+      #expect(map["1"] is [String: Any])
+      #expect(map["two"] as? Int == 2)
+    } else {
+      Issue.record("Expected bridged dictionary, got: \(type(of: bridged))")
+    }
+
+    let optionalArray: [Any?] = [nil, "value"]
+    let bridgedArray = Utils.deepBridgeToAnyIterative(optionalArray)
+    if Swift.type(of: bridgedArray) == [Any?].self, let arrOpt = bridgedArray as? [Any?] {
+      let firstElementIsNone: Bool
+      if case .some(.none) = arrOpt.first {
+        firstElementIsNone = true
+      } else {
+        firstElementIsNone = false
+      }
+      if !firstElementIsNone {
+        Issue.record("Expected first element to be .none")
+      }
+
+      switch arrOpt.last {
+      case .some(.some(let value)):
+        #expect(value as? String == "value")
+      default:
+        Issue.record("Expected last element to unwrap to String")
+      }
+    } else if let arr = bridgedArray as? [Any] {
+      let first = arr.first
+      let firstMirror = first.map { Mirror(reflecting: $0) }
+      let firstValue = firstMirror?.displayStyle == .optional ? firstMirror?.children.first?.value : first
+      #expect(firstValue is NSNull)
+
+      let last = arr.last
+      let lastMirror = last.map { Mirror(reflecting: $0) }
+      let lastValue = lastMirror?.displayStyle == .optional ? lastMirror?.children.first?.value : last
+      #expect(lastValue as? String == "value")
+    } else {
+      Issue.record("Optional array branch not exercised")
+    }
+  }
+
+  @Test("Utils.deepBridgeToAnyIterative bridges Foundation containers")
+  func utils_deepBridge_foundationContainers() {
+    let foundation: NSDictionary = [
+      1: "x",
+      "nested": NSArray(array: ["y"]),
+    ]
+
+    let bridged = Utils.deepBridgeToAnyIterative(foundation)
+    let dict = bridged as? [String: Any]
+    #expect(dict?["1"] as? String == "x")
+    #expect((dict?["nested"] as? [Any])?.first as? String == "y")
+  }
+
+  @Test("Utils.deepBridgeToAnyIterative unwraps boxed optionals in raw array containers")
+  func utils_deepBridge_unwrapsBoxedOptionalsInRawArrays() {
+    func expectNormalizedArray(_ bridged: Any, expectedValues: [Any?], label: String) {
+      guard let array = bridged as? [Any] else {
+        Issue.record("Expected bridged array for \(label), got: \(type(of: bridged))")
+        return
+      }
+
+      #expect(array.count == expectedValues.count)
+      for (index, expected) in expectedValues.enumerated() {
+        let actual = array[index]
+        if let expected {
+          switch expected {
+          case let string as String:
+            #expect(actual as? String == string)
+          case let int as Int:
+            #expect(actual as? Int == int)
+          default:
+            Issue.record("Unhandled expected value for \(label) at index \(index): \(expected)")
+          }
+        } else {
+          #expect(actual is NSNull)
+        }
+      }
+    }
+
+    let boxedNil: Any = Optional<String>.none as Any
+    let boxedSome: Any = Optional<String>.some("x") as Any
+    let boxedInt: Any = Optional<Int>.some(42) as Any
+
+    expectNormalizedArray(
+      Utils.deepBridgeToAnyIterative([boxedNil, boxedSome, boxedInt] as [Any]),
+      expectedValues: [nil, "x", 42],
+      label: "[Any]"
+    )
+
+    expectNormalizedArray(
+      Utils.deepBridgeToAnyIterative([boxedNil, boxedSome, nil, boxedInt] as [Any?]),
+      expectedValues: [nil, "x", nil, 42],
+      label: "[Any?]"
+    )
+  }
+
+  @Test(
+    "Utils.deepBridgeToAnyIterative preserves OrderedDictionary entry order",
+    .enabled(if: deterministicHashing, "requires SWIFT_DETERMINISTIC_HASHING=1 for stable dictionary iteration")
+  )
+  func utils_deepBridge_preservesOrderedDictionaryOrder() {
+    let entries: [(AnyHashable, Any)] = [
+      (AnyHashable("first"), 1),
+      (AnyHashable(2), "two"),
+      (AnyHashable("third"), 3),
+    ]
+    let ordered = OrderedDictionary<AnyHashable, Any>(uniqueKeysWithValues: entries)
+
+    let bridged = Utils.deepBridgeToAnyIterative(ordered)
+    if let dict = bridged as? [String: Any] {
+      // This is intentionally implementation-sensitive: it guards against reversing
+      // OrderedDictionary scheduling in deepBridgeToAnyIterative when hashing is deterministic.
+      #expect(Array(dict.keys) == ["first", "2", "third"])
+      #expect(dict["2"] as? String == "two")
+    } else {
+      Issue.record("Expected bridged ordered dictionary, got: \(type(of: bridged))")
+    }
+  }
+
+  @Test("Utils.deepBridgeToAnyIterative tolerates Foundation self-cycles")
+  func utils_deepBridge_foundationSelfCycles() throws {
+    #if os(Linux)
+      try withKnownIssue(Comment("Linux: corelibs-foundation segfault constructing NSDictionary self-cycle")) {
+        #expect(
+          Bool(false),
+          Comment("Skipped: cannot safely build a cyclic Foundation container on Linux")
+        )
+      }
+    #else
+      let cyclicDict = NSMutableDictionary()
+      cyclicDict["self"] = cyclicDict
+      cyclicDict["leaf"] = "x"
+
+      let bridgedDict = Utils.deepBridgeToAnyIterative(cyclicDict)
+      if let dict = bridgedDict as? [String: Any] {
+        #expect(dict["leaf"] as? String == "x")
+        #expect(dict["self"] is NSNull)
+      } else {
+        Issue.record("Expected bridged cyclic dictionary, got: \(type(of: bridgedDict))")
+      }
+
+      let cyclicArray = NSMutableArray()
+      cyclicArray.add(cyclicArray)
+      cyclicArray.add("y")
+
+      let bridgedArray = Utils.deepBridgeToAnyIterative(cyclicArray)
+      if let array = bridgedArray as? [Any] {
+        #expect(array.count == 2)
+        #expect(array[0] is NSNull)
+        #expect(array[1] as? String == "y")
+      } else {
+        Issue.record("Expected bridged cyclic array, got: \(type(of: bridgedArray))")
+      }
+    #endif
+  }
+
+  @Test("Utils.deepBridgeToAnyIterative bridges typed Swift containers")
+  func utils_deepBridge_typedSwiftContainers() {
+    let typed: [String: Any] = [
+      "dict": [1: "x"] as [Int: String],
+      "array": [nil, "y"] as [String?],
+    ]
+
+    let bridged = Utils.deepBridgeToAnyIterative(typed)
+    let dict = bridged as? [String: Any]
+    let nestedDict = dict?["dict"] as? [String: Any]
+    let nestedArray = dict?["array"] as? [Any]
+    #expect(nestedDict?["1"] as? String == "x")
+    #expect(nestedArray?.count == 2)
+    #expect(nestedArray?.first is NSNull)
+    #expect(nestedArray?[1] as? String == "y")
+  }
+
+  @Test("Utils.needsMainDrop short-circuits when threshold is non-positive")
+  func utils_needsMainDrop_thresholdShortCircuit() {
+    let root: [String: Any?] = ["k": nil]
+    #expect(!Utils.needsMainDrop(root, threshold: 0))
+    #expect(!Utils.needsMainDrop(root, threshold: -3))
+  }
+
+  @Test("Utils.needsMainDrop sees boxed optional single-key chains")
+  func utils_needsMainDrop_boxedOptionalChain() {
+    let level2: [String: Any] = ["c": "end"]
+    let level1: [String: Any] = ["b": Optional<[String: Any]>.some(level2) as Any]
+    let root: [String: Any?] = ["a": Optional<[String: Any]>.some(level1) as Any]
+    #expect(Utils.needsMainDrop(root, threshold: 2))
+  }
+
+  @Test("Utils.dropOnMainThread tolerates nil payloads")
+  func utils_dropOnMainThread_nilPayload() {
+    Utils.dropOnMainThread(nil as Any?)
+    Utils.dropOnMainThread(nil as AnyObject?)
+  }
+
+  @Test("Utils.apply returns nil when the value cannot be cast to generic type")
+  func utils_apply_typeMismatchReturnsNil() {
+    let transformed = Utils.apply("not-an-int") { (value: Int) -> Int in value * 2 }
+    #expect(transformed == nil)
+  }
+
+  #if DEBUG && os(macOS)
+    @MainActor
+    @Test("bridge tolerates very deep single-key maps on MainActor")
+    func testDecode_DeepMaps_VeryDeep_Main() {
+      let depth = 6000
+      var leaf: Any? = "bar"
+      for _ in 0..<depth { leaf = ["p": leaf] }
+
+      let root: [String: Any?] = ["foo": leaf]
+      let bridged = Utils.deepBridgeToAnyIterative(root) as! [String: Any]
+
+      #expect(bridged["foo"] != nil)
+    }
+  #endif
+
+  @Test("dropOnMainThread eventually releases")
+  func DropOnMain_Releases() async {
+    weak var weakRef: AnyObject?
+    do {
+      let deep = [
+        "k": (0..<6000).reduce(into: ["p": Any?("x")]) { acc, _ in acc = ["p": acc] }
+      ]
+      let box = Holder(deep)
+      weakRef = box
+      Utils.dropOnMainThread(box)  // schedule last release on main
+    }
+
+    // Pump the main runloop a few times so the async release runs.
+    for _ in 0..<4 {
+      await MainActor.run {
+        RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.002))
+      }
+    }
+
+    #expect(weakRef == nil)
+  }
 }
 
 // MARK: - Helpers
 
 private func compactDict(_ value: Any) -> [String: Any?]? {
-    value as? [String: Any?]
+  value as? [String: Any?]
 }
 
 private func anyArray(_ value: Any?) -> [Any]? {
-    if let array = value as? [Any] {
-        return array
-    }
-    if let array = value as? [Any?] {
-        return array.map { $0 ?? NSNull() }
-    }
-    if let array = value as? NSArray {
-        return array.map { $0 }
-    }
-    return nil
+  if let array = value as? [Any] {
+    return array
+  }
+  if let array = value as? [Any?] {
+    return array.map { $0 ?? NSNull() }
+  }
+  if let array = value as? NSArray {
+    return array.map { $0 }
+  }
+  return nil
 }
 
 private func anyDict(_ value: Any?) -> [String: Any]? {
-    if let dict = value as? [String: Any] {
-        return dict
+  if let dict = value as? [String: Any] {
+    return dict
+  }
+  if let dict = value as? [String: Any?] {
+    var bridged: [String: Any] = [:]
+    bridged.reserveCapacity(dict.count)
+    for (key, child) in dict {
+      bridged[key] = child ?? NSNull()
     }
-    if let dict = value as? [String: Any?] {
-        var bridged: [String: Any] = [:]
-        bridged.reserveCapacity(dict.count)
-        for (key, child) in dict {
-            bridged[key] = child ?? NSNull()
-        }
-        return bridged
-    }
-    return nil
+    return bridged
+  }
+  return nil
 }
 
 private final class Holder: CustomStringConvertible {
-    var payload: Any?
-    init(_ p: Any?) { payload = p }
-    var description: String { "Holder(payload: …)" }  // prevents recursive dictionary dump
+  var payload: Any?
+  init(_ p: Any?) { payload = p }
+  var description: String { "Holder(payload: …)" }  // prevents recursive dictionary dump
 }

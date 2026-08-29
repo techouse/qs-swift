@@ -4,76 +4,76 @@
 import PackageDescription
 
 var deps: [Package.Dependency] = [
-    .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
-    .package(url: "https://github.com/apple/swift-collections.git", from: "1.4.0"),
-    .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.6"),
+  .package(url: "https://github.com/apple/swift-algorithms.git", from: "1.2.1"),
+  .package(url: "https://github.com/apple/swift-collections.git", from: "1.4.0"),
+  .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.6"),
 ]
 var targetDeps: [Target.Dependency] = [
-    .product(name: "Algorithms", package: "swift-algorithms"),
-    .product(name: "OrderedCollections", package: "swift-collections"),
+  .product(name: "Algorithms", package: "swift-algorithms"),
+  .product(name: "OrderedCollections", package: "swift-collections"),
 ]
 #if os(Linux)
-    deps.append(.package(url: "https://github.com/reers/ReerKit.git", from: "1.2.5"))
-    targetDeps.append(.product(name: "ReerKit", package: "ReerKit"))
+  deps.append(.package(url: "https://github.com/reers/ReerKit.git", from: "1.2.5"))
+  targetDeps.append(.product(name: "ReerKit", package: "ReerKit"))
 #endif
 
 let package = Package(
-    name: "QsSwift",
-    platforms: [
-        .macOS(.v12), .iOS(.v13), .tvOS(.v13), .watchOS(.v8),
-    ],
-    products: [
-        .library(name: "QsSwift", targets: ["QsSwift"]),
-        .library(name: "QsObjC", targets: ["QsObjC"]),
-    ],
-    dependencies: deps,
-    targets: [
-        .target(
-            name: "QsSwift",
-            dependencies: targetDeps,
-            path: "Sources/QsSwift"
-        ),
-        .target(
-            name: "QsObjC",
-            dependencies: ["QsSwift"],
-            path: "Sources/QsObjC",
-            exclude: ["README.md"],
-            swiftSettings: [
-                .define("QS_OBJC_BRIDGE", .when(platforms: [.macOS, .iOS, .tvOS, .watchOS]))
-            ]
-        ),
-        .target(
-            name: "QsTestSupport",
-            path: "Tests/TestSupport"
-        ),
-        .testTarget(
-            name: "QsSwiftTests",
-            dependencies: ["QsSwift", "QsTestSupport"],
-            path: "Tests/QsSwiftTests"
-        ),
-        .testTarget(
-            name: "QsObjCTests",
-            dependencies: [
-                "QsSwift",
-                "QsObjC",
-                "QsTestSupport",
-            ],
-            path: "Tests/QsObjCTests"
-        ),
-        .executableTarget(
-            name: "QsSwiftComparison",
-            dependencies: ["QsSwift"],
-            path: "Tools/QsSwiftComparison",
-            exclude: [
-                "js/node_modules",
-                "js/package.json",
-                "js/package-lock.json",
-                "js/qs.js",
-                "compare_outputs.sh",
-            ],
-            resources: [
-                .copy("js/test_cases.json")
-            ]
-        ),
-    ]
+  name: "QsSwift",
+  platforms: [
+    .macOS(.v12), .iOS(.v13), .tvOS(.v13), .watchOS(.v8),
+  ],
+  products: [
+    .library(name: "QsSwift", targets: ["QsSwift"]),
+    .library(name: "QsObjC", targets: ["QsObjC"]),
+  ],
+  dependencies: deps,
+  targets: [
+    .target(
+      name: "QsSwift",
+      dependencies: targetDeps,
+      path: "Sources/QsSwift"
+    ),
+    .target(
+      name: "QsObjC",
+      dependencies: ["QsSwift"],
+      path: "Sources/QsObjC",
+      exclude: ["README.md"],
+      swiftSettings: [
+        .define("QS_OBJC_BRIDGE", .when(platforms: [.macOS, .iOS, .tvOS, .watchOS]))
+      ]
+    ),
+    .target(
+      name: "QsTestSupport",
+      path: "Tests/TestSupport"
+    ),
+    .testTarget(
+      name: "QsSwiftTests",
+      dependencies: ["QsSwift", "QsTestSupport"],
+      path: "Tests/QsSwiftTests"
+    ),
+    .testTarget(
+      name: "QsObjCTests",
+      dependencies: [
+        "QsSwift",
+        "QsObjC",
+        "QsTestSupport",
+      ],
+      path: "Tests/QsObjCTests"
+    ),
+    .executableTarget(
+      name: "QsSwiftComparison",
+      dependencies: ["QsSwift"],
+      path: "Tools/QsSwiftComparison",
+      exclude: [
+        "js/node_modules",
+        "js/package.json",
+        "js/package-lock.json",
+        "js/qs.js",
+        "compare_outputs.sh",
+      ],
+      resources: [
+        .copy("js/test_cases.json")
+      ]
+    ),
+  ]
 )

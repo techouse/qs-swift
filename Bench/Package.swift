@@ -4,21 +4,21 @@
 import PackageDescription
 
 let package = Package(
-    name: "QsSwiftBench",
-    platforms: [.macOS(.v12)],
-    products: [
-        .executable(name: "QsSwiftBench", targets: ["QsSwiftBench"])
-    ],
-    dependencies: [
-        .package(name: "QsSwift", path: "..")
-    ],
-    targets: [
-        .executableTarget(
-            name: "QsSwiftBench",
-            dependencies: [
-                .product(name: "QsSwift", package: "QsSwift"),
-                .product(name: "QsObjC", package: "QsSwift"),
-            ]
-        )
-    ]
+  name: "QsSwiftBench",
+  platforms: [.macOS(.v12)],
+  products: [
+    .executable(name: "QsSwiftBench", targets: ["QsSwiftBench"])
+  ],
+  dependencies: [
+    .package(name: "QsSwift", path: "..")
+  ],
+  targets: [
+    .executableTarget(
+      name: "QsSwiftBench",
+      dependencies: [
+        .product(name: "QsSwift", package: "QsSwift"),
+        .product(name: "QsObjC", package: "QsSwift"),
+      ]
+    )
+  ]
 )

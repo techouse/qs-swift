@@ -19,15 +19,15 @@
 /// - Or provide a custom `filter`/`encoder` in `EncodeOptions` that drops or replaces
 ///   the cyclic portions (e.g., replace an object with an ID).
 public enum EncodeError: Error, Equatable, CustomStringConvertible {
-    /// The input object graph contains a reference cycle (e.g., a dictionary/array
-    /// that refers to itself), which would cause infinite recursion during encoding.
-    case cyclicObject
+  /// The input object graph contains a reference cycle (e.g., a dictionary/array
+  /// that refers to itself), which would cause infinite recursion during encoding.
+  case cyclicObject
 
-    /// Human-readable description useful in tests and logs.
-    public var description: String {
-        switch self {
-        case .cyclicObject:
-            return "Cyclic object graph detected during encoding."
-        }
+  /// Human-readable description useful in tests and logs.
+  public var description: String {
+    switch self {
+    case .cyclicObject:
+      return "Cyclic object graph detected during encoding."
     }
+  }
 }

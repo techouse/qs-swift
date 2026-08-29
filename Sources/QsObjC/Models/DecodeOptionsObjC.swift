@@ -1,239 +1,239 @@
 #if canImport(ObjectiveC) && QS_OBJC_BRIDGE
-    import Foundation
-    import QsSwift
+  import Foundation
+  import QsSwift
 
-    /// Objective-C wrapper for `QsSwift.DecodeOptions`.
+  /// Objective-C wrapper for `QsSwift.DecodeOptions`.
+  ///
+  /// This class is mutable and designed to be configured from Obj-C or Swift,
+  /// then bridged to the Swift core via the internal `swift` computed property.
+  /// It mirrors the Swift API closely, including defaults.
+  ///
+  /// Thread-safety: not thread-safe. Configure on one thread, then pass into a call.
+  ///
+  /// Obj-C usage example:
+  /// ```objc
+  /// QsDecodeOptions *opts = [QsDecodeOptions new];
+  /// opts.ignoreQueryPrefix = YES;
+  /// opts.allowDots = YES;                  // treat `a.b` as `a[b]`
+  /// opts.delimiter = QsDelimiter.ampersand; // `&` (default)
+  /// opts.duplicates = QsDuplicatesCombine; // combine duplicate keys
+  /// NSDictionary *out = [Qs decode:@"?a=1&a=2" options:opts error:NULL];
+  /// ```
+  @objc(QsDecodeOptions)
+  @objcMembers
+  public final class DecodeOptionsObjC: NSObject, @unchecked Sendable {
+
+    // MARK: - Custom decoders
+
+    /// If set, called to decode a single percent-encoded scalar **before** it’s interpreted
+    /// by the core. Return the decoded value (e.g. `NSString`, `NSNumber`, `NSNull`, etc.),
+    /// or `nil` to produce an absent value. The core will honor `nil` (no fallback).
     ///
-    /// This class is mutable and designed to be configured from Obj-C or Swift,
-    /// then bridged to the Swift core via the internal `swift` computed property.
-    /// It mirrors the Swift API closely, including defaults.
+    /// - Parameters:
+    ///   - string:  The raw token as an Objective‑C string. May be `nil` if the source is empty.
+    ///   - charset: `NSNumber` wrapping `String.Encoding.rawValue`, or `nil` if unspecified.
     ///
-    /// Thread-safety: not thread-safe. Configure on one thread, then pass into a call.
+    /// Tips:
+    /// - If you enable `interpretNumericEntities`, you generally don’t need to handle HTML
+    ///   entities here—the core can do that for you.
+    /// - Return values are inserted verbatim into the decoded map, so ensure they are
+    ///   Foundation types (NSString/NSNumber/NSArray/NSDictionary/NSNull) for best bridging.
+    public typealias ValueDecoderBlock = (NSString?, NSNumber?) -> Any?
+    public var valueDecoderBlock: ValueDecoderBlock?
+
+    /// Preferred: KEY/VALUE-aware scalar decoder.
+    /// Signature: token, charset (String.Encoding.rawValue), kind (0=key, 1=value) -> Any?
+    public typealias DecoderBlock = (NSString?, NSNumber?, NSNumber?) -> Any?
+    public var decoderBlock: DecoderBlock?
+
+    /// Back‑compat: legacy two‑argument decoder, mirroring Swift `LegacyDecoder` (deprecated).
+    /// Prefer `decoderBlock` (the KEY/VALUE‑aware 3‑argument variant).
+    /// Returning `nil` produces an absent value; the core will not fall back.
+    public typealias LegacyDecoderBlock = (NSString?, NSNumber?) -> Any?
+    public var legacyDecoderBlock: LegacyDecoderBlock?
+
+    // MARK: - Key syntax
+
+    /// Accept dotted key paths (`a.b.c`) as if they were bracket paths (`a[b][c]`).
+    /// This is OR'ed with `decodeDotInKeys` so either flag enables dot support.
+    public var allowDots: Bool = false
+
+    /// Deprecated spelling mirroring Swift; when `true` dots in keys are parsed as path
+    /// separators. Kept for compatibility with other ports. Prefer `allowDots`.
+    public var decodeDotInKeys: Bool = false
+
+    // MARK: - List / array parsing
+
+    /// Allow empty lists like `a[]=` to produce an empty array rather than omitting the key.
+    public var allowEmptyLists: Bool = false
+
+    /// Permit sparse arrays (e.g. `a[2]=x` without lower indices). When `false`, gaps are
+    /// compacted; when `true`, public bridge output preserves them as `NSNull` placeholders.
+    public var allowSparseLists: Bool = false
+
+    /// Maximum list size and numeric-index threshold used while decoding.
     ///
-    /// Obj-C usage example:
-    /// ```objc
-    /// QsDecodeOptions *opts = [QsDecodeOptions new];
-    /// opts.ignoreQueryPrefix = YES;
-    /// opts.allowDots = YES;                  // treat `a.b` as `a[b]`
-    /// opts.delimiter = QsDelimiter.ampersand; // `&` (default)
-    /// opts.duplicates = QsDuplicatesCombine; // combine duplicate keys
-    /// NSDictionary *out = [Qs decode:@"?a=1&a=2" options:opts error:NULL];
-    /// ```
-    @objc(QsDecodeOptions)
-    @objcMembers
-    public final class DecodeOptionsObjC: NSObject, @unchecked Sendable {
+    /// The limit is cumulative across duplicate keys, flat comma-separated values, and list
+    /// merges. A result with exactly `listLimit` elements remains a list; growing past it
+    /// becomes a numeric-keyed dictionary, or throws when `throwOnLimitExceeded` is `true`.
+    /// A negative limit treats every list construction or merge that reaches limit enforcement
+    /// as exceeded. Parser-recognized empty lists can still be preserved by `allowEmptyLists`
+    /// because they bypass list construction.
+    ///
+    /// Comma values written with `[]=` are nested groups: each complete comma group counts as
+    /// one outer list element, regardless of how many values the group contains. Numeric
+    /// bracket indices at or above the limit are represented as dictionary keys.
+    public var listLimit: Int = 20
 
-        // MARK: - Custom decoders
+    /// When `true`, treat commas as element separators inside a single key (e.g. `a=b,c`).
+    public var comma: Bool = false
 
-        /// If set, called to decode a single percent-encoded scalar **before** it’s interpreted
-        /// by the core. Return the decoded value (e.g. `NSString`, `NSNumber`, `NSNull`, etc.),
-        /// or `nil` to produce an absent value. The core will honor `nil` (no fallback).
-        ///
-        /// - Parameters:
-        ///   - string:  The raw token as an Objective‑C string. May be `nil` if the source is empty.
-        ///   - charset: `NSNumber` wrapping `String.Encoding.rawValue`, or `nil` if unspecified.
-        ///
-        /// Tips:
-        /// - If you enable `interpretNumericEntities`, you generally don’t need to handle HTML
-        ///   entities here—the core can do that for you.
-        /// - Return values are inserted verbatim into the decoded map, so ensure they are
-        ///   Foundation types (NSString/NSNumber/NSArray/NSDictionary/NSNull) for best bridging.
-        public typealias ValueDecoderBlock = (NSString?, NSNumber?) -> Any?
-        public var valueDecoderBlock: ValueDecoderBlock?
+    /// Whether to parse bracketed array syntax at all (e.g. `a[0]=x`). When `false`,
+    /// everything is treated as scalars / objects.
+    public var parseLists: Bool = true
 
-        /// Preferred: KEY/VALUE-aware scalar decoder.
-        /// Signature: token, charset (String.Encoding.rawValue), kind (0=key, 1=value) -> Any?
-        public typealias DecoderBlock = (NSString?, NSNumber?, NSNumber?) -> Any?
-        public var decoderBlock: DecoderBlock?
+    /// If `true`, enforce the exact nesting depth limit below; otherwise the core
+    /// may best‑effort parse past the limit for compatibility.
+    public var strictDepth: Bool = false
 
-        /// Back‑compat: legacy two‑argument decoder, mirroring Swift `LegacyDecoder` (deprecated).
-        /// Prefer `decoderBlock` (the KEY/VALUE‑aware 3‑argument variant).
-        /// Returning `nil` produces an absent value; the core will not fall back.
-        public typealias LegacyDecoderBlock = (NSString?, NSNumber?) -> Any?
-        public var legacyDecoderBlock: LegacyDecoderBlock?
+    /// If `true`, object/scalar conflicts use qs-compatible array wrapping.
+    public var strictMerge: Bool = true
 
-        // MARK: - Key syntax
+    /// If `true`, `a` without value is `NSNull` rather than empty string. Mirrors Swift.
+    public var strictNullHandling: Bool = false
 
-        /// Accept dotted key paths (`a.b.c`) as if they were bracket paths (`a[b][c]`).
-        /// This is OR'ed with `decodeDotInKeys` so either flag enables dot support.
-        public var allowDots: Bool = false
+    // MARK: - Limits & safety
 
-        /// Deprecated spelling mirroring Swift; when `true` dots in keys are parsed as path
-        /// separators. Kept for compatibility with other ports. Prefer `allowDots`.
-        public var decodeDotInKeys: Bool = false
+    /// Hard cap on nested bracket depth.
+    public var depth: Int = 5
 
-        // MARK: - List / array parsing
+    /// Hard cap on the number of key/value pairs processed from the input.
+    public var parameterLimit: Int = 1000
 
-        /// Allow empty lists like `a[]=` to produce an empty array rather than omitting the key.
-        public var allowEmptyLists: Bool = false
+    /// If `true`, exceeding `parameterLimit` or `listLimit` throws. Otherwise parameter
+    /// parsing truncates and list overflow falls back to a numeric-keyed dictionary.
+    /// Depth exceedance is controlled separately by `strictDepth`.
+    public var throwOnLimitExceeded: Bool = false
 
-        /// Permit sparse arrays (e.g. `a[2]=x` without lower indices). When `false`, gaps are
-        /// compacted; when `true`, public bridge output preserves them as `NSNull` placeholders.
-        public var allowSparseLists: Bool = false
+    // MARK: - Charset / wire format
 
-        /// Maximum list size and numeric-index threshold used while decoding.
-        ///
-        /// The limit is cumulative across duplicate keys, flat comma-separated values, and list
-        /// merges. A result with exactly `listLimit` elements remains a list; growing past it
-        /// becomes a numeric-keyed dictionary, or throws when `throwOnLimitExceeded` is `true`.
-        /// A negative limit treats every list construction or merge that reaches limit enforcement
-        /// as exceeded. Parser-recognized empty lists can still be preserved by `allowEmptyLists`
-        /// because they bypass list construction.
-        ///
-        /// Comma values written with `[]=` are nested groups: each complete comma group counts as
-        /// one outer list element, regardless of how many values the group contains. Numeric
-        /// bracket indices at or above the limit are represented as dictionary keys.
-        public var listLimit: Int = 20
+    /// Desired input charset. Defaults to UTF‑8.
+    /// Bridged to `String.Encoding(rawValue:)` in Swift.
+    public var charset: UInt = String.Encoding.utf8.rawValue
 
-        /// When `true`, treat commas as element separators inside a single key (e.g. `a=b,c`).
-        public var comma: Bool = false
+    /// Interpret the `utf8=✓` sentinel (if present) per qs conventions.
+    public var charsetSentinel: Bool = false
 
-        /// Whether to parse bracketed array syntax at all (e.g. `a[0]=x`). When `false`,
-        /// everything is treated as scalars / objects.
-        public var parseLists: Bool = true
+    /// Pair delimiter for query tokens (e.g. `&` or `;`).
+    /// Obj‑C: this is a reference type wrapper so it bridges cleanly.
+    public var delimiter: DelimiterObjC = .ampersand
 
-        /// If `true`, enforce the exact nesting depth limit below; otherwise the core
-        /// may best‑effort parse past the limit for compatibility.
-        public var strictDepth: Bool = false
+    /// How to handle duplicate keys (e.g. `a=1&a=2`) — combine vs. last‑write‑wins.
+    public var duplicates: DuplicatesObjC = .combine
 
-        /// If `true`, object/scalar conflicts use qs-compatible array wrapping.
-        public var strictMerge: Bool = true
+    /// Ignore a leading `?` in the source string (useful when decoding full URLs or query parts).
+    public var ignoreQueryPrefix: Bool = false
 
-        /// If `true`, `a` without value is `NSNull` rather than empty string. Mirrors Swift.
-        public var strictNullHandling: Bool = false
+    /// Convert `&#...;` / `&name;` numeric entities inside tokens to their Unicode scalars.
+    public var interpretNumericEntities: Bool = false
 
-        // MARK: - Limits & safety
+    // MARK: - Bridge to Swift core
 
-        /// Hard cap on nested bracket depth.
-        public var depth: Int = 5
+    /// Internal bridge that constructs the Swift `DecodeOptions` used by the core.
+    /// We also normalize the dot‑parsing flags so **either** Obj‑C flag enables dots.
+    var swift: QsSwift.DecodeOptions {
+      let normalizedAllowDots = allowDots || decodeDotInKeys
+      let normalizedDecodeDotInKeys = decodeDotInKeys && normalizedAllowDots
+      let normalizedCharset: String.Encoding = {
+        let candidate = String.Encoding(rawValue: charset)
+        return (candidate == .utf8 || candidate == .isoLatin1) ? candidate : .utf8
+      }()
+      let normalizedParameterLimit = max(1, parameterLimit)
+      let normalizedDepth = max(0, depth)
 
-        /// Hard cap on the number of key/value pairs processed from the input.
-        public var parameterLimit: Int = 1000
-
-        /// If `true`, exceeding `parameterLimit` or `listLimit` throws. Otherwise parameter
-        /// parsing truncates and list overflow falls back to a numeric-keyed dictionary.
-        /// Depth exceedance is controlled separately by `strictDepth`.
-        public var throwOnLimitExceeded: Bool = false
-
-        // MARK: - Charset / wire format
-
-        /// Desired input charset. Defaults to UTF‑8.
-        /// Bridged to `String.Encoding(rawValue:)` in Swift.
-        public var charset: UInt = String.Encoding.utf8.rawValue
-
-        /// Interpret the `utf8=✓` sentinel (if present) per qs conventions.
-        public var charsetSentinel: Bool = false
-
-        /// Pair delimiter for query tokens (e.g. `&` or `;`).
-        /// Obj‑C: this is a reference type wrapper so it bridges cleanly.
-        public var delimiter: DelimiterObjC = .ampersand
-
-        /// How to handle duplicate keys (e.g. `a=1&a=2`) — combine vs. last‑write‑wins.
-        public var duplicates: DuplicatesObjC = .combine
-
-        /// Ignore a leading `?` in the source string (useful when decoding full URLs or query parts).
-        public var ignoreQueryPrefix: Bool = false
-
-        /// Convert `&#...;` / `&name;` numeric entities inside tokens to their Unicode scalars.
-        public var interpretNumericEntities: Bool = false
-
-        // MARK: - Bridge to Swift core
-
-        /// Internal bridge that constructs the Swift `DecodeOptions` used by the core.
-        /// We also normalize the dot‑parsing flags so **either** Obj‑C flag enables dots.
-        var swift: QsSwift.DecodeOptions {
-            let normalizedAllowDots = allowDots || decodeDotInKeys
-            let normalizedDecodeDotInKeys = decodeDotInKeys && normalizedAllowDots
-            let normalizedCharset: String.Encoding = {
-                let candidate = String.Encoding(rawValue: charset)
-                return (candidate == .utf8 || candidate == .isoLatin1) ? candidate : .utf8
-            }()
-            let normalizedParameterLimit = max(1, parameterLimit)
-            let normalizedDepth = max(0, depth)
-
-            // Bridge Obj-C decoder blocks → Swift ScalarDecoder
-            // Prefer the KEY/VALUE-aware `decoderBlock`; fall back to `valueDecoderBlock`.
-            let swiftDecoder: QsSwift.ScalarDecoder? = {
-                if let blk = decoderBlock {
-                    let box = _BlockBox(blk)
-                    return { (str: String?, charset: String.Encoding?, kind: QsSwift.DecodeKind?) in
-                        let csNum = charset.map { NSNumber(value: $0.rawValue) }
-                        let kindNum: NSNumber =
-                            {
-                                switch kind ?? .value {
-                                case .key: return 0
-                                case .value: return 1
-                                }
-                            }() as NSNumber
-                        return box.block(str as NSString?, csNum, kindNum)
-                    }
+      // Bridge Obj-C decoder blocks → Swift ScalarDecoder
+      // Prefer the KEY/VALUE-aware `decoderBlock`; fall back to `valueDecoderBlock`.
+      let swiftDecoder: QsSwift.ScalarDecoder? = {
+        if let blk = decoderBlock {
+          let box = _BlockBox(blk)
+          return { (str: String?, charset: String.Encoding?, kind: QsSwift.DecodeKind?) in
+            let csNum = charset.map { NSNumber(value: $0.rawValue) }
+            let kindNum: NSNumber =
+              {
+                switch kind ?? .value {
+                case .key: return 0
+                case .value: return 1
                 }
-                if let blk = valueDecoderBlock {
-                    let box = _BlockBox(blk)
-                    return { (str: String?, charset: String.Encoding?, _: QsSwift.DecodeKind?) in
-                        let csNum = charset.map { NSNumber(value: $0.rawValue) }
-                        return box.block(str as NSString?, csNum)
-                    }
-                }
-                return nil
-            }()
-
-            // Bridge legacyDecoderBlock → Swift LegacyDecoder (deprecated)
-            let swiftLegacy: QsSwift.LegacyDecoder? = {
-                guard let blk = legacyDecoderBlock else { return nil }
-                let box = _BlockBox(blk)
-                return { (str: String?, charset: String.Encoding?) in
-                    let csNum = charset.map { NSNumber(value: $0.rawValue) }
-                    return box.block(str as NSString?, csNum)
-                }
-            }()
-
-            return QsSwift.DecodeOptions(
-                // Dot handling: either flag enables it (compat with other ports).
-                allowDots: normalizedAllowDots,
-                decoder: swiftDecoder,
-                legacyDecoder: swiftLegacy,
-                decodeDotInKeys: normalizedDecodeDotInKeys,
-
-                // Lists / arrays
-                allowEmptyLists: allowEmptyLists,
-                allowSparseLists: allowSparseLists,
-                listLimit: listLimit,
-
-                // Charset / wire format
-                charset: normalizedCharset,
-                charsetSentinel: charsetSentinel,
-                comma: comma,
-                delimiter: delimiter.swift,
-
-                // Limits & behavior
-                depth: normalizedDepth,
-                parameterLimit: normalizedParameterLimit,
-                duplicates: duplicates.swift,
-                ignoreQueryPrefix: ignoreQueryPrefix,
-                interpretNumericEntities: interpretNumericEntities,
-                parseLists: parseLists,
-                strictDepth: strictDepth,
-                strictMerge: strictMerge,
-                strictNullHandling: strictNullHandling,
-                throwOnLimitExceeded: throwOnLimitExceeded
-            )
+              }() as NSNumber
+            return box.block(str as NSString?, csNum, kindNum)
+          }
         }
-
-        // MARK: - Swift convenience
-
-        /// Tiny Swift-only helper that lets you configure fluently:
-        ///
-        /// ```swift
-        /// let opts = DecodeOptionsObjC().with {
-        ///   $0.ignoreQueryPrefix = true
-        ///   $0.allowDots = true
-        /// }
-        /// ```
-        @discardableResult
-        public func with(_ configure: (DecodeOptionsObjC) -> Void) -> Self {
-            configure(self)
-            return self
+        if let blk = valueDecoderBlock {
+          let box = _BlockBox(blk)
+          return { (str: String?, charset: String.Encoding?, _: QsSwift.DecodeKind?) in
+            let csNum = charset.map { NSNumber(value: $0.rawValue) }
+            return box.block(str as NSString?, csNum)
+          }
         }
+        return nil
+      }()
+
+      // Bridge legacyDecoderBlock → Swift LegacyDecoder (deprecated)
+      let swiftLegacy: QsSwift.LegacyDecoder? = {
+        guard let blk = legacyDecoderBlock else { return nil }
+        let box = _BlockBox(blk)
+        return { (str: String?, charset: String.Encoding?) in
+          let csNum = charset.map { NSNumber(value: $0.rawValue) }
+          return box.block(str as NSString?, csNum)
+        }
+      }()
+
+      return QsSwift.DecodeOptions(
+        // Dot handling: either flag enables it (compat with other ports).
+        allowDots: normalizedAllowDots,
+        decoder: swiftDecoder,
+        legacyDecoder: swiftLegacy,
+        decodeDotInKeys: normalizedDecodeDotInKeys,
+
+        // Lists / arrays
+        allowEmptyLists: allowEmptyLists,
+        allowSparseLists: allowSparseLists,
+        listLimit: listLimit,
+
+        // Charset / wire format
+        charset: normalizedCharset,
+        charsetSentinel: charsetSentinel,
+        comma: comma,
+        delimiter: delimiter.swift,
+
+        // Limits & behavior
+        depth: normalizedDepth,
+        parameterLimit: normalizedParameterLimit,
+        duplicates: duplicates.swift,
+        ignoreQueryPrefix: ignoreQueryPrefix,
+        interpretNumericEntities: interpretNumericEntities,
+        parseLists: parseLists,
+        strictDepth: strictDepth,
+        strictMerge: strictMerge,
+        strictNullHandling: strictNullHandling,
+        throwOnLimitExceeded: throwOnLimitExceeded
+      )
     }
+
+    // MARK: - Swift convenience
+
+    /// Tiny Swift-only helper that lets you configure fluently:
+    ///
+    /// ```swift
+    /// let opts = DecodeOptionsObjC().with {
+    ///   $0.ignoreQueryPrefix = true
+    ///   $0.allowDots = true
+    /// }
+    /// ```
+    @discardableResult
+    public func with(_ configure: (DecodeOptionsObjC) -> Void) -> Self {
+      configure(self)
+      return self
+    }
+  }
 #endif

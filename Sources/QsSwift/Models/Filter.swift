@@ -34,14 +34,14 @@ public protocol Filter {}
 /// }
 /// ```
 public struct FunctionFilter: Filter, CustomStringConvertible {
-    /// The transformation function. Returning `nil` drops the key.
-    public let function: (String, Any?) -> Any?
+  /// The transformation function. Returning `nil` drops the key.
+  public let function: (String, Any?) -> Any?
 
-    public init(_ function: @escaping (String, Any?) -> Any?) {
-        self.function = function
-    }
+  public init(_ function: @escaping (String, Any?) -> Any?) {
+    self.function = function
+  }
 
-    public var description: String { "FunctionFilter(<closure>)" }
+  public var description: String { "FunctionFilter(<closure>)" }
 }
 
 /// A filter that whitelists a fixed set of keys/indices.
@@ -64,53 +64,53 @@ public struct FunctionFilter: Filter, CustomStringConvertible {
 /// let f3 = IterableFilter.mixed("a", 0, 2)
 /// ```
 public struct IterableFilter: Filter, CustomStringConvertible {
-    /// The allowlist of keys/indices (`String` keys and/or `Int` indices).
-    public let iterable: [Any]
+  /// The allowlist of keys/indices (`String` keys and/or `Int` indices).
+  public let iterable: [Any]
 
-    public init<T: Sequence>(_ iterable: T) {
-        self.iterable = Array(iterable)
-    }
+  public init<T: Sequence>(_ iterable: T) {
+    self.iterable = Array(iterable)
+  }
 
-    public init(_ array: [Any]) {
-        self.iterable = array
-    }
+  public init(_ array: [Any]) {
+    self.iterable = array
+  }
 
-    public var description: String { "IterableFilter(\(iterable))" }
+  public var description: String { "IterableFilter(\(iterable))" }
 }
 
 // MARK: - Convenience factories
 
 extension FunctionFilter {
-    /// Exclude keys for which the predicate returns `true`.
-    public static func excluding(_ shouldExclude: @escaping (String) -> Bool) -> FunctionFilter {
-        FunctionFilter { key, value in
-            shouldExclude(key) ? nil : value
-        }
+  /// Exclude keys for which the predicate returns `true`.
+  public static func excluding(_ shouldExclude: @escaping (String) -> Bool) -> FunctionFilter {
+    FunctionFilter { key, value in
+      shouldExclude(key) ? nil : value
     }
+  }
 
-    /// Include keys for which the predicate returns `true`.
-    public static func including(_ shouldInclude: @escaping (String) -> Bool) -> FunctionFilter {
-        FunctionFilter { key, value in
-            shouldInclude(key) ? value : nil
-        }
+  /// Include keys for which the predicate returns `true`.
+  public static func including(_ shouldInclude: @escaping (String) -> Bool) -> FunctionFilter {
+    FunctionFilter { key, value in
+      shouldInclude(key) ? value : nil
     }
+  }
 
-    /// Transform values for specific keys; other keys pass through unchanged.
-    public static func transforming(_ keyTransforms: [String: (Any?) -> Any?]) -> FunctionFilter {
-        FunctionFilter { key, value in
-            if let transform = keyTransforms[key] { return transform(value) }
-            return value
-        }
+  /// Transform values for specific keys; other keys pass through unchanged.
+  public static func transforming(_ keyTransforms: [String: (Any?) -> Any?]) -> FunctionFilter {
+    FunctionFilter { key, value in
+      if let transform = keyTransforms[key] { return transform(value) }
+      return value
     }
+  }
 }
 
 extension IterableFilter {
-    /// Convenience: include only the specified string keys.
-    public static func keys(_ keys: String...) -> IterableFilter { IterableFilter(keys) }
+  /// Convenience: include only the specified string keys.
+  public static func keys(_ keys: String...) -> IterableFilter { IterableFilter(keys) }
 
-    /// Convenience: include only the specified integer indices.
-    public static func indices(_ indices: Int...) -> IterableFilter { IterableFilter(indices) }
+  /// Convenience: include only the specified integer indices.
+  public static func indices(_ indices: Int...) -> IterableFilter { IterableFilter(indices) }
 
-    /// Convenience: include a mixed list of keys and indices.
-    public static func mixed(_ items: Any...) -> IterableFilter { IterableFilter(items) }
+  /// Convenience: include a mixed list of keys and indices.
+  public static func mixed(_ items: Any...) -> IterableFilter { IterableFilter(items) }
 }
