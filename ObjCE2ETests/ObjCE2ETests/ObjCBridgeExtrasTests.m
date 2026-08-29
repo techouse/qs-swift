@@ -1,8 +1,8 @@
 @import XCTest;
 @import QsObjC;
 
-#import "ObjCE2ETests-Swift.h"   // for SPMOrdered helpers
-#define OD(KS,VS) [SPMOrdered dictWithKeys:(KS) values:(VS)]
+#import "ObjCE2ETests-Swift.h" // for SPMOrdered helpers
+#define OD(KS, VS) [SPMOrdered dictWithKeys:(KS) values:(VS)]
 
 @interface ObjCBridgeExtrasTests : XCTestCase
 @end
@@ -11,533 +11,552 @@
 
 #pragma mark - Helpers
 
-- (QsEncodeOptions *)optsNoEncode {
-    QsEncodeOptions *o = [[QsEncodeOptions alloc] init];
-    o.encode = NO;
-    return o;
+- (QsEncodeOptions*)optsNoEncode {
+  QsEncodeOptions* o = [[QsEncodeOptions alloc] init];
+  o.encode = NO;
+  return o;
 }
 
 #pragma mark - 1) Cycles surface as NSError
 
 - (void)test_encode_cycle_returnsNSError {
-    NSMutableDictionary *m = [NSMutableDictionary dictionary];
-    m[@"self"] = m;  // cycle
-    
-    NSError *err = nil;
-    NSString *s = [Qs encode:m options:nil error:&err];
-    
-    XCTAssertNil(s);
-    XCTAssertNotNil(err);
-    XCTAssertEqualObjects(err.domain, QsEncodeErrorInfo.domain);
-    XCTAssertEqual(err.code, QsEncodeErrorCodeCyclicObject);
+  NSMutableDictionary* m = [NSMutableDictionary dictionary];
+  m[@"self"] = m; // cycle
+
+  NSError* err = nil;
+  NSString* s = [Qs encode:m options:nil error:&err];
+
+  XCTAssertNil(s);
+  XCTAssertNotNil(err);
+  XCTAssertEqualObjects(err.domain, QsEncodeErrorInfo.domain);
+  XCTAssertEqual(err.code, QsEncodeErrorCodeCyclicObject);
 }
 
 #pragma mark - 2) Custom value encoder block is invoked (values only)
 
 - (void)test_valueEncoderBlock_is_called_for_values_only {
-    QsEncodeOptions *o = [[QsEncodeOptions alloc] init];
-    o.encode = YES;                 // normal percent-encoding
-    o.encodeValuesOnly = YES;       // do NOT touch keys with the block
-    o.valueEncoderBlock = ^NSString * _Nonnull(id value,
-                                               NSNumber *charsetNum,
-                                               NSNumber *formatNum) {
-        // Make it obvious it ran:
-        return @"VV";
-    };
-    
-    NSString *got = [QsObjCTestHelpers encode:OD(@[@"a"], @[@"b"]) options:o];
-    XCTAssertEqualObjects(got, @"a=VV");
+  QsEncodeOptions* o = [[QsEncodeOptions alloc] init];
+  o.encode = YES; // normal percent-encoding
+  o.encodeValuesOnly = YES; // do NOT touch keys with the block
+  o.valueEncoderBlock = ^NSString* _Nonnull(id value, NSNumber* charsetNum, NSNumber* formatNum) {
+    // Make it obvious it ran:
+    return @"VV";
+  };
+
+  NSString* got = [QsObjCTestHelpers encode:OD(@[ @"a" ], @[ @"b" ]) options:o];
+  XCTAssertEqualObjects(got, @"a=VV");
 }
 
 #pragma mark - 3) Date serializer bridges through
 
 - (void)test_dateSerializer_is_used {
-    NSDate *epoch = [NSDate dateWithTimeIntervalSince1970:0];
-    
-    QsEncodeOptions *o = [[QsEncodeOptions alloc] init];
-    o.dateSerializerBlock = ^NSString * _Nonnull(NSDate * _Nonnull date) {
-        // return a plain string; the core will encode if needed
-        return @"epoch";
-    };
-    
-    NSString *got = [QsObjCTestHelpers encode:OD(@[@"when"], @[epoch]) options:o];
-    XCTAssertEqualObjects(got, @"when=epoch");
+  NSDate* epoch = [NSDate dateWithTimeIntervalSince1970:0];
+
+  QsEncodeOptions* o = [[QsEncodeOptions alloc] init];
+  o.dateSerializerBlock = ^NSString* _Nonnull(NSDate* _Nonnull date) {
+    // return a plain string; the core will encode if needed
+    return @"epoch";
+  };
+
+  NSString* got = [QsObjCTestHelpers encode:OD(@[ @"when" ], @[ epoch ]) options:o];
+  XCTAssertEqualObjects(got, @"when=epoch");
 }
 
 #pragma mark - 4) Sort comparator controls top-level order
 
 - (void)test_sortComparator_controls_key_order {
-    QsEncodeOptions *o = [self optsNoEncode];
-    o.sortComparatorBlock = ^NSInteger(id a, id b) {
-        NSString *sa = [NSString stringWithFormat:@"%@", a ?: @""];
-        NSString *sb = [NSString stringWithFormat:@"%@", b ?: @""];
-        NSComparisonResult primary = [sa caseInsensitiveCompare:sb];
-        if (primary != NSOrderedSame) return -primary;  // reverse
-        NSComparisonResult tie = [sa compare:sb];
-        return (tie == NSOrderedAscending) ? -1 : (tie == NSOrderedSame ? 0 : 1);
-    };
-    
-    NSString *got = [QsObjCTestHelpers encode:[SPMOrdered dictWithKeys:@[@"a",@"b",@"c"] values:@[@"1",@"2",@"3"]]
-                                      options:o];
-    XCTAssertEqualObjects(got, @"c=3&b=2&a=1");
+  QsEncodeOptions* o = [self optsNoEncode];
+  o.sortComparatorBlock = ^NSInteger(id a, id b) {
+      NSString* sa = [NSString stringWithFormat:@"%@", a ?: @""];
+      NSString* sb = [NSString stringWithFormat:@"%@", b ?: @""];
+      NSComparisonResult primary = [sa caseInsensitiveCompare:sb];
+      if (primary != NSOrderedSame)
+        return -primary; // reverse
+      NSComparisonResult tie = [sa compare:sb];
+      return (tie == NSOrderedAscending) ? -1 : (tie == NSOrderedSame ? 0 : 1);
+  };
+
+  NSString* got = [QsObjCTestHelpers encode:[SPMOrdered dictWithKeys:@[ @"a", @"b", @"c" ] values:@[ @"1", @"2", @"3" ]]
+                                    options:o];
+  XCTAssertEqualObjects(got, @"c=3&b=2&a=1");
 }
 
 #pragma mark - 5) Function filter can drop a key via Undefined
 
 - (void)test_functionFilter_drops_key_withUndefined {
-    QsFunctionFilter *ff = [[QsFunctionFilter alloc] init:^id _Nullable(NSString *key, id value) {
-        if ([key isEqualToString:@"secret"]) return [QsUndefined new]; // omit it
-        return value;
-    }];
-    
-    QsEncodeOptions *o = [self optsNoEncode];
-    o.filter = [QsFilter function:ff];
-    
-    NSString *got = [QsObjCTestHelpers encode:[SPMOrdered dictWithKeys:@[@"ok", @"secret"] values:@[@"1", @"2"]]
-                                      options:o];
-    XCTAssertEqualObjects(got, @"ok=1");
+  QsFunctionFilter* ff = [[QsFunctionFilter alloc] init:^id _Nullable(NSString* key, id value) {
+      if ([key isEqualToString:@"secret"])
+        return [QsUndefined new]; // omit it
+      return value;
+  }];
+
+  QsEncodeOptions* o = [self optsNoEncode];
+  o.filter = [QsFilter function:ff];
+
+  NSString* got = [QsObjCTestHelpers encode:[SPMOrdered dictWithKeys:@[ @"ok", @"secret" ] values:@[ @"1", @"2" ]]
+                                    options:o];
+  XCTAssertEqualObjects(got, @"ok=1");
 }
 
 #pragma mark - 6) Regex delimiter on decode
 
 - (void)test_decode_with_regex_delimiter {
-    QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
-    d.delimiter = QsDelimiter.commaOrSemicolon; // /\s*[,;]\s*/
-    NSError *err = nil;
-    
-    NSDictionary *map = [Qs decode:@"a=1; b=2, c=3" options:d error:&err];
-    XCTAssertNil(err);
-    XCTAssertEqualObjects(map[@"a"], @"1");
-    XCTAssertEqualObjects(map[@"b"], @"2");
-    XCTAssertEqualObjects(map[@"c"], @"3");
+  QsDecodeOptions* d = [[QsDecodeOptions alloc] init];
+  d.delimiter = QsDelimiter.commaOrSemicolon; // /\s*[,;]\s*/
+  NSError* err = nil;
+
+  NSDictionary* map = [Qs decode:@"a=1; b=2, c=3" options:d error:&err];
+  XCTAssertNil(err);
+  XCTAssertEqualObjects(map[@"a"], @"1");
+  XCTAssertEqualObjects(map[@"b"], @"2");
+  XCTAssertEqualObjects(map[@"c"], @"3");
 }
 
 #pragma mark - 7) Decode duplicates policy (combine/first/last)
 
 - (void)test_decode_duplicates_policy {
-    NSString *q = @"a=1&a=2";
-    
-    // combine → array
-    QsDecodeOptions *d1 = [[QsDecodeOptions alloc] init];
-    d1.duplicates = QsDuplicatesCombine;
-    NSError *err = nil;
-    NSDictionary *m1 = [Qs decode:q options:d1 error:&err];
-    XCTAssertNil(err);
-    id v1 = m1[@"a"]; XCTAssertTrue([v1 isKindOfClass:[NSArray class]]);
-    NSArray *arr = (NSArray *)v1;
-    XCTAssertEqual(arr.count, 2u);
-    XCTAssertEqualObjects(arr[0], @"1");
-    XCTAssertEqualObjects(arr[1], @"2");
-    
-    // first → "1"
-    QsDecodeOptions *d2 = [[QsDecodeOptions alloc] init];
-    d2.duplicates = QsDuplicatesFirst;
-    NSDictionary *m2 = [Qs decode:q options:d2 error:&err];
-    XCTAssertNil(err);
-    XCTAssertEqualObjects(m2[@"a"], @"1");
-    
-    // last → "2"
-    QsDecodeOptions *d3 = [[QsDecodeOptions alloc] init];
-    d3.duplicates = QsDuplicatesLast;
-    NSDictionary *m3 = [Qs decode:q options:d3 error:&err];
-    XCTAssertNil(err);
-    XCTAssertEqualObjects(m3[@"a"], @"2");
+  NSString* q = @"a=1&a=2";
+
+  // combine → array
+  QsDecodeOptions* d1 = [[QsDecodeOptions alloc] init];
+  d1.duplicates = QsDuplicatesCombine;
+  NSError* err = nil;
+  NSDictionary* m1 = [Qs decode:q options:d1 error:&err];
+  XCTAssertNil(err);
+  id v1 = m1[@"a"];
+  XCTAssertTrue([v1 isKindOfClass:[NSArray class]]);
+  NSArray* arr = (NSArray*)v1;
+  XCTAssertEqual(arr.count, 2u);
+  XCTAssertEqualObjects(arr[0], @"1");
+  XCTAssertEqualObjects(arr[1], @"2");
+
+  // first → "1"
+  QsDecodeOptions* d2 = [[QsDecodeOptions alloc] init];
+  d2.duplicates = QsDuplicatesFirst;
+  NSDictionary* m2 = [Qs decode:q options:d2 error:&err];
+  XCTAssertNil(err);
+  XCTAssertEqualObjects(m2[@"a"], @"1");
+
+  // last → "2"
+  QsDecodeOptions* d3 = [[QsDecodeOptions alloc] init];
+  d3.duplicates = QsDuplicatesLast;
+  NSDictionary* m3 = [Qs decode:q options:d3 error:&err];
+  XCTAssertNil(err);
+  XCTAssertEqualObjects(m3[@"a"], @"2");
 }
 
 - (void)test_decode_qs_6_15_3_cumulative_list_limits {
-    QsDecodeOptions *strict = [[QsDecodeOptions alloc] init];
-    strict.comma = YES;
-    strict.listLimit = 3;
-    strict.throwOnLimitExceeded = YES;
+  QsDecodeOptions* strict = [[QsDecodeOptions alloc] init];
+  strict.comma = YES;
+  strict.listLimit = 3;
+  strict.throwOnLimitExceeded = YES;
 
-    NSError *err = nil;
-    NSDictionary *failed = [Qs decode:@"a=1,2&a=3,4" options:strict error:&err];
-    XCTAssertNil(failed);
-    XCTAssertNotNil(err);
-    XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
-    XCTAssertEqual(err.code, QsDecodeErrorCodeListLimitExceeded);
+  NSError* err = nil;
+  NSDictionary* failed = [Qs decode:@"a=1,2&a=3,4" options:strict error:&err];
+  XCTAssertNil(failed);
+  XCTAssertNotNil(err);
+  XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
+  XCTAssertEqual(err.code, QsDecodeErrorCodeListLimitExceeded);
 
-    QsDecodeOptions *soft = [[QsDecodeOptions alloc] init];
-    soft.comma = YES;
-    soft.listLimit = 3;
-    err = nil;
-    NSDictionary *overflowed = [Qs decode:@"a=1,2&a=3,4" options:soft error:&err];
-    XCTAssertNil(err);
-    NSDictionary *overflow = overflowed[@"a"];
-    XCTAssertEqualObjects(overflow[@"0"], @"1");
-    XCTAssertEqualObjects(overflow[@"3"], @"4");
+  QsDecodeOptions* soft = [[QsDecodeOptions alloc] init];
+  soft.comma = YES;
+  soft.listLimit = 3;
+  err = nil;
+  NSDictionary* overflowed = [Qs decode:@"a=1,2&a=3,4" options:soft error:&err];
+  XCTAssertNil(err);
+  NSDictionary* overflow = overflowed[@"a"];
+  XCTAssertEqualObjects(overflow[@"0"], @"1");
+  XCTAssertEqualObjects(overflow[@"3"], @"4");
 
-    QsDecodeOptions *bracketed = [[QsDecodeOptions alloc] init];
-    bracketed.comma = YES;
-    bracketed.listLimit = 1;
-    bracketed.throwOnLimitExceeded = YES;
-    err = nil;
-    NSDictionary *nested = [Qs decode:@"a[]=1,2,3,4" options:bracketed error:&err];
-    XCTAssertNil(err);
-    NSArray *outer = nested[@"a"];
-    XCTAssertEqual(outer.count, 1u);
-    XCTAssertEqualObjects(outer[0], (@[@"1", @"2", @"3", @"4"]));
+  QsDecodeOptions* bracketed = [[QsDecodeOptions alloc] init];
+  bracketed.comma = YES;
+  bracketed.listLimit = 1;
+  bracketed.throwOnLimitExceeded = YES;
+  err = nil;
+  NSDictionary* nested = [Qs decode:@"a[]=1,2,3,4" options:bracketed error:&err];
+  XCTAssertNil(err);
+  NSArray* outer = nested[@"a"];
+  XCTAssertEqual(outer.count, 1u);
+  XCTAssertEqualObjects(outer[0], (@[ @"1", @"2", @"3", @"4" ]));
 }
 
 #pragma mark - 8) RFC1738 uses + for spaces when encoding
 
 - (void)test_encode_rfc1738_space_plus {
-    QsEncodeOptions *o = [self optsNoEncode];
-    o.encode = YES;                  // allow percent-encoding
-    o.format = QsFormatRfc1738;      // space → "+"
-    NSString *got = [QsObjCTestHelpers encode:OD(@[@"q"], @[@"a b"]) options:o];
-    XCTAssertEqualObjects(got, @"q=a+b");
+  QsEncodeOptions* o = [self optsNoEncode];
+  o.encode = YES; // allow percent-encoding
+  o.format = QsFormatRfc1738; // space → "+"
+  NSString* got = [QsObjCTestHelpers encode:OD(@[ @"q" ], @[ @"a b" ]) options:o];
+  XCTAssertEqualObjects(got, @"q=a+b");
 }
 
 #pragma mark - 9) Comma list format round-trip flag
 
 - (void)test_encode_comma_list_roundtrip_flag {
-    QsEncodeOptions *o = [self optsNoEncode];
-    o.listFormat = @(QsListFormatComma);
-    
-    // roundTrip = YES → single-item lists get [] to re-inflate to array
-    o.commaRoundTrip = YES;
-    NSString *got = [QsObjCTestHelpers encode:OD(@[@"a"], @[@[ @"x" ]]) options:o];
-    XCTAssertEqualObjects(got, @"a[]=x");
-    
-    // roundTrip = NO → single-item array encoded as scalar
-    o.commaRoundTrip = NO;
-    got = [QsObjCTestHelpers encode:OD(@[@"a"], @[@[ @"x" ]]) options:o];
-    XCTAssertEqualObjects(got, @"a=x");
+  QsEncodeOptions* o = [self optsNoEncode];
+  o.listFormat = @(QsListFormatComma);
+
+  // roundTrip = YES → single-item lists get [] to re-inflate to array
+  o.commaRoundTrip = YES;
+  NSString* got = [QsObjCTestHelpers encode:OD(@[ @"a" ], @[ @[ @"x" ] ]) options:o];
+  XCTAssertEqualObjects(got, @"a[]=x");
+
+  // roundTrip = NO → single-item array encoded as scalar
+  o.commaRoundTrip = NO;
+  got = [QsObjCTestHelpers encode:OD(@[ @"a" ], @[ @[ @"x" ] ]) options:o];
+  XCTAssertEqualObjects(got, @"a=x");
 }
 
 - (void)test_encode_comma_list_compact_nulls {
-    QsEncodeOptions *o = [self optsNoEncode];
-    o.listFormat = @(QsListFormatComma);
+  QsEncodeOptions* o = [self optsNoEncode];
+  o.listFormat = @(QsListFormatComma);
 
-    NSArray *payload = @[ @"one", [NSNull null], @"two" ];
-    NSString *baseline = [QsObjCTestHelpers encode:OD(@[@"a"], @[ payload ]) options:o];
-    XCTAssertEqualObjects(baseline, @"a=one,,two");
+  NSArray* payload = @[ @"one", [NSNull null], @"two" ];
+  NSString* baseline = [QsObjCTestHelpers encode:OD(@[ @"a" ], @[ payload ]) options:o];
+  XCTAssertEqualObjects(baseline, @"a=one,,two");
 
-    o.commaCompactNulls = YES;
-    NSString *compact = [QsObjCTestHelpers encode:OD(@[@"a"], @[ payload ]) options:o];
-    XCTAssertEqualObjects(compact, @"a=one,two");
+  o.commaCompactNulls = YES;
+  NSString* compact = [QsObjCTestHelpers encode:OD(@[ @"a" ], @[ payload ]) options:o];
+  XCTAssertEqualObjects(compact, @"a=one,two");
 }
 
 #pragma mark - 10) allowDots vs encodeDotInKeys
 
 - (void)test_allowDots_vs_encodeDotInKeys {
-    QsEncodeOptions *o = [self optsNoEncode];
-    o.allowDots = NO; o.encodeDotInKeys = NO;
-    
-    // Use nested input so the encoder chooses between bracket vs dot notation.
-    id nested = OD(@[@"a"], @[ OD(@[@"b"], @[@"1"]) ]);
-    
-    NSString *got = [QsObjCTestHelpers encode:nested options:o];
-    XCTAssertEqualObjects(got, @"a[b]=1");
-    
-    o.allowDots = YES; // use dot notation for nested paths
-    got = [QsObjCTestHelpers encode:nested options:o];
-    XCTAssertEqualObjects(got, @"a.b=1");
+  QsEncodeOptions* o = [self optsNoEncode];
+  o.allowDots = NO;
+  o.encodeDotInKeys = NO;
+
+  // Use nested input so the encoder chooses between bracket vs dot notation.
+  id nested = OD(@[ @"a" ], @[ OD(@[ @"b" ], @[ @"1" ]) ]);
+
+  NSString* got = [QsObjCTestHelpers encode:nested options:o];
+  XCTAssertEqualObjects(got, @"a[b]=1");
+
+  o.allowDots = YES; // use dot notation for nested paths
+  got = [QsObjCTestHelpers encode:nested options:o];
+  XCTAssertEqualObjects(got, @"a.b=1");
 }
 
 #pragma mark - 11) Async wrappers queue behavior and error paths
 
 - (void)test_encode_async_on_main_queue {
-    XCTestExpectation *exp = [self expectationWithDescription:@"encode-async-main"];
-    QsEncodeOptions *o = [self optsNoEncode];
-    [Qs encodeAsyncOnMain:OD(@[@"a"], @[@"b"]) options:o completion:^(NSString * _Nullable s, NSError * _Nullable err) {
-        XCTAssertTrue([NSThread isMainThread]);
-        XCTAssertNil(err);
-        XCTAssertEqualObjects(s, @"a=b");
-        [exp fulfill];
-    }];
-    [self waitForExpectations:@[exp] timeout:2.0]; // macOS runners can be sluggish intermittently. A 2s timeout (like in other async tests) is safer.
+  XCTestExpectation* exp = [self expectationWithDescription:@"encode-async-main"];
+  QsEncodeOptions* o = [self optsNoEncode];
+  [Qs encodeAsyncOnMain:OD(@[ @"a" ], @[ @"b" ])
+                options:o
+             completion:^(NSString* _Nullable s, NSError* _Nullable err) {
+                 XCTAssertTrue([NSThread isMainThread]);
+                 XCTAssertNil(err);
+                 XCTAssertEqualObjects(s, @"a=b");
+                 [exp fulfill];
+             }];
+  [self waitForExpectations:@[ exp ]
+                    timeout:2.0]; // macOS runners can be sluggish intermittently. A 2s timeout (like in other async
+                                  // tests) is safer.
 }
 
 - (void)test_decode_async_on_main_queue {
-    XCTestExpectation *exp = [self expectationWithDescription:@"decode-async-main"];
-    [Qs decodeAsyncOnMain:@"a=b" options:nil completion:^(NSDictionary * _Nullable dict, NSError * _Nullable err) {
-        XCTAssertTrue([NSThread isMainThread]);
-        XCTAssertNil(err);
-        XCTAssertEqualObjects(dict[@"a"], @"b");
-        [exp fulfill];
-    }];
-    [self waitForExpectations:@[exp] timeout:2.0]; // macOS runners can be sluggish intermittently. A 2s timeout (like in other async tests) is safer.
+  XCTestExpectation* exp = [self expectationWithDescription:@"decode-async-main"];
+  [Qs decodeAsyncOnMain:@"a=b"
+                options:nil
+             completion:^(NSDictionary* _Nullable dict, NSError* _Nullable err) {
+                 XCTAssertTrue([NSThread isMainThread]);
+                 XCTAssertNil(err);
+                 XCTAssertEqualObjects(dict[@"a"], @"b");
+                 [exp fulfill];
+             }];
+  [self waitForExpectations:@[ exp ]
+                    timeout:2.0]; // macOS runners can be sluggish intermittently. A 2s timeout (like in other async
+                                  // tests) is safer.
 }
 
 - (void)test_decode_async_background_queue {
-    XCTestExpectation *exp = [self expectationWithDescription:@"decode-async-background"];
-    [Qs decodeAsync:@"a=b" options:nil completion:^(NSDictionary * _Nullable dict, NSError * _Nullable err) {
-        XCTAssertFalse([NSThread isMainThread]);
-        XCTAssertNil(err);
-        XCTAssertEqualObjects(dict[@"a"], @"b");
-        [exp fulfill];
-    }];
-    [self waitForExpectations:@[exp] timeout:2.0];
+  XCTestExpectation* exp = [self expectationWithDescription:@"decode-async-background"];
+  [Qs decodeAsync:@"a=b"
+          options:nil
+       completion:^(NSDictionary* _Nullable dict, NSError* _Nullable err) {
+           XCTAssertFalse([NSThread isMainThread]);
+           XCTAssertNil(err);
+           XCTAssertEqualObjects(dict[@"a"], @"b");
+           [exp fulfill];
+       }];
+  [self waitForExpectations:@[ exp ] timeout:2.0];
 }
 
 - (void)test_decode_async_on_main_invalid_input_returns_error {
-    XCTestExpectation *exp = [self expectationWithDescription:@"decode-async-main-error"];
-    [Qs decodeAsyncOnMain:@(1) options:nil completion:^(NSDictionary * _Nullable dict, NSError * _Nullable err) {
-        XCTAssertTrue([NSThread isMainThread]);
-        XCTAssertNil(dict);
-        XCTAssertNotNil(err);
-        XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
-        [exp fulfill];
-    }];
-    [self waitForExpectations:@[exp] timeout:2.0];
+  XCTestExpectation* exp = [self expectationWithDescription:@"decode-async-main-error"];
+  [Qs decodeAsyncOnMain:@(1)
+                options:nil
+             completion:^(NSDictionary* _Nullable dict, NSError* _Nullable err) {
+                 XCTAssertTrue([NSThread isMainThread]);
+                 XCTAssertNil(dict);
+                 XCTAssertNotNil(err);
+                 XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
+                 [exp fulfill];
+             }];
+  [self waitForExpectations:@[ exp ] timeout:2.0];
 }
 
 - (void)test_decode_async_invalid_input_returns_error_off_main {
-    XCTestExpectation *exp = [self expectationWithDescription:@"decode-async-background-error"];
-    [Qs decodeAsync:@(1) options:nil completion:^(NSDictionary * _Nullable dict, NSError * _Nullable err) {
-        XCTAssertFalse([NSThread isMainThread]);
-        XCTAssertNil(dict);
-        XCTAssertNotNil(err);
-        XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
-        [exp fulfill];
-    }];
-    [self waitForExpectations:@[exp] timeout:2.0];
+  XCTestExpectation* exp = [self expectationWithDescription:@"decode-async-background-error"];
+  [Qs decodeAsync:@(1)
+          options:nil
+       completion:^(NSDictionary* _Nullable dict, NSError* _Nullable err) {
+           XCTAssertFalse([NSThread isMainThread]);
+           XCTAssertNil(dict);
+           XCTAssertNotNil(err);
+           XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
+           [exp fulfill];
+       }];
+  [self waitForExpectations:@[ exp ] timeout:2.0];
 }
 
 #pragma mark - 12) Charset sentinel is present when requested
 
 - (void)test_encode_includes_charset_sentinel_when_enabled {
-    QsEncodeOptions *o = [self optsNoEncode];
-    o.charsetSentinel = YES;
-    o.encode = YES; // ensure sentinel token is encoded
-    NSString *got = [QsObjCTestHelpers encode:OD(@[@"a"], @[@"b"]) options:o];
-    // We don't assume position; just ensure the known token is present
-    XCTAssertTrue([got containsString:@"utf8=%E2%9C%93"]);
+  QsEncodeOptions* o = [self optsNoEncode];
+  o.charsetSentinel = YES;
+  o.encode = YES; // ensure sentinel token is encoded
+  NSString* got = [QsObjCTestHelpers encode:OD(@[ @"a" ], @[ @"b" ]) options:o];
+  // We don't assume position; just ensure the known token is present
+  XCTAssertTrue([got containsString:@"utf8=%E2%9C%93"]);
 }
 
 #pragma mark - 13) skipNulls & Undefined omit keys
 
 - (void)test_encode_skips_nulls_and_undefined {
-    // NSNull + skipNulls
-    QsEncodeOptions *o1 = [self optsNoEncode];
-    o1.skipNulls = YES;
-    NSString *got1 = [QsObjCTestHelpers encode:OD((@[@"a", @"b"]), (@[ [NSNull null], @"x" ])) options:o1];
-    XCTAssertEqualObjects(got1, @"b=x");
-    
-    // Direct Undefined sentinel value
-    QsEncodeOptions *o2 = [self optsNoEncode];
-    NSString *got2 = [QsObjCTestHelpers encode:OD((@[@"a", @"b"]), (@[ [QsUndefined new], @"x" ])) options:o2];
-    XCTAssertEqualObjects(got2, @"b=x");
+  // NSNull + skipNulls
+  QsEncodeOptions* o1 = [self optsNoEncode];
+  o1.skipNulls = YES;
+  NSString* got1 = [QsObjCTestHelpers encode:OD((@[ @"a", @"b" ]), (@[ [NSNull null], @"x" ])) options:o1];
+  XCTAssertEqualObjects(got1, @"b=x");
+
+  // Direct Undefined sentinel value
+  QsEncodeOptions* o2 = [self optsNoEncode];
+  NSString* got2 = [QsObjCTestHelpers encode:OD((@[ @"a", @"b" ]), (@[ [QsUndefined new], @"x" ])) options:o2];
+  XCTAssertEqualObjects(got2, @"b=x");
 }
 
 #pragma mark - 14) Decode depth limit surfaces error when strict & throwing
 
 - (void)test_decode_depth_exceeded_throws_when_strict {
-    QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
-    d.depth = 1;                // allow one level; we'll exceed with two below
-    d.strictDepth = YES;        // enforce exact depth
-    d.throwOnLimitExceeded = YES;
-    
-    NSError *err = nil;
-    NSDictionary *map = [Qs decode:@"a[b][c]=1" options:d error:&err];
-    XCTAssertNil(map);
-    XCTAssertNotNil(err);
-    XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
-    XCTAssertEqual(err.code, QsDecodeErrorCodeDepthExceeded);
+  QsDecodeOptions* d = [[QsDecodeOptions alloc] init];
+  d.depth = 1; // allow one level; we'll exceed with two below
+  d.strictDepth = YES; // enforce exact depth
+  d.throwOnLimitExceeded = YES;
+
+  NSError* err = nil;
+  NSDictionary* map = [Qs decode:@"a[b][c]=1" options:d error:&err];
+  XCTAssertNil(map);
+  XCTAssertNotNil(err);
+  XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
+  XCTAssertEqual(err.code, QsDecodeErrorCodeDepthExceeded);
 }
 
 #pragma mark - 15) valueEncoderBlock can encode keys when encodeValuesOnly = NO
 
 - (void)test_valueEncoderBlock_encodes_keys_when_allowed {
-    QsEncodeOptions *o = [self optsNoEncode];
-    o.encode = YES;
-    o.encodeValuesOnly = NO; // allow block for keys too
-    o.valueEncoderBlock = ^NSString * _Nonnull(id value, NSNumber *charsetNum, NSNumber *formatNum) {
-        return @"V"; // obvious marker
-    };
-    NSString *got = [QsObjCTestHelpers encode:OD(@[@"A"], @[@"b"]) options:o];
-    XCTAssertEqualObjects(got, @"V=V");
+  QsEncodeOptions* o = [self optsNoEncode];
+  o.encode = YES;
+  o.encodeValuesOnly = NO; // allow block for keys too
+  o.valueEncoderBlock = ^NSString* _Nonnull(id value, NSNumber* charsetNum, NSNumber* formatNum) {
+    return @"V"; // obvious marker
+  };
+  NSString* got = [QsObjCTestHelpers encode:OD(@[ @"A" ], @[ @"b" ]) options:o];
+  XCTAssertEqualObjects(got, @"V=V");
 }
 
 // MARK: - 16) Decode: scalar decoder block is invoked for KEY and VALUE
 
 - (void)test_decode_scalarDecoderBlock_invoked_for_key_and_value {
-    QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
-    
-    __block BOOL sawKey = NO;
-    __block BOOL sawValue = NO;
-    
-    d.decoderBlock = ^id _Nullable(NSString * _Nullable token,
-                                   NSNumber * _Nullable charsetNum,
-                                   NSNumber * _Nullable kindNum) {
-        QsDecodeKind kind = (QsDecodeKind)kindNum.integerValue; // enum-backed
-        if (kind == 0) {
-            sawKey = YES;
-            return [NSString stringWithFormat:@"K:%@", token ?: @"<nil>"];
-        } else { // QsDecodeKindValue
-            sawValue = YES;
-            return [NSString stringWithFormat:@"V:%@", token ?: @"<nil>"];
-        }
-    };
-    
-    NSError *err = nil;
-    // Mix a top-level key with an indexed key to ensure we see both KEY and VALUE paths
-    NSDictionary *m = [Qs decode:@"a%2Eb=c&a[b]=d" options:d error:&err];
-    XCTAssertNil(err);
-    
-    // Custom decoder echoes keys/values with a prefix; verify both were used.
-    // For the dotted key, allowDots defaults to NO so no splitting occurs.
-    XCTAssertEqualObjects(m[@"K:a%2Eb"], @"V:c");
-    // For the bracketed key, the key is decoded *before* splitting, so "K:a[b]"
-    // becomes parent "K:a" with child "b".
-    id Ka = m[@"K:a"];
-    XCTAssertTrue([Ka isKindOfClass:[NSDictionary class]]);
-    XCTAssertEqualObjects(((NSDictionary *)Ka)[@"b"], @"V:d");
-    XCTAssertTrue(sawKey);
-    XCTAssertTrue(sawValue);
+  QsDecodeOptions* d = [[QsDecodeOptions alloc] init];
+
+  __block BOOL sawKey = NO;
+  __block BOOL sawValue = NO;
+
+  d.decoderBlock
+      = ^id _Nullable(NSString* _Nullable token, NSNumber* _Nullable charsetNum, NSNumber* _Nullable kindNum) {
+    QsDecodeKind kind = (QsDecodeKind)kindNum.integerValue; // enum-backed
+    if (kind == 0) {
+      sawKey = YES;
+      return [NSString stringWithFormat:@"K:%@", token ?: @"<nil>"];
+    } else { // QsDecodeKindValue
+      sawValue = YES;
+      return [NSString stringWithFormat:@"V:%@", token ?: @"<nil>"];
+    }
+  };
+
+  NSError* err = nil;
+  // Mix a top-level key with an indexed key to ensure we see both KEY and VALUE paths
+  NSDictionary* m = [Qs decode:@"a%2Eb=c&a[b]=d" options:d error:&err];
+  XCTAssertNil(err);
+
+  // Custom decoder echoes keys/values with a prefix; verify both were used.
+  // For the dotted key, allowDots defaults to NO so no splitting occurs.
+  XCTAssertEqualObjects(m[@"K:a%2Eb"], @"V:c");
+  // For the bracketed key, the key is decoded *before* splitting, so "K:a[b]"
+  // becomes parent "K:a" with child "b".
+  id Ka = m[@"K:a"];
+  XCTAssertTrue([Ka isKindOfClass:[NSDictionary class]]);
+  XCTAssertEqualObjects(((NSDictionary*)Ka)[@"b"], @"V:d");
+  XCTAssertTrue(sawKey);
+  XCTAssertTrue(sawValue);
 }
 
 #pragma mark - 17) Decode: decoder wins over legacyDecoder when both provided
 
 - (void)test_decode_decoderBlock_wins_over_legacyDecoderBlock {
-    QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
-    
-    d.legacyDecoderBlock = ^id _Nullable(NSString * _Nullable v, NSNumber * _Nullable cs) {
-        return [NSString stringWithFormat:@"L:%@", v ?: @"null"]; // should be ignored
-    };
-    d.decoderBlock = ^id _Nullable(NSString * _Nullable v, NSNumber * _Nullable cs, NSNumber * _Nullable kind) {
-        return [NSString stringWithFormat:@"K:%@", v ?: @"null"]; // should win
-    };
-    
-    NSError *err = nil;
-    NSDictionary *r = [Qs decode:@"x=y" options:d error:&err];
-    XCTAssertNil(err);
-    XCTAssertEqualObjects(r[@"K:x"], @"K:y");
+  QsDecodeOptions* d = [[QsDecodeOptions alloc] init];
+
+  d.legacyDecoderBlock = ^id _Nullable(NSString* _Nullable v, NSNumber* _Nullable cs) {
+    return [NSString stringWithFormat:@"L:%@", v ?: @"null"]; // should be ignored
+  };
+  d.decoderBlock = ^id _Nullable(NSString* _Nullable v, NSNumber* _Nullable cs, NSNumber* _Nullable kind) {
+    return [NSString stringWithFormat:@"K:%@", v ?: @"null"]; // should win
+  };
+
+  NSError* err = nil;
+  NSDictionary* r = [Qs decode:@"x=y" options:d error:&err];
+  XCTAssertNil(err);
+  XCTAssertEqualObjects(r[@"K:x"], @"K:y");
 }
 
 #pragma mark - 18) Decode: depth=0 normalizes dots without bracket splitting
 
 - (void)test_decode_depth_zero_normalizes_dots_without_bracket_splitting {
-    QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
-    d.allowDots = YES;
-    d.depth = 0; // normalize dots, but never split bracket syntax
-    
-    NSError *err = nil;
-    NSDictionary *m = [Qs decode:@"a.b=c" options:d error:&err];
-    XCTAssertNil(err);
-    XCTAssertEqualObjects(m[@"a[b]"], @"c");
+  QsDecodeOptions* d = [[QsDecodeOptions alloc] init];
+  d.allowDots = YES;
+  d.depth = 0; // normalize dots, but never split bracket syntax
+
+  NSError* err = nil;
+  NSDictionary* m = [Qs decode:@"a.b=c" options:d error:&err];
+  XCTAssertNil(err);
+  XCTAssertEqualObjects(m[@"a[b]"], @"c");
 }
 
 #pragma mark - 19) Decode: top-level dot guardrails (leading/trailing/double)
 
 - (void)test_decode_top_level_dot_guardrails {
-    NSError *err = nil;
-    
-    // Leading dot: ".a" → { "a": "x" }
-    {
-        QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
-        d.allowDots = YES;
-        d.decodeDotInKeys = NO;
-        NSDictionary *m = [Qs decode:@".a=x" options:d error:&err];
-        XCTAssertNil(err);
-        XCTAssertEqualObjects(m[@"a"], @"x");
-    }
-    
-    // Trailing dot: "a." remains literal
-    {
-        QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
-        d.allowDots = YES;
-        d.decodeDotInKeys = NO;
-        NSDictionary *m = [Qs decode:@"a.=x" options:d error:&err];
-        XCTAssertNil(err);
-        XCTAssertEqualObjects(m[@"a."], @"x");
-    }
-    
-    // Double dots: first dot is literal on the parent; second splits
-    {
-        QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
-        d.allowDots = YES;
-        d.decodeDotInKeys = NO;
-        NSDictionary *m = [Qs decode:@"a..b=x" options:d error:&err];
-        XCTAssertNil(err);
-        id parent = m[@"a."];
-        XCTAssertTrue([parent isKindOfClass:[NSDictionary class]]);
-        XCTAssertEqualObjects(((NSDictionary *)parent)[@"b"], @"x");
-    }
+  NSError* err = nil;
+
+  // Leading dot: ".a" → { "a": "x" }
+  {
+    QsDecodeOptions* d = [[QsDecodeOptions alloc] init];
+    d.allowDots = YES;
+    d.decodeDotInKeys = NO;
+    NSDictionary* m = [Qs decode:@".a=x" options:d error:&err];
+    XCTAssertNil(err);
+    XCTAssertEqualObjects(m[@"a"], @"x");
+  }
+
+  // Trailing dot: "a." remains literal
+  {
+    QsDecodeOptions* d = [[QsDecodeOptions alloc] init];
+    d.allowDots = YES;
+    d.decodeDotInKeys = NO;
+    NSDictionary* m = [Qs decode:@"a.=x" options:d error:&err];
+    XCTAssertNil(err);
+    XCTAssertEqualObjects(m[@"a."], @"x");
+  }
+
+  // Double dots: first dot is literal on the parent; second splits
+  {
+    QsDecodeOptions* d = [[QsDecodeOptions alloc] init];
+    d.allowDots = YES;
+    d.decodeDotInKeys = NO;
+    NSDictionary* m = [Qs decode:@"a..b=x" options:d error:&err];
+    XCTAssertNil(err);
+    id parent = m[@"a."];
+    XCTAssertTrue([parent isKindOfClass:[NSDictionary class]]);
+    XCTAssertEqualObjects(((NSDictionary*)parent)[@"b"], @"x");
+  }
 }
 
 #pragma mark - 20) Decode: encoded dot behavior at top level & inside brackets
 
 - (void)test_decode_encoded_dot_behavior_top_level_and_brackets {
-    NSError *err = nil;
-    
-    // Top-level, allowDots=false, decodeDotInKeys=false → no split; %2E → '.'
-    {
-        QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
-        d.allowDots = NO;
-        d.decodeDotInKeys = NO;
-        NSDictionary *m = [Qs decode:@"a%2Eb=c" options:d error:&err];
-        XCTAssertNil(err);
-        XCTAssertEqualObjects(m[@"a.b"], @"c");
-    }
-    
-    // Top-level, allowDots=true, decodeDotInKeys=true → split
-    {
-        QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
-        d.allowDots = YES;
-        d.decodeDotInKeys = YES;
-        NSDictionary *m = [Qs decode:@"a%2Eb=c" options:d error:&err];
-        XCTAssertNil(err);
-        id a = m[@"a"]; XCTAssertTrue([a isKindOfClass:[NSDictionary class]]);
-        XCTAssertEqualObjects(((NSDictionary *)a)[@"b"], @"c");
-    }
-    
-    // Top-level, allowDots=true, decodeDotInKeys=false → also splits
-    {
-        QsDecodeOptions *d = [[QsDecodeOptions alloc] init];
-        d.allowDots = YES;
-        d.decodeDotInKeys = NO;
-        NSDictionary *m = [Qs decode:@"a%2Eb=c" options:d error:&err];
-        XCTAssertNil(err);
-        id a = m[@"a"]; XCTAssertTrue([a isKindOfClass:[NSDictionary class]]);
-        XCTAssertEqualObjects(((NSDictionary *)a)[@"b"], @"c");
-    }
-    
-    // Bracket segment: percent-decoding yields '.' regardless of decodeDotInKeys
-    {
-        QsDecodeOptions *d1 = [[QsDecodeOptions alloc] init];
-        d1.allowDots = YES; d1.decodeDotInKeys = NO;
-        NSDictionary *m1 = [Qs decode:@"a[%2E]=x" options:d1 error:&err];
-        XCTAssertNil(err);
-        XCTAssertEqualObjects(((NSDictionary *)m1[@"a"])[@"."], @"x");
-        
-        QsDecodeOptions *d2 = [[QsDecodeOptions alloc] init];
-        d2.allowDots = YES; d2.decodeDotInKeys = YES;
-        NSDictionary *m2 = [Qs decode:@"a[%2e]=x" options:d2 error:&err];
-        XCTAssertNil(err);
-        XCTAssertEqualObjects(((NSDictionary *)m2[@"a"])[@"."], @"x");
-    }
+  NSError* err = nil;
+
+  // Top-level, allowDots=false, decodeDotInKeys=false → no split; %2E → '.'
+  {
+    QsDecodeOptions* d = [[QsDecodeOptions alloc] init];
+    d.allowDots = NO;
+    d.decodeDotInKeys = NO;
+    NSDictionary* m = [Qs decode:@"a%2Eb=c" options:d error:&err];
+    XCTAssertNil(err);
+    XCTAssertEqualObjects(m[@"a.b"], @"c");
+  }
+
+  // Top-level, allowDots=true, decodeDotInKeys=true → split
+  {
+    QsDecodeOptions* d = [[QsDecodeOptions alloc] init];
+    d.allowDots = YES;
+    d.decodeDotInKeys = YES;
+    NSDictionary* m = [Qs decode:@"a%2Eb=c" options:d error:&err];
+    XCTAssertNil(err);
+    id a = m[@"a"];
+    XCTAssertTrue([a isKindOfClass:[NSDictionary class]]);
+    XCTAssertEqualObjects(((NSDictionary*)a)[@"b"], @"c");
+  }
+
+  // Top-level, allowDots=true, decodeDotInKeys=false → also splits
+  {
+    QsDecodeOptions* d = [[QsDecodeOptions alloc] init];
+    d.allowDots = YES;
+    d.decodeDotInKeys = NO;
+    NSDictionary* m = [Qs decode:@"a%2Eb=c" options:d error:&err];
+    XCTAssertNil(err);
+    id a = m[@"a"];
+    XCTAssertTrue([a isKindOfClass:[NSDictionary class]]);
+    XCTAssertEqualObjects(((NSDictionary*)a)[@"b"], @"c");
+  }
+
+  // Bracket segment: percent-decoding yields '.' regardless of decodeDotInKeys
+  {
+    QsDecodeOptions* d1 = [[QsDecodeOptions alloc] init];
+    d1.allowDots = YES;
+    d1.decodeDotInKeys = NO;
+    NSDictionary* m1 = [Qs decode:@"a[%2E]=x" options:d1 error:&err];
+    XCTAssertNil(err);
+    XCTAssertEqualObjects(((NSDictionary*)m1[@"a"])[@"."], @"x");
+
+    QsDecodeOptions* d2 = [[QsDecodeOptions alloc] init];
+    d2.allowDots = YES;
+    d2.decodeDotInKeys = YES;
+    NSDictionary* m2 = [Qs decode:@"a[%2e]=x" options:d2 error:&err];
+    XCTAssertNil(err);
+    XCTAssertEqualObjects(((NSDictionary*)m2[@"a"])[@"."], @"x");
+  }
 }
 
 #pragma mark - 21) Decode: value tokens percent-decode %2E → "."
 
 - (void)test_decode_value_token_decodes_percent_dot {
-    NSError *err = nil;
-    NSDictionary *m = [Qs decode:@"x=%2E" options:nil error:&err];
-    XCTAssertNil(err);
-    XCTAssertEqualObjects(m[@"x"], @".");
+  NSError* err = nil;
+  NSDictionary* m = [Qs decode:@"x=%2E" options:nil error:&err];
+  XCTAssertNil(err);
+  XCTAssertEqualObjects(m[@"x"], @".");
 }
 
 #pragma mark - 22) Encode: very deep nested maps do not crash
 
 - (void)test_encode_very_deep_nested_maps_does_not_crash {
-    NSUInteger depth = 1000;
+  NSUInteger depth = 1000;
 
-    id leaf = @{ @"v": @"x" };
-    for (NSUInteger i = 0; i < depth; i++) {
-        leaf = @{ @"p": leaf };
-    }
+  id leaf = @{ @"v" : @"x" };
+  for (NSUInteger i = 0; i < depth; i++) {
+    leaf = @{ @"p" : leaf };
+  }
 
-    NSDictionary *payload = @{ @"root": leaf };
-    NSError *err = nil;
-    NSString *encoded = [Qs encode:payload options:nil error:&err];
+  NSDictionary* payload = @{ @"root" : leaf };
+  NSError* err = nil;
+  NSString* encoded = [Qs encode:payload options:nil error:&err];
 
-    XCTAssertNil(err);
-    XCTAssertNotNil(encoded);
-    XCTAssertTrue([encoded hasPrefix:@"root"]);
-    XCTAssertTrue([encoded hasSuffix:@"=x"]);
+  XCTAssertNil(err);
+  XCTAssertNotNil(encoded);
+  XCTAssertTrue([encoded hasPrefix:@"root"]);
+  XCTAssertTrue([encoded hasSuffix:@"=x"]);
 }
 
 @end
