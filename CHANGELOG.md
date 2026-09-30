@@ -1,3 +1,12 @@
+## Unreleased
+
+- [FEAT] add Swift/Objective-C encode depth limits with unlimited defaults and stable depth-error metadata.
+- [FIX] encode dotted top-level scalar/null keys before normal key encoding, matching `qs@6.16.0`.
+- [FIX] enforce strict comma-group limits under `[]=` before splitting, while preserving non-throwing nested groups.
+- [FIX] spread later array values one level when appending to soft-overflow maps, preserving bracketed inner groups and checked-index fallback values.
+- [CHORE] align SwiftPM comparator exclusions with pnpm lock/workspace files, removing stale npm-lock warnings.
+- [FIX][ObjC] expose encode-error maximum-depth metadata through the native `maxDepthFrom:` accessor as nullable `NSNumber`.
+
 ## 1.4.2
 
 - [CHORE] modify swift-lint and clang-format rules and apply them across the codebase
