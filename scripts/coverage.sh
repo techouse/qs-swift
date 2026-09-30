@@ -156,7 +156,17 @@ resolve_llvm_bin() {
   # macOS: prefer Xcode toolchain via xcrun
   if [[ "$OSTYPE" == darwin* ]]; then
     if xcrun -f "$name" >/dev/null 2>&1; then
-      echo "xcrun $name"; return
+      xcrun -f "$name"; return
+    fi
+  fi
+  # Linux: use the LLVM tools shipped with the selected Swift toolchain.
+  # System LLVM may not understand profiles produced by a newer Swift compiler.
+  if [[ "$OSTYPE" == linux* ]]; then
+    local swift_bin toolchain_bin
+    swift_bin="$(command -v swift)"
+    toolchain_bin="$(dirname "$(readlink -f "$swift_bin")")"
+    if [[ -x "$toolchain_bin/$name" ]]; then
+      echo "$toolchain_bin/$name"; return
     fi
   fi
   # Plain name first
@@ -181,7 +191,7 @@ for exe in "${BINS[@]}"; do
   echo "• exporting LCOV from: $exe"
   # Ignore test sources and build dir; keep everything else
   # (tweak the regex if you want to filter generated files or a Bench package)
-  $LLVM_COV export \
+  "$LLVM_COV" export \
     --format=lcov \
     --instr-profile "$PROF" \
     --ignore-filename-regex='/(Tests|\.build)/' \
