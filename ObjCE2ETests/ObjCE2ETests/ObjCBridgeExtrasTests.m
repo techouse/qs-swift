@@ -36,7 +36,7 @@
   QsEncodeOptions* options = [[QsEncodeOptions alloc] init];
   options.depth = 0;
   NSError* error = nil;
-  NSString* encoded = [Qs encode:@{ @"a" : @{ @"b" : @"c" } } options:options error:&error];
+  NSString* encoded = [Qs encode:@{ @"a" : @ { @"b" : @"c" } } options:options error:&error];
 
   XCTAssertNil(encoded);
   XCTAssertNotNil(error);
@@ -59,8 +59,8 @@
   XCTAssertEqual(maxDepth.integerValue, -1);
 
   NSError* withoutMetadata = [NSError errorWithDomain:QsEncodeErrorInfo.domain
-                                               code:QsEncodeErrorCodeDepthExceeded
-                                           userInfo:@{}];
+                                                 code:QsEncodeErrorCodeDepthExceeded
+                                             userInfo:@{ }];
   XCTAssertNil([QsEncodeError maxDepthFrom:withoutMetadata]);
 }
 
