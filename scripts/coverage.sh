@@ -109,6 +109,9 @@ BUNDLES=()
 while IFS= read -r -d '' p; do BUNDLES+=("$p"); done < <(find "$BIN_PATH" -type d -name '*.xctest' -print0 2>/dev/null || true)
 # Linux sometimes produces a file named *.xctest (executable, not bundle)
 while IFS= read -r -d '' p; do BUNDLES+=("$p"); done < <(find "$BIN_PATH" -maxdepth 1 -type f -name '*Tests.xctest' -print0 2>/dev/null || true)
+# Swift 6.4's Swift Build backend puts Linux test code in shared libraries,
+# separate from the *Tests-test-runner launchers.
+while IFS= read -r -d '' p; do BUNDLES+=("$p"); done < <(find "$BIN_PATH" -maxdepth 1 -type f -name '*Tests.so' -print0 2>/dev/null || true)
 
 # If still nothing, scan for any executable whose basename ends with Tests/PackageTests
 if [[ ${#BUNDLES[@]} -eq 0 ]]; then
