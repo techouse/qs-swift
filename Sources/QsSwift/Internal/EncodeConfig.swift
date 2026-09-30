@@ -19,6 +19,7 @@ internal struct EncodeConfig {
   let formatter: Formatter
   let encodeValuesOnly: Bool
   let charset: String.Encoding
+  let maxDepth: Int
 
   var isCommaListFormat: Bool {
     listFormat == .comma
@@ -43,7 +44,8 @@ internal struct EncodeConfig {
       format: format,
       formatter: formatter,
       encodeValuesOnly: encodeValuesOnly,
-      charset: charset
+      charset: charset,
+      maxDepth: maxDepth
     )
   }
 }

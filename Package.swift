@@ -67,7 +67,8 @@ let package = Package(
       exclude: [
         "js/node_modules",
         "js/package.json",
-        "js/package-lock.json",
+        "js/pnpm-lock.yaml",
+        "js/pnpm-workspace.yaml",
         "js/qs.js",
         "compare_outputs.sh",
       ],

@@ -1138,6 +1138,16 @@ struct UtilsTests {
     #expect(combinedMap[AnyHashable(Int.max)] as? String == "x")
     #expect(combined[1] as? String == "y")
 
+    let appendedArray = try #require(
+      try Utils.combine(boundary, ["y", "z"], options: options) as? [Any]
+    )
+    try #require(appendedArray.count == 3)
+    let arrayMap = try #require(appendedArray[0] as? [AnyHashable: Any])
+    #expect(!Utils.isOverflow(arrayMap))
+    #expect(arrayMap[AnyHashable(Int.max)] as? String == "x")
+    #expect(appendedArray[1] as? String == "y")
+    #expect(appendedArray[2] as? String == "z")
+
     let merged = try #require(
       try Utils.merge(
         target: boundary,
@@ -1160,37 +1170,32 @@ struct UtilsTests {
     #expect(shiftedMap[AnyHashable(Int.max)] as? String == "x")
   }
 
-  @Test("Utils.combine - keeps arrays nested when appending to overflow objects")
-  func testCombineKeepsOverflowAppendNested() async throws {
+  @Test("qs 6.16: overflow appends spread arrays once and normalize nullable elements")
+  func qs6160_combineSpreadsNullableOverflowAppend() throws {
     let overflow = try Utils.combine(["a"], "b", options: DecodeOptions(listLimit: 1))
-    let combined = try Utils.combine(
-      overflow,
-      ["c", "d"],
-      options: DecodeOptions(listLimit: 10)
+    let options = DecodeOptions(listLimit: 10)
+    let combined = try #require(
+      try Utils.combine(overflow, ["c", "d"], options: options) as? [AnyHashable: Any]
     )
-    let combinedDict = combined as? [AnyHashable: Any]
-    #expect(Utils.isOverflow(combinedDict))
-    if let combinedDict {
-      let cleaned = combinedDict.filter { !Utils.isOverflowKey($0.key) }
-      #expect(cleaned[AnyHashable(0)] as? String == "a")
-      #expect(cleaned[AnyHashable(1)] as? String == "b")
-      #expect(cleaned[AnyHashable(2)] as? [String] == ["c", "d"])
-    }
+    #expect(Utils.isOverflow(combined))
+    #expect(combined[AnyHashable(0)] as? String == "a")
+    #expect(combined[AnyHashable(1)] as? String == "b")
+    #expect(combined[AnyHashable(2)] as? String == "c")
+    #expect(combined[AnyHashable(3)] as? String == "d")
 
-    let combinedWithNil = try Utils.combine(
-      overflow,
-      [nil, "e"],
-      options: DecodeOptions(listLimit: 10)
+    let nullable: [Any?] = [nil, "e"]
+    let combinedWithNil = try #require(
+      try Utils.combine(overflow, nullable, options: options) as? [AnyHashable: Any]
     )
-    let combinedNilDict = combinedWithNil as? [AnyHashable: Any]
-    #expect(Utils.isOverflow(combinedNilDict))
-    if let combinedNilDict {
-      let cleaned = combinedNilDict.filter { !Utils.isOverflowKey($0.key) }
-      let nested = cleaned[AnyHashable(2)] as? [Any?]
-      #expect(nested?.count == 2)
-      #expect(nested?[0] == nil)
-      #expect(nested?[1] as? String == "e")
-    }
+    #expect(combinedWithNil[AnyHashable(2)] is NSNull)
+    #expect(combinedWithNil[AnyHashable(3)] as? String == "e")
+
+    let emptyAppend = try Utils.combine(overflow, [Any](), options: options)
+    let afterEmpty = try #require(
+      try Utils.combine(emptyAppend, "c", options: options) as? [AnyHashable: Any]
+    )
+    #expect(afterEmpty[AnyHashable(2)] as? String == "c")
+    #expect(afterEmpty[AnyHashable(3)] == nil)
   }
 
   @Test("Utils.merge - handles overflow objects")

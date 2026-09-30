@@ -14,6 +14,126 @@ import OrderedCollections
 #endif
 
 struct EncodeTests {
+  @Test("qs 6.16: dotted top-level leaves respect key encoding modes")
+  func qs6160_dottedRootLeaves() throws {
+    let input = ["a.b": "c"]
+    for allowDots in [nil, false, true] as [Bool?] {
+      #expect(
+        try Qs.encode(input, options: EncodeOptions(allowDots: allowDots, encodeDotInKeys: true))
+          == "a%252Eb=c"
+      )
+    }
+    #expect(
+      try Qs.encode(input, options: EncodeOptions(encodeDotInKeys: true, encodeValuesOnly: true))
+        == "a%2Eb=c"
+    )
+    #expect(
+      try Qs.encode(input, options: EncodeOptions(encode: false, encodeDotInKeys: true)) == "a%2Eb=c"
+    )
+    #expect(
+      try Qs.encode(["a.b": NSNull()], options: EncodeOptions(encodeDotInKeys: true, strictNullHandling: true))
+        == "a%252Eb"
+    )
+    #expect(
+      try Qs.encode(["a.b": NSNull()], options: EncodeOptions(encodeDotInKeys: true, skipNulls: true)) == ""
+    )
+    let encoded = try Qs.encode(input, options: EncodeOptions(encodeDotInKeys: true))
+    #expect(try Qs.decode(encoded, options: DecodeOptions(decodeDotInKeys: true))["a.b"] as? String == "c")
+    let valuesOnly = try Qs.decode("a%2Eb=c", options: DecodeOptions(decodeDotInKeys: true))
+    #expect((valuesOnly["a"] as? [String: Any])?["b"] as? String == "c")
+  }
+
+  @Test("qs 6.16: dotted root prefixes affect filter and encoder transformations")
+  func qs6160_dottedRootTransforms() throws {
+    let filter = FunctionFilter { prefix, value in
+      prefix == "a%2Eb" ? "changed" : value
+    }
+    #expect(
+      try Qs.encode(["a.b": "c"], options: EncodeOptions(encodeDotInKeys: true, filter: filter))
+        == "a%252Eb=changed"
+    )
+    let encoder: ValueEncoder = { value, _, _ in
+      let token = value as? String ?? ""
+      return token == "a%2Eb" ? "literal-dot" : token
+    }
+    #expect(
+      try Qs.encode(["a.b": "c"], options: EncodeOptions(encoder: encoder, encodeDotInKeys: true))
+        == "literal-dot=c"
+    )
+  }
+
+  @Test("qs 6.16: encode depth boundaries and option copies")
+  func qs6160_depthBoundaries() throws {
+    let nested = ["a": ["b": "c"]]
+    let deep = ["a": ["b": ["c": ["d": "e"]]]]
+    let bounded = EncodeOptions(depth: 0)
+
+    #expect(try Qs.encode(["a": "b"], options: bounded) == "a=b")
+    #expect(throws: EncodeError.depthExceeded(maxDepth: 0)) {
+      try Qs.encode(nested, options: bounded)
+    }
+    #expect(throws: EncodeError.depthExceeded(maxDepth: 0)) {
+      try Qs.encode(nested, options: bounded.copy(encode: false))
+    }
+    #expect(try Qs.encode(nested, options: bounded.copy(depth: 1)) == "a%5Bb%5D=c")
+    #expect(throws: EncodeError.depthExceeded(maxDepth: 2)) {
+      try Qs.encode(deep, options: EncodeOptions(depth: 2))
+    }
+    #expect(try Qs.encode(deep, options: EncodeOptions(depth: 3)) == "a%5Bb%5D%5Bc%5D%5Bd%5D=e")
+    #expect(try Qs.encode(deep, options: bounded.copy(depth: .max)) == "a%5Bb%5D%5Bc%5D%5Bd%5D=e")
+    #expect(try Qs.encode(deep) == "a%5Bb%5D%5Bc%5D%5Bd%5D=e")
+  }
+
+  @Test("qs 6.16: arrays, empty frames, and negative encode depth")
+  func qs6160_depthArraysAndEmptyFrames() throws {
+    for format in [ListFormat.comma, .indices] {
+      #expect(throws: EncodeError.depthExceeded(maxDepth: 0)) {
+        try Qs.encode(["a": ["x", "y"]], options: EncodeOptions(listFormat: format, depth: 0))
+      }
+    }
+    #expect(
+      try Qs.encode(["a": ["x", "y"]], options: EncodeOptions(listFormat: .comma, depth: 1))
+        == "a=x%2Cy"
+    )
+    #expect(
+      try Qs.encode(["a": ["x", "y"]], options: EncodeOptions(depth: 1))
+        == "a%5B0%5D=x&a%5B1%5D=y"
+    )
+    let empty: [String: Any] = [:]
+    #expect(try Qs.encode(empty, options: EncodeOptions(depth: 0)) == "")
+    #expect(try Qs.encode(["a": empty], options: EncodeOptions(depth: 0)) == "")
+    #expect(throws: EncodeError.depthExceeded(maxDepth: 0)) {
+      try Qs.encode(["a": ["b": empty]], options: EncodeOptions(depth: 0))
+    }
+    #expect(throws: EncodeError.depthExceeded(maxDepth: -1)) {
+      try Qs.encode(["a": "b"], options: EncodeOptions(depth: -1))
+    }
+    #expect(try Qs.encode(nil, options: EncodeOptions(depth: -1)) == "")
+  }
+
+  @Test("qs 6.16: over-depth leaves fail before filtering or null handling")
+  func qs6160_depthBeforeLeafFilter() throws {
+    let omitLeaf = FunctionFilter { prefix, value in
+      if prefix == "a[b]" { return Undefined() }
+      return value
+    }
+    let nested = ["a": ["b": "c"]]
+    #expect(throws: EncodeError.depthExceeded(maxDepth: 0)) {
+      try Qs.encode(nested, options: EncodeOptions(filter: omitLeaf, depth: 0))
+    }
+    #expect(try Qs.encode(nested, options: EncodeOptions(filter: omitLeaf, depth: 1)) == "")
+    #expect(throws: EncodeError.depthExceeded(maxDepth: 0)) {
+      try Qs.encode(["a": ["b": NSNull()]], options: EncodeOptions(depth: 0))
+    }
+    let replaceContainer = FunctionFilter { prefix, value in
+      prefix == "a" ? "replacement" : value
+    }
+    #expect(
+      try Qs.encode(nested, options: EncodeOptions(filter: replaceContainer, depth: 0))
+        == "a=replacement"
+    )
+  }
+
   @Test("encode - encodes a simple Map to a query string")
   func testEncodeSimpleMapToQueryString() async throws {
     #expect(try Qs.encode(["a": "c"]) == "a=c")

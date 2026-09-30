@@ -143,6 +143,12 @@
       didSet { invalidateSwiftOptionsCache() }
     }
 
+    /// Maximum serializer depth; top-level values have depth zero. `Int.max` is unlimited.
+    /// Negative limits reject every started value frame.
+    public var depth: Int = .max {
+      didSet { invalidateSwiftOptionsCache() }
+    }
+
     /// Convenience: provide a predictable case-insensitive A→Z sort (ties broken case-sensitively
     /// so `"A"` sorts before `"a"`). Ignored if `sortComparatorBlock` is set.
     public var sortKeysCaseInsensitively: Bool = false {
@@ -241,6 +247,7 @@
         strictNullHandling: strictNullHandling,
         commaRoundTrip: commaRoundTrip,
         commaCompactNulls: commaCompactNulls,
+        depth: depth,
 
         // Sorting
         sort: swiftSorter

@@ -126,8 +126,7 @@ extension QsSwift.Decoder {
         let parsed = try parseListValue(
           rhs,
           options: options,
-          currentListLength: currentLen,
-          isFlatListValue: !hadBracketedEmpty
+          currentListLength: currentLen
         )
 
         // IMPORTANT: distinguish custom decoder vs default decoder

@@ -197,12 +197,16 @@ extension Qs {
           if value is NSNull { continue }
         }
 
+        let prefix =
+          options.encodeDotInKeys && key.contains(".")
+          ? key.replacingOccurrences(of: ".", with: "%2E") : key
+
         // Delegate to the lower-level encoder for nested traversal & formatting.
         let encoded = try QsSwift.Encoder.encode(
           data: value,
           undefined: !containsKey,
           sideChannel: sideChannel,
-          prefix: key,
+          prefix: prefix,
           generateArrayPrefix: nil,
           listFormat: listFormat,
           commaRoundTrip: commaRoundTrip,
@@ -221,7 +225,8 @@ extension Qs {
           encodeValuesOnly: options.encodeValuesOnly,
           charset: options.charset,
           addQueryPrefix: options.addQueryPrefix,
-          depth: 1
+          depth: 1,
+          maxDepth: options.depth
         )
 
         if let array = encoded as? [Any] {

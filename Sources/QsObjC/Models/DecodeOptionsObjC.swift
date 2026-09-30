@@ -80,9 +80,10 @@
     /// as exceeded. Parser-recognized empty lists can still be preserved by `allowEmptyLists`
     /// because they bypass list construction.
     ///
-    /// Comma values written with `[]=` are nested groups: each complete comma group counts as
-    /// one outer list element, regardless of how many values the group contains. Numeric
-    /// bracket indices at or above the limit are represented as dictionary keys.
+    /// Comma values written with `[]=` count as one outer list element. When
+    /// `throwOnLimitExceeded` is true, each group's inner count is also checked before
+    /// splitting; non-throwing oversized groups remain nested. Numeric bracket indices
+    /// at or above the limit are represented as dictionary keys.
     public var listLimit: Int = 20
 
     /// When `true`, treat commas as element separators inside a single key (e.g. `a=b,c`).

@@ -84,15 +84,31 @@ extension Utils {
   ) throws -> Any {
     var copy = dict
     var maxIndex = overflowMaxIndex(copy) ?? -1
-    guard let nextIndex = nextOverflowIndex(after: maxIndex) else {
-      let values: [Any?] = [
-        removingOverflowMetadata(from: copy),
-        value ?? NSNull(),
-      ]
-      return try enforceListLimit(values, options: options)
+    if let array = value as? [Any] {
+      guard !array.isEmpty else { return dict }
+      for (offset, element) in array.enumerated() {
+        guard let nextIndex = nextOverflowIndex(after: maxIndex) else {
+          var values: [Any?] = [removingOverflowMetadata(from: copy)]
+          values.reserveCapacity(array.count - offset + 1)
+          for remaining in array[offset...] {
+            values.append(eraseOptionalLike(remaining) ?? NSNull())
+          }
+          return try enforceListLimit(values, options: options)
+        }
+        maxIndex = nextIndex
+        copy[maxIndex] = eraseOptionalLike(element) ?? NSNull()
+      }
+    } else {
+      guard let nextIndex = nextOverflowIndex(after: maxIndex) else {
+        let values: [Any?] = [
+          removingOverflowMetadata(from: copy),
+          value ?? NSNull(),
+        ]
+        return try enforceListLimit(values, options: options)
+      }
+      maxIndex = nextIndex
+      copy[maxIndex] = value ?? NSNull()
     }
-    maxIndex = nextIndex
-    copy[maxIndex] = value ?? NSNull()
     setOverflowMaxIndex(&copy, maxIndex)
     return copy
   }

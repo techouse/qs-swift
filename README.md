@@ -274,6 +274,16 @@ let r = try Qs.decode("a=b,c", options: .init(comma: true))
 // ["a": ["b", "c"]]
 ```
 
+With `throwOnLimitExceeded: true`, each comma token is checked against `listLimit` before splitting,
+including `[]=` groups. For example, `a[]=1,2,3` is valid at limit 3 and remains one nested outer
+element; `a[]=1,2,3,4` throws. Outer list growth is limited separately. Without throwing, oversized
+`[]=` groups retain their nested array shape.
+
+When a soft overflow has already produced a numeric-keyed map, later flat comma arrays append their
+elements at successive indices. Bracket-push groups spread only their outer wrapper: with
+`comma: true, listLimit: 2`, `a[]=1&a[]=2&a[]=3&a[]=4,5` becomes
+`["a": ["0": "1", "1": "2", "2": "3", "3": ["4", "5"]]]`. Incoming dictionaries remain single values.
+
 ---
 
 ## Encoding
@@ -321,6 +331,22 @@ try Qs.encode(["a": ["b": "č"]], options: .init(encoder: enc))
 // "a[b]=c"
 ```
 
+### Encoding depth
+
+Encoding is unbounded by default (`EncodeOptions.depth == .max`). Set an integer limit to reject
+deeper values with `EncodeError.depthExceeded(maxDepth:)`:
+
+```swift
+try Qs.encode(["a": "b"], options: .init(depth: 0))       // "a=b"
+try Qs.encode(["a": ["b": "c"]], options: .init(depth: 1)) // "a%5Bb%5D=c"
+// The nested example throws with depth: 0.
+```
+
+Each top-level value starts at depth zero; child values, including array elements and comma-list
+serialization, consume a level. Negative limits reject any started value frame. Empty roots still
+produce an empty string. The check precedes filtering and leaf handling at an over-limit frame.
+The limit bounds serialization, not Objective-C input conversion or total input size.
+
 ### List formats
 
 ```swift
@@ -362,6 +388,19 @@ try Qs.encode(
 )
 // "name%252Eobj.first=John&name%252Eobj.last=Doe"
 ```
+
+This also applies to scalar and null top-level keys:
+
+```swift
+try Qs.encode(["a.b": "c"], options: .init(encodeDotInKeys: true))
+// "a%252Eb=c"
+try Qs.encode(["a.b": "c"], options: .init(encodeDotInKeys: true, encodeValuesOnly: true))
+// "a%2Eb=c"
+```
+
+Normal key encoding escapes the inserted `%` again, preserving a literal dot when decoded with
+`decodeDotInKeys: true`. With `encodeValuesOnly: true` or `encode: false`, the top-level key contains
+only `%2E`; decoding with dot notation can therefore split it as a structural dot.
 
 Empty lists, nulls, and other niceties:
 
