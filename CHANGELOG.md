@@ -6,6 +6,7 @@
 - [FIX] spread later array values one level when appending to soft-overflow maps, preserving bracketed inner groups and checked-index fallback values.
 - [CHORE] align SwiftPM comparator exclusions with pnpm lock/workspace files, removing stale npm-lock warnings.
 - [FIX][ObjC] expose encode-error maximum-depth metadata through the native `maxDepthFrom:` accessor as nullable `NSNumber`.
+- [TEST][ObjC] align native comma-group coverage with qs 6.16 strict rejection, exact-limit acceptance, and non-throwing nested-array preservation.
 
 ## 1.4.2
 

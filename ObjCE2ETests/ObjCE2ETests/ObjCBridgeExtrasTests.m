@@ -205,9 +205,26 @@
   bracketed.listLimit = 1;
   bracketed.throwOnLimitExceeded = YES;
   err = nil;
+  NSDictionary* oversized = [Qs decode:@"a[]=1,2,3,4" options:bracketed error:&err];
+  XCTAssertNil(oversized);
+  XCTAssertNotNil(err);
+  XCTAssertEqualObjects(err.domain, QsDecodeErrorInfo.domain);
+  XCTAssertEqual(err.code, QsDecodeErrorCodeListLimitExceeded);
+
+  bracketed.listLimit = 4;
+  err = nil;
   NSDictionary* nested = [Qs decode:@"a[]=1,2,3,4" options:bracketed error:&err];
   XCTAssertNil(err);
   NSArray* outer = nested[@"a"];
+  XCTAssertEqual(outer.count, 1u);
+  XCTAssertEqualObjects(outer[0], (@[ @"1", @"2", @"3", @"4" ]));
+
+  bracketed.listLimit = 1;
+  bracketed.throwOnLimitExceeded = NO;
+  err = nil;
+  nested = [Qs decode:@"a[]=1,2,3,4" options:bracketed error:&err];
+  XCTAssertNil(err);
+  outer = nested[@"a"];
   XCTAssertEqual(outer.count, 1u);
   XCTAssertEqualObjects(outer[0], (@[ @"1", @"2", @"3", @"4" ]));
 }
