@@ -382,7 +382,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Swift ${{ env.SWIFT_VERSION }}
-        uses: techouse/setup-swift@e29a4b7290b4f0e4b561ee2cda1da0dab519ea9b # chore/updates
+        uses: techouse/setup-swift@9eeb368a19d77121a3eca489912148fd0abb21ae # chore/updates
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
