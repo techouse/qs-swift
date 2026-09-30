@@ -111,7 +111,8 @@ SWIFT_DETERMINISTIC_HASHING=1 swift test --enable-code-coverage
 ```
 
 Notes:
-- The script requires `llvm-cov` (Xcode CLT on macOS; `llvm` on Linux). For HTML export, install `lcov` (e.g., `brew install lcov`).
+- The script prefers `llvm-cov` from the selected Swift toolchain (`xcrun` on macOS, alongside the resolved `swift` binary on Linux), then falls back to system LLVM. The exporter must support the compiler's instrumentation profile format; older system LLVM may reject newer Swift profiles. For HTML export, install `lcov` (e.g., `brew install lcov`).
+- On Linux, coverage export supports both older SwiftPM `*Tests.xctest` executables and Swift 6.4's `*Tests.so` test libraries.
 
 ---
 
