@@ -50,8 +50,7 @@ extension QsSwift.Decoder {
       : try parseListValue(
         value,
         options: options,
-        currentListLength: currentListLength,
-        isFlatListValue: true
+        currentListLength: currentListLength
       )
 
     // Walk backwards from leaf to root

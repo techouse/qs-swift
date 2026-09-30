@@ -32,6 +32,38 @@
   XCTAssertEqual(err.code, QsEncodeErrorCodeCyclicObject);
 }
 
+- (void)test_encode_depth_exceeded_reports_max_depth {
+  QsEncodeOptions* options = [[QsEncodeOptions alloc] init];
+  options.depth = 0;
+  NSError* error = nil;
+  NSString* encoded = [Qs encode:@{ @"a" : @{ @"b" : @"c" } } options:options error:&error];
+
+  XCTAssertNil(encoded);
+  XCTAssertNotNil(error);
+  XCTAssertEqualObjects(error.domain, QsEncodeErrorInfo.domain);
+  XCTAssertEqual(error.code, QsEncodeErrorCodeDepthExceeded);
+  NSNumber* maxDepth = [QsEncodeError maxDepthFrom:error];
+  XCTAssertNotNil(maxDepth);
+  XCTAssertEqual(maxDepth.integerValue, 0);
+
+  options.depth = -1;
+  error = nil;
+  encoded = [Qs encode:@{ @"a" : @"b" } options:options error:&error];
+
+  XCTAssertNil(encoded);
+  XCTAssertNotNil(error);
+  XCTAssertEqualObjects(error.domain, QsEncodeErrorInfo.domain);
+  XCTAssertEqual(error.code, QsEncodeErrorCodeDepthExceeded);
+  maxDepth = [QsEncodeError maxDepthFrom:error];
+  XCTAssertNotNil(maxDepth);
+  XCTAssertEqual(maxDepth.integerValue, -1);
+
+  NSError* withoutMetadata = [NSError errorWithDomain:QsEncodeErrorInfo.domain
+                                               code:QsEncodeErrorCodeDepthExceeded
+                                           userInfo:@{}];
+  XCTAssertNil([QsEncodeError maxDepthFrom:withoutMetadata]);
+}
+
 #pragma mark - 2) Custom value encoder block is invoked (values only)
 
 - (void)test_valueEncoderBlock_is_called_for_values_only {

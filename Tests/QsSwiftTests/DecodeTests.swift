@@ -333,40 +333,37 @@ struct DecodeTests {
       _ = try Decoder.parseListValue(
         "value",
         options: .init(listLimit: 0, throwOnLimitExceeded: true),
-        currentListLength: 0,
-        isFlatListValue: true
+        currentListLength: 0
       )
     }
   }
 
-  @Test("comma helper: throwing path checks the current flat token, not cumulative length")
+  @Test("comma helper: throwing path checks the current token, not cumulative length")
   func testParseListValue_ThrowingCommaBranches() throws {
     #expect(throws: DecodeError.listLimitExceeded(limit: -1)) {
       _ = try Decoder.parseListValue(
         "a,b",
         options: .init(listLimit: -1, comma: true, throwOnLimitExceeded: true),
-        currentListLength: 0,
-        isFlatListValue: true
+        currentListLength: 0
       )
     }
 
     let parsed = try Decoder.parseListValue(
       "a,b",
       options: .init(listLimit: 2, comma: true, throwOnLimitExceeded: true),
-      currentListLength: 1,
-      isFlatListValue: true
+      currentListLength: 1
     )
 
     let list = parsed as? [String]
     #expect(list == ["a", "b"])
 
-    let bracketed = try Decoder.parseListValue(
-      "a,b,c",
-      options: .init(listLimit: 1, comma: true, throwOnLimitExceeded: true),
-      currentListLength: 0,
-      isFlatListValue: false
-    )
-    #expect(bracketed as? [String] == ["a", "b", "c"])
+    #expect(throws: DecodeError.listLimitExceeded(limit: 1)) {
+      _ = try Decoder.parseListValue(
+        "a,b,c",
+        options: .init(listLimit: 1, comma: true, throwOnLimitExceeded: true),
+        currentListLength: 0
+      )
+    }
   }
 
   @Test("comma helper: non-throwing values are split before cumulative enforcement")
@@ -374,8 +371,7 @@ struct DecodeTests {
     let parsed = try Decoder.parseListValue(
       "a,b",
       options: .init(listLimit: -1, comma: true, throwOnLimitExceeded: false),
-      currentListLength: 0,
-      isFlatListValue: true
+      currentListLength: 0
     )
 
     #expect(parsed as? [String] == ["a", "b"])
@@ -387,8 +383,7 @@ struct DecodeTests {
       _ = try Decoder.parseListValue(
         "value",
         options: .init(listLimit: 1, throwOnLimitExceeded: true),
-        currentListLength: 1,
-        isFlatListValue: true
+        currentListLength: 1
       )
     }
   }
@@ -434,6 +429,41 @@ struct DecodeTests {
     let a = asDictString(r["a"])
     #expect((a?["0"] as? String) == "b")
     #expect((a?["1"] as? String) == "c")
+  }
+
+  @Test("qs 6.16: later comma arrays append flatly to overflow maps")
+  func qs6160_overflowFlatCommaAppends() throws {
+    let repeated = "a=1,2,3,4,5,6&a=7,8&a=9,10"
+    let defaultValues = (0...20).map(String.init)
+    let cases: [(String, DecodeOptions, [String])] = [
+      (repeated, .init(listLimit: 5, comma: true), (1...10).map(String.init)),
+      ("a=" + defaultValues.joined(separator: ",") + "&a=x,y", .init(comma: true), defaultValues + ["x", "y"]),
+    ]
+    for (query, options, expected) in cases {
+      let decoded = try Qs.decode(query, options: options)
+      let overflow = try #require(asDictString(decoded["a"]))
+      #expect(overflow.count == expected.count)
+      for (index, value) in expected.enumerated() {
+        #expect(overflow[String(index)] as? String == value)
+      }
+    }
+    #expect(throws: DecodeError.listLimitExceeded(limit: 5)) {
+      try Qs.decode(repeated, options: .init(listLimit: 5, comma: true, throwOnLimitExceeded: true))
+    }
+  }
+
+  @Test("qs 6.16: overflow bracket-push appends preserve one inner group level")
+  func qs6160_overflowBracketedGroupAppend() throws {
+    let decoded = try Qs.decode(
+      "a[]=1&a[]=2&a[]=3&a[]=4,5",
+      options: .init(listLimit: 2, comma: true)
+    )
+    let overflow = try #require(asDictString(decoded["a"]))
+    #expect(overflow.count == 4)
+    #expect(overflow["0"] as? String == "1")
+    #expect(overflow["1"] as? String == "2")
+    #expect(overflow["2"] as? String == "3")
+    #expect(overflow["3"] as? [String] == ["4", "5"])
   }
 
   @Test("comma overflow appended after a duplicate remains nested")
@@ -829,25 +859,29 @@ struct DecodeTests {
     #expect(overflow["1"] as? String == "☺,☻")
   }
 
-  @Test("qs 6.15.3: bracketed comma groups count as outer elements")
-  func qs6153_bracketedCommaGroupsCountAsOuterElements() throws {
-    let options = DecodeOptions(listLimit: 2, comma: true, throwOnLimitExceeded: true)
-    let decoded = try Qs.decode(
-      "a[]=1,2,3,4,5,6&a[]=7,8,9,10,11,12",
-      options: options
+  @Test("qs 6.16: bracketed comma groups enforce inner and outer boundaries")
+  func qs6160_bracketedCommaGroupBoundaries() throws {
+    let options = DecodeOptions(listLimit: 3, comma: true, throwOnLimitExceeded: true)
+    let query = "a[]=1,2,3&a[]=4,5,6&a[]=7"
+    let decoded = try Qs.decode(query, options: options)
+    let outer = try #require(decoded["a"] as? [Any])
+    try #require(outer.count == 3)
+    #expect(outer[0] as? [String] == ["1", "2", "3"])
+    #expect(outer[1] as? [String] == ["4", "5", "6"])
+    #expect(outer[2] as? String == "7")
+    #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+      try Qs.decode(query + "&a[]=8", options: options)
+    }
+    #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+      try Qs.decode("a[]=1,2,3,4", options: options)
+    }
+    let twoGroups = try Qs.decode(
+      "a[]=1,2&a[]=3,4",
+      options: .init(listLimit: 2, comma: true, throwOnLimitExceeded: true)
     )
-    #expect(
-      as2DStrings(decoded["a"] as Any?) == [
-        ["1", "2", "3", "4", "5", "6"],
-        ["7", "8", "9", "10", "11", "12"],
-      ]
-    )
-
+    #expect(as2DStrings(twoGroups["a"]) == [["1", "2"], ["3", "4"]])
     #expect(throws: DecodeError.listLimitExceeded(limit: 0)) {
-      _ = try Qs.decode(
-        "a[]=1,2,3",
-        options: DecodeOptions(listLimit: 0, comma: true, throwOnLimitExceeded: true)
-      )
+      try Qs.decode("a[]=1,2,3", options: .init(listLimit: 0, comma: true, throwOnLimitExceeded: true))
     }
   }
 
@@ -876,28 +910,53 @@ struct DecodeTests {
     #expect(counter.valueCalls == 0)
   }
 
-  @Test("qs 6.15.3: bracketed comma groups decode every inner value")
-  func qs6153_bracketedCommaDecodesEveryInnerValue() throws {
+  @Test("qs 6.16: oversized bracketed comma groups fail before value decoding")
+  func qs6160_bracketedCommaThrowsBeforeDecoding() throws {
     final class Counter: @unchecked Sendable {
-      var values: [String] = []
+      var valueCalls = 0
     }
     let counter = Counter()
     let decoder: ScalarDecoder = { token, _, kind in
-      if kind == .value, let token { counter.values.append(token) }
+      if kind == .value {
+        counter.valueCalls += 1
+        return token.map { "decoded:\($0)" }
+      }
       return token
     }
+    let options = DecodeOptions(decoder: decoder, listLimit: 3, comma: true, throwOnLimitExceeded: true)
+    for query in ["a[]=1,2,3,4", "a[b][]=1,2,3,4", "a[][]=1,2,3,4"] {
+      #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+        try Qs.decode(query, options: options)
+      }
+    }
+    #expect(counter.valueCalls == 0)
+    let decoded = try Qs.decode("a[]=1,2,3", options: options)
+    #expect(as2DStrings(decoded["a"]) == [["decoded:1", "decoded:2", "decoded:3"]])
+  }
 
-    let decoded = try Qs.decode(
-      "a[]=1,2,3,4,5,6",
-      options: DecodeOptions(
-        decoder: decoder,
-        listLimit: 1,
-        comma: true,
-        throwOnLimitExceeded: true
+  @Test("qs 6.16: comma limits precede duplicate policies and map input materialization")
+  func qs6160_strictCommaInputVariants() throws {
+    for duplicates in [Duplicates.first, .last] {
+      #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+        try Qs.decode(
+          "a[]=ok&a[]=1,2,3,4",
+          options: .init(listLimit: 3, comma: true, duplicates: duplicates, throwOnLimitExceeded: true)
+        )
+      }
+    }
+    #expect(throws: DecodeError.listLimitExceeded(limit: 3)) {
+      try Qs.decode(
+        ["a": "1,2,3,4"],
+        options: .init(listLimit: 3, comma: true, throwOnLimitExceeded: true)
       )
+    }
+    let rawComma = try Qs.decode(
+      "a[]=1%2C2,3",
+      options: .init(listLimit: 2, comma: true, throwOnLimitExceeded: true)
     )
-    #expect(as2DStrings(decoded["a"] as Any?) == [["1", "2", "3", "4", "5", "6"]])
-    #expect(counter.values == ["1", "2", "3", "4", "5", "6"])
+    #expect(as2DStrings(rawComma["a"]) == [["1,2", "3"]])
+    let soft = try Qs.decode("a[]=1,2,3,4", options: .init(listLimit: 3, comma: true))
+    #expect(as2DStrings(soft["a"]) == [["1", "2", "3", "4"]])
   }
 
   @Test("qs 6.15.3: negative listLimit overflows duplicate growth")

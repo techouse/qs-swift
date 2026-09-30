@@ -115,7 +115,7 @@ o.encodeValuesOnly = NO;                // YES => leave keys untouched, only enc
 
 // Dots in keys (e.g. "user.name")
 o.allowDots = NO;                       // enable dotted key‑path form when encoding
-o.encodeDotInKeys = NO;                 // if YES, '.' in keys is percent‑encoded; requires allowDots = YES
+o.encodeDotInKeys = NO;                 // rewrite literal key dots; also enables allowDots in the bridge
 
 // Arrays/lists
 // Prefer listFormat; `indices` is kept for parity
@@ -134,6 +134,9 @@ o.commaCompactNulls = NO;                // drop NSNull entries when using .comm
 // - skipNulls: omit pairs whose value is NSNull / nil
 o.strictNullHandling = NO;
 o.skipNulls          = NO;
+
+// Serialization depth (NSIntegerMax means unlimited; top-level values start at zero)
+o.depth = NSIntegerMax;                 // depth 0 permits scalars but rejects nested children
 
 // Date and value encoding hooks
 o.dateSerializerBlock = ^NSString *(NSDate *d) {
@@ -189,7 +192,7 @@ d.parameterLimit = 1000;                // must be > 0 (defensive cap on number 
 // Exact-limit results stay arrays; soft overflow and numeric indices at/above the limit use maps.
 // A negative limit makes limit-enforced list construction/merges overflow or throw;
 // allowEmptyLists can still preserve parser-recognized empty lists by bypassing that enforcement.
-// Each comma group in a[]= counts as one element.
+// Each comma group in a[]= counts as one outer element; strict mode also limits its inner count.
 d.listLimit      = 20;
 d.depth          = 5;                   // maximum bracket nesting (≥ 0)
 
@@ -229,7 +232,14 @@ d.decoderBlock = ^id(NSString * token, NSNumber * charset, NSNumber * kind) {
 
 All throwing APIs fill `NSError **` with domains and codes that mirror Swift:
 
-- **Encode**: `QsEncodeErrorInfo.domain` with code `QsEncodeErrorCodeCyclicObject` when a cycle is detected.
+- **Encode**: `QsEncodeErrorInfo.domain` with codes:
+    - `QsEncodeErrorCodeCyclicObject` (`1`) when a cycle is detected.
+    - `QsEncodeErrorCodeDepthExceeded` (`2`) when serialization exceeds `QsEncodeOptions.depth`.
+      `error.userInfo[QsEncodeErrorInfo.maxDepthKey]` contains the configured integer limit.
+      `[QsEncodeError maxDepthFrom:error]` reads this metadata as a nullable `NSNumber *`.
+
+The encode depth limit defaults to `NSIntegerMax` (unlimited). It bounds serializer traversal,
+not the bridge's input-conversion pass or total input size.
 - **Decode**: `QsDecodeErrorInfo.domain` with codes:
     - `QsDecodeErrorCodeParameterLimitNotPositive`
     - `QsDecodeErrorCodeParameterLimitExceeded`

@@ -4,18 +4,30 @@ extension EncodeError: CustomNSError, LocalizedError {
   // Distinct domain for encoding errors
   public static var errorDomain: String { "io.github.techouse.qsswift.encode" }
 
+  /// NSError user-info key containing the configured maximum serialization depth.
+  public static let userInfoMaxDepthKey = "maxDepth"
+
   // Stable numeric codes
   public var errorCode: Int {
     switch self {
     case .cyclicObject: return 1
+    case .depthExceeded: return 2
     }
   }
 
   // Human-friendly message (also used for NSError.localizedDescription)
   public var errorDescription: String? { description }
 
-  // Extra info if you ever add more fields; for now just description.
+  // Additional metadata for errors with associated values.
   public var errorUserInfo: [String: Any] {
-    [NSLocalizedDescriptionKey: description]
+    switch self {
+    case .cyclicObject:
+      return [NSLocalizedDescriptionKey: description]
+    case .depthExceeded(let maxDepth):
+      return [
+        NSLocalizedDescriptionKey: description,
+        Self.userInfoMaxDepthKey: maxDepth,
+      ]
+    }
   }
 }

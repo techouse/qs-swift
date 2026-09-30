@@ -214,6 +214,21 @@ struct FoundationURLTests {
     #expect(unicodeComponents.percentEncodedQuery == "existing=x")
   }
 
+  @Test("qs 6.16: URL query helpers preserve depth errors without mutation")
+  func qs6160_urlDepthFailureIsAtomic() throws {
+    var components = URLComponents(string: "https://example.com/products?existing=x")!
+    let nested = ["a": ["b": "c"]]
+    let options = EncodeOptions(depth: 0)
+
+    #expect(throws: EncodeError.depthExceeded(maxDepth: 0)) {
+      try components.appendQsQueryItems(nested, options: options)
+    }
+    #expect(components.percentEncodedQuery == "existing=x")
+    let didAppend = components.appendQsQueryItemsIfPossible(nested, options: options)
+    #expect(!didAppend)
+    #expect(components.percentEncodedQuery == "existing=x")
+  }
+
   private static func lexicalSort(_ lhs: Any?, _ rhs: Any?) -> Int {
     let left = String(describing: lhs ?? "")
     let right = String(describing: rhs ?? "")

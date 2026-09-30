@@ -106,8 +106,9 @@ public struct DecodeOptions: @unchecked Sendable {
   /// or merge that reaches limit enforcement as exceeded. Parser-recognized empty lists
   /// can still be preserved by `allowEmptyLists` because they bypass list construction.
   ///
-  /// Comma values written with `[]=` are nested groups: each complete comma group counts
-  /// as one outer list element, regardless of how many values the group contains.
+  /// Comma values written with `[]=` are nested groups: each complete group counts
+  /// as one outer list element. With `throwOnLimitExceeded`, each group's inner element
+  /// count is also checked before splitting; without throwing, oversized groups stay nested.
   /// Numeric bracket indices at or above the limit are represented as dictionary keys.
   public let listLimit: Int
 

@@ -210,16 +210,56 @@
       #expect(overflow?["3"] as? String == "4")
     }
 
-    @Test("objc-decode: bracketed comma group counts as one outer element")
-    func bracketedCommaGroupCountsAsOneOuterElement() throws {
-      let decoded = decode("a[]=1,2,3,4") { o in
-        o.comma = true
-        o.listLimit = 1
-        o.throwOnLimitExceeded = true
+    @Test("qs 6.16: ObjC overflow maps spread flat comma arrays but preserve bracket groups")
+    func qs6160_overflowCommaAppends() throws {
+      let flat = decode("a=1,2,3,4,5,6&a=7,8") {
+        $0.comma = true
+        $0.listLimit = 5
       }
-      let outer = decoded["a"] as? [Any]
-      #expect(outer?.count == 1)
-      #expect(outer?.first as? [String] == ["1", "2", "3", "4"])
+      let flatOverflow = try #require(flat["a"] as? NSDictionary)
+      #expect(flatOverflow.count == 8)
+      for index in 0..<8 {
+        #expect(flatOverflow[String(index)] as? String == String(index + 1))
+      }
+
+      let grouped = decode("a[]=1&a[]=2&a[]=3&a[]=4,5") {
+        $0.comma = true
+        $0.listLimit = 2
+      }
+      let groupOverflow = try #require(grouped["a"] as? NSDictionary)
+      #expect(groupOverflow.count == 4)
+      #expect(groupOverflow["0"] as? String == "1")
+      #expect(groupOverflow["1"] as? String == "2")
+      #expect(groupOverflow["2"] as? String == "3")
+      #expect(groupOverflow["3"] as? [String] == ["4", "5"])
+    }
+
+    @Test("qs 6.16: ObjC comma groups enforce strict inner and outer limits")
+    func qs6160_bracketedCommaGroupBoundaries() throws {
+      let configure: (DecodeOptionsObjC) -> Void = {
+        $0.comma = true
+        $0.listLimit = 3
+        $0.throwOnLimitExceeded = true
+      }
+      let query = "a[]=1,2,3&a[]=4,5,6&a[]=7"
+      let decoded = decode(query, configure: configure)
+      let outer = try #require(decoded["a"] as? [Any])
+      try #require(outer.count == 3)
+      #expect(outer[0] as? [String] == ["1", "2", "3"])
+      #expect(outer[1] as? [String] == ["4", "5", "6"])
+      #expect(outer[2] as? String == "7")
+      for oversized in ["a[]=1,2,3,4", query + "&a[]=8"] {
+        let error = try #require(decodeExpectingError(oversized, configure: configure))
+        #expect(DecodeErrorObjC.kind(from: error) == .listLimitExceeded)
+        #expect(DecodeErrorObjC.limit(from: error) == 3)
+      }
+      let soft = decode("a[]=1,2,3,4") {
+        $0.comma = true
+        $0.listLimit = 3
+      }
+      let softOuter = try #require(soft["a"] as? [Any])
+      try #require(softOuter.count == 1)
+      #expect(softOuter[0] as? [String] == ["1", "2", "3", "4"])
     }
 
     @Test("objc-decode: comma non-throw fallback percent-decodes split elements")

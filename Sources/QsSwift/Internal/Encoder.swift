@@ -45,7 +45,8 @@ internal enum Encoder {
     encodeValuesOnly: Bool = false,
     charset: String.Encoding = .utf8,
     addQueryPrefix: Bool = false,
-    depth: Int = 0
+    depth: Int = 0,
+    maxDepth: Int = .max
   ) throws -> Any {
     // Kept for API compatibility: passed from Qs+Encode and direct tests that still exercise this signature.
     // Preserve until those call sites and iterative path-tracking expectations are updated in one refactor.
@@ -70,18 +71,21 @@ internal enum Encoder {
       format: format,
       formatter: formatter ?? format.formatter,
       encodeValuesOnly: encodeValuesOnly,
-      charset: charset
+      charset: charset,
+      maxDepth: maxDepth
     )
 
     let rootPrefix = prefix ?? (addQueryPrefix ? "?" : "")
     let rootIsContainer = isContainer(data)
 
-    if let fast = try encodeLinearChainIfEligible(
-      data: data,
-      undefined: undefined,
-      prefix: rootPrefix,
-      config: rootConfig
-    ) {
+    if maxDepth == .max,
+      let fast = try encodeLinearChainIfEligible(
+        data: data,
+        undefined: undefined,
+        prefix: rootPrefix,
+        config: rootConfig
+      )
+    {
       return rootIsContainer ? [fast] : fast
     }
 
@@ -137,6 +141,10 @@ internal enum Encoder {
 
       switch frame.phase {
       case .start:
+        if config.maxDepth != .max && frame.depth - depth > config.maxDepth {
+          throw EncodeError.depthExceeded(maxDepth: config.maxDepth)
+        }
+
         var obj = frame.object
         var pathText: String?
 

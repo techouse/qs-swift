@@ -852,6 +852,74 @@
       #expect(EncodeErrorObjC.kind(from: err!) == .cyclicObject)
     }
 
+    @Test("encode depth: cached options reflect unlimited, bounded, and restored limits")
+    func qs6160_encodeDepthCacheMutation() throws {
+      let payload: NSDictionary = ["a": ["b": "c"]]
+      let options = EncodeOptionsObjC()
+      var error: NSError?
+
+      #expect(QsBridge.encode(payload, options: options, error: &error) as String? == "a%5Bb%5D=c")
+      #expect(error == nil)
+
+      options.depth = 0
+      #expect(QsBridge.encode(payload, options: options, error: &error) == nil)
+      let depthError = try #require(error)
+      #expect(depthError.domain == "io.github.techouse.qsswift.encode")
+      #expect(depthError.code == 2)
+      #expect(depthError.userInfo["maxDepth"] as? Int == 0)
+      #expect(EncodeErrorObjC.kind(from: depthError) == .depthExceeded)
+      #expect(EncodeErrorObjC.maxDepth(from: depthError)?.intValue == 0)
+      #expect(depthError.userInfo[EncodeErrorInfoObjC.maxDepthKey] as? Int == 0)
+
+      options.depth = .max
+      error = nil
+      #expect(QsBridge.encode(payload, options: options, error: &error) as String? == "a%5Bb%5D=c")
+      #expect(error == nil)
+    }
+
+    @Test("encode depth: raw-chain, sorted direct, and filtered bridge routes enforce limits")
+    func qs6160_encodeDepthRoutes() throws {
+      let payload: NSDictionary = ["a": ["b": "c"]]
+      let raw = EncodeOptionsObjC()
+      raw.encode = false
+      raw.depth = 0
+      let sorted = EncodeOptionsObjC()
+      sorted.sortKeysCaseInsensitively = true
+      sorted.depth = 0
+      let filtered = EncodeOptionsObjC()
+      filtered.filter = .function(FunctionFilterObjC { _, value in value })
+      filtered.depth = 0
+
+      for options in [raw, sorted, filtered] {
+        var error: NSError?
+        #expect(QsBridge.encode(payload, options: options, error: &error) == nil)
+        let depthError = try #require(error)
+        #expect(depthError.domain == EncodeErrorInfoObjC.domain)
+        #expect(depthError.code == EncodeErrorCodeObjC.depthExceeded.rawValue)
+        #expect(EncodeErrorObjC.maxDepth(from: depthError)?.intValue == 0)
+
+        options.depth = 1
+        error = nil
+        let expected = options.encode ? "a%5Bb%5D=c" : "a[b]=c"
+        #expect(QsBridge.encode(payload, options: options, error: &error) as String? == expected)
+        #expect(error == nil)
+      }
+    }
+
+    @Test("encode depth: convenience failures retain nil and empty contracts")
+    func qs6160_encodeDepthConvenienceContracts() {
+      let payload: NSDictionary = ["a": ["b": "c"]]
+      let options = EncodeOptionsObjC()
+      options.depth = 0
+      #expect(QsBridge.encodeOrNil(payload, options: options) == nil)
+      #expect(QsBridge.encodeOrEmpty(payload, options: options) as String == "")
+      #expect(QsBridge.encodeOrNil(nil, options: options) as String? == "")
+      #expect(QsBridge.encodeOrEmpty(nil, options: options) as String == "")
+      #expect(QsBridge.encodeOrNil(NSDictionary(), options: options) as String? == "")
+      #expect(QsBridge.encodeOrEmpty(NSDictionary(), options: options) as String == "")
+      #expect(QsBridge.encodeOrNil(["a": "b"], options: options) as String? == "a=b")
+    }
+
     @Test("DecodeErrorObjC: parameterLimitExceeded exposes userInfo limit")
     func decode_error_mapping() {
       let opts = DecodeOptionsObjC()
@@ -1026,6 +1094,34 @@
       await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
         QsBridge.encodeAsync(["a": "b"], options: nil) { s, _ in
           #expect(s as String? == "a=b")
+          #expect(pthread_main_np() == 0)
+          cont.resume()
+        }
+      }
+    }
+
+    @Test("encode depth: async failures preserve NSError metadata and callback queues")
+    func qs6160_encodeDepthAsyncFailures() async {
+      await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+        let options = EncodeOptionsObjC()
+        options.depth = 0
+        QsBridge.encodeAsyncOnMain(["a": ["b": "c"]], options: options) { result, error in
+          #expect(result == nil)
+          #expect(error?.domain == EncodeErrorInfoObjC.domain)
+          #expect(error?.code == EncodeErrorCodeObjC.depthExceeded.rawValue)
+          #expect(error?.userInfo[EncodeErrorInfoObjC.maxDepthKey] as? Int == 0)
+          #expect(pthread_main_np() != 0)
+          cont.resume()
+        }
+      }
+      await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+        let options = EncodeOptionsObjC()
+        options.depth = 0
+        QsBridge.encodeAsync(["a": ["b": "c"]], options: options) { result, error in
+          #expect(result == nil)
+          #expect(error?.domain == EncodeErrorInfoObjC.domain)
+          #expect(error?.code == EncodeErrorCodeObjC.depthExceeded.rawValue)
+          #expect(error?.userInfo[EncodeErrorInfoObjC.maxDepthKey] as? Int == 0)
           #expect(pthread_main_np() == 0)
           cont.resume()
         }

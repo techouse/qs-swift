@@ -2,6 +2,7 @@
 ///
 /// The encoder walks the input object graph (dictionaries, arrays, nested values) and
 /// will fail fast if it encounters a reference cycle to avoid infinite recursion.
+/// It also fails when serialization exceeds the configured `EncodeOptions.depth`.
 ///
 /// Typical causes:
 /// - A dictionary or array that (directly or indirectly) contains itself.
@@ -23,11 +24,16 @@ public enum EncodeError: Error, Equatable, CustomStringConvertible {
   /// that refers to itself), which would cause infinite recursion during encoding.
   case cyclicObject
 
+  /// A value frame exceeds the configured maximum serialization depth.
+  case depthExceeded(maxDepth: Int)
+
   /// Human-readable description useful in tests and logs.
   public var description: String {
     switch self {
     case .cyclicObject:
       return "Cyclic object graph detected during encoding."
+    case .depthExceeded(let maxDepth):
+      return "Input depth exceeded depth option of \(maxDepth)"
     }
   }
 }

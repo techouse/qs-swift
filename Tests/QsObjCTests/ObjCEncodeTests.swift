@@ -183,6 +183,35 @@
 
     // MARK: - Dot / encodeDotInKeys interaction
 
+    @Test("qs 6.16: ObjC dotted top-level scalar and null keys")
+    func qs6160_dottedRootLeaves() throws {
+      #expect(encode(["a.b": "c"]) { $0.encodeDotInKeys = true } as String == "a%252Eb=c")
+      #expect(
+        encode(["a.b": "c"]) {
+          $0.encodeDotInKeys = true
+          $0.encodeValuesOnly = true
+        } as String == "a%2Eb=c"
+      )
+      #expect(
+        encode(["a.b": "c"]) {
+          $0.encodeDotInKeys = true
+          $0.encode = false
+        } as String == "a%2Eb=c"
+      )
+      #expect(
+        encode(["a.b": NSNull()]) {
+          $0.encodeDotInKeys = true
+          $0.strictNullHandling = true
+        } as String == "a%252Eb"
+      )
+      #expect(
+        encode(["a.b": NSNull()]) {
+          $0.encodeDotInKeys = true
+          $0.skipNulls = true
+        } as String == ""
+      )
+    }
+
     @Test("objc-encode: encodeDotInKeys implies allowDots fallback")
     func encode_encodeDotInKeysImpliesAllowDots() throws {
       // Only set encodeDotInKeys = true; allowDots remains false (default). The shim forwards allowDots || encodeDotInKeys.

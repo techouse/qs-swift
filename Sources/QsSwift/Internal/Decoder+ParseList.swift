@@ -7,7 +7,7 @@ extension QsSwift.Decoder {
   /// Behavior:
   /// - If `options.comma == true` and `value` is a non-empty `String` containing commas,
   ///   split it into a `[String]` (preserving empty segments). Example: `"a,,b"` → `["a", "", "b"]`.
-  /// - If `throwOnLimitExceeded == true`, validates flat comma values before splitting and
+  /// - If `throwOnLimitExceeded == true`, validates every comma group before splitting and
   ///   validates the *next* scalar append (`currentListLength`) against `listLimit`.
   /// - Comma groups under `[]=` are nested values and count as one outer list element.
   ///
@@ -15,7 +15,6 @@ extension QsSwift.Decoder {
   ///   - value: The raw (decoded) RHS value for the current key part.
   ///   - options: The active `DecodeOptions`.
   ///   - currentListLength: The current length of the list under construction for this key, if any.
-  ///   - isFlatListValue: Whether a comma value is flat rather than nested under `[]=`.
   /// - Returns: Either the original `value`, or a `[String]` when comma-splitting applies.
   /// - Throws: `.listLimitExceeded`.
   #if QSBENCH_INLINE
@@ -25,11 +24,10 @@ extension QsSwift.Decoder {
   internal static func parseListValue(
     _ value: Any?,
     options: DecodeOptions,
-    currentListLength: Int,
-    isFlatListValue: Bool = true
+    currentListLength: Int
   ) throws -> Any? {
     if let stringVal = value as? String, !stringVal.isEmpty, options.comma, stringVal.contains(",") {
-      if isFlatListValue, options.throwOnLimitExceeded {
+      if options.throwOnLimitExceeded {
         var commaCount = 0
         for byte in stringVal.utf8 where byte == 0x2C {
           commaCount += 1

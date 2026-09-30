@@ -92,7 +92,8 @@ public struct EncodeOptions: @unchecked Sendable {
 
   /// When `true`, encode `.` in keys as `%2E`. (Values are unaffected unless you encode them yourself.)
   ///
-  /// - Note: If you also set `encodeValuesOnly == true`, only **keys** are encoded by the library.
+  /// - Note: Top-level dots become `%252E` under normal key encoding, or `%2E` when
+  ///   `encodeValuesOnly == true` or `encode == false`; value encoding is unchanged.
   public let encodeDotInKeys: Bool
 
   /// When `true`, encode only **values** and not keys.
@@ -117,6 +118,11 @@ public struct EncodeOptions: @unchecked Sendable {
 
   /// If `.comma` list format is used, drop `nil`/`NSNull` items before joining to produce a compact payload.
   public let commaCompactNulls: Bool
+
+  /// Maximum serialization depth, with top-level values at depth zero.
+  /// `.max` is unlimited; negative values reject every started value frame.
+  /// This does not bound input conversion or total serialization work.
+  public let depth: Int
 
   /// Sort function for keys when you want deterministic output independent of input order.
   ///
@@ -155,7 +161,7 @@ public struct EncodeOptions: @unchecked Sendable {
   ///   - charsetSentinel: Prepend a Rails-style `utf8=...` sentinel parameter.
   ///   - delimiter: Pair delimiter (default `"&"`).
   ///   - encode: When `false`, do not percent-encode keys/values.
-  ///   - encodeDotInKeys: Percent-encode `.` in keys (`.` → `%2E`) when `encode == true`.
+  ///   - encodeDotInKeys: Rewrite literal top-level key dots before normal key encoding.
   ///   - encodeValuesOnly: Encode only values, not keys.
   ///   - format: RFC3986 (space as `%20`) or RFC1738 (space as `+`).
   ///   - filter: Include/transform keys via `Filter`.
@@ -163,6 +169,7 @@ public struct EncodeOptions: @unchecked Sendable {
   ///   - strictNullHandling: Distinguish `nil` (`a`) from empty `""` (`a=`).
   ///   - commaRoundTrip: With `.comma`, ensure single-element lists keep `[]` for round-trip.
   ///   - commaCompactNulls: With `.comma`, drop `nil` entries before joining to avoid empty slots.
+  ///   - depth: Maximum serialization depth, counting top-level values as zero; `.max` is unlimited.
   ///   - sort: Optional comparator for deterministic key ordering.
   public init(
     encoder: ValueEncoder? = nil,
@@ -184,6 +191,7 @@ public struct EncodeOptions: @unchecked Sendable {
     strictNullHandling: Bool = false,
     commaRoundTrip: Bool? = nil,
     commaCompactNulls: Bool = false,
+    depth: Int = .max,
     sort: Sorter? = nil
   ) {
     // Validate charset (.utf8 or .isoLatin1)
@@ -208,6 +216,7 @@ public struct EncodeOptions: @unchecked Sendable {
     self.strictNullHandling = strictNullHandling
     self.commaRoundTrip = commaRoundTrip
     self.commaCompactNulls = commaCompactNulls
+    self.depth = depth
     self.sort = sort
   }
 
@@ -290,6 +299,7 @@ public struct EncodeOptions: @unchecked Sendable {
     strictNullHandling: Bool? = nil,
     commaRoundTrip: Bool?? = nil,
     commaCompactNulls: Bool? = nil,
+    depth: Int? = nil,
     sort: Sorter?? = nil
   ) -> EncodeOptions {
     @inline(__always)
@@ -319,6 +329,7 @@ public struct EncodeOptions: @unchecked Sendable {
       strictNullHandling: strictNullHandling ?? self.strictNullHandling,
       commaRoundTrip: pick(commaRoundTrip, self.commaRoundTrip),
       commaCompactNulls: commaCompactNulls ?? self.commaCompactNulls,
+      depth: depth ?? self.depth,
       sort: pick(sort, self.sort)
     )
   }
