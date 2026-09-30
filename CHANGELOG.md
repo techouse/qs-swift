@@ -1,4 +1,4 @@
-## Unreleased
+## 1.5.0
 
 - [FEAT] add Swift/Objective-C encode depth limits with unlimited defaults and stable depth-error metadata.
 - [FIX] encode dotted top-level scalar/null keys before normal key encoding, matching `qs@6.16.0`.
